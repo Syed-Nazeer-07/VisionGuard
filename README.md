@@ -640,7 +640,4 @@ The project demonstrates the integration of Computer Vision, Deep Learning, OCR,
 
 ## Author
 
-**Your Name**
-
-* GitHub: https://github.com/yourusername
-* LinkedIn: https://linkedin.com/in/yourprofile
+Syed Nazeer S
