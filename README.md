@@ -1,48 +1,90 @@
 # VisionGuard AI
 
-## Intelligent Traffic Monitoring, Speed Prediction & Violation Detection System
+## Intelligent Traffic Monitoring, Vehicle Analytics & Traffic Violation Detection Platform
 
-### Overview
+> **VisionGuard AI** is an AI-powered intelligent traffic surveillance platform that leverages Computer Vision, Deep Learning, Vehicle Tracking, OCR, and Real-Time Analytics to automatically monitor roads, estimate vehicle speeds, detect traffic violations, and generate actionable insights through a centralized dashboard.
 
-VisionGuard AI is an advanced AI-powered traffic surveillance and monitoring platform that uses Computer Vision, Machine Learning, OCR, and real-time analytics to automatically detect vehicles, estimate speeds, identify traffic violations, and maintain violation records through a centralized dashboard.
-
-The system is designed to assist traffic authorities by reducing manual monitoring and providing real-time enforcement capabilities while maintaining privacy by storing only violating vehicles.
+The platform is designed for smart cities, traffic authorities, universities, industrial campuses, residential communities, and research institutions seeking automated traffic monitoring and road safety enforcement.
 
 ---
 
-## Problem Statement
+# Table of Contents
 
-Traffic violations are one of the major causes of road accidents worldwide. Existing traffic monitoring systems often require extensive human supervision and are not capable of real-time intelligent analysis.
-
-VisionGuard AI aims to create a scalable smart traffic monitoring system capable of:
-
-* Monitoring multiple traffic locations simultaneously
-* Detecting and tracking vehicles in real time
-* Predicting speeding behavior before violations occur
-* Detecting traffic violations automatically
-* Maintaining searchable violation records
-* Providing authorities with real-time alerts and analytics
+* Overview
+* Problem Statement
+* Key Features
+* System Workflow
+* Artificial Intelligence Modules
+* Violation Detection Modules
+* Dashboard & Analytics
+* Technology Stack
+* System Architecture
+* Project Structure
+* Installation Guide
+* API Endpoints
+* Database Design
+* Security Features
+* Performance Metrics
+* Future Enhancements
+* Project Goals
 
 ---
 
-# Core Features
+# Overview
 
-## User Authentication & Management
+Traditional traffic monitoring systems require extensive manual supervision and are often unable to provide intelligent, real-time analysis of vehicle behavior.
+
+VisionGuard AI automates the entire monitoring process by:
+
+* Detecting vehicles in real time
+* Tracking vehicle movement across frames
+* Estimating vehicle speed
+* Recognizing license plates
+* Detecting traffic violations
+* Generating evidence records
+* Delivering real-time alerts
+* Visualizing traffic analytics
+
+The system stores only violation-related information, ensuring privacy-conscious operation while maintaining enforcement capabilities.
+
+---
+
+# Problem Statement
+
+Road accidents and traffic violations continue to be major public safety concerns.
+
+Existing surveillance systems often face challenges such as:
+
+* Dependence on manual monitoring
+* Delayed violation detection
+* Lack of centralized analytics
+* Limited scalability
+* High operational costs
+
+VisionGuard AI addresses these challenges through automated AI-driven monitoring and intelligent traffic analysis.
+
+---
+
+# Key Features
+
+## Authentication & User Management
 
 ### Authentication
 
 * User Registration
 * User Login
-* Password Encryption
+* Password Hashing
 * JWT Authentication
 * Password Reset
 * Session Management
 
 ### User Roles
 
-* Administrator
-* Traffic Authority
-* Viewer
+| Role              | Permissions                      |
+| ----------------- | -------------------------------- |
+| Administrator     | Full system control              |
+| Traffic Authority | Monitor feeds, manage violations |
+| Viewer            | Read-only dashboard access       |
 
 ### User Dashboard
 
@@ -50,45 +92,45 @@ VisionGuard AI aims to create a scalable smart traffic monitoring system capable
 * Saved Reports
 * Activity Logs
 * Violation Analytics
+* Account Settings
 
 ---
 
-## Multi-Location Traffic Monitoring
+# Multi-Camera Traffic Monitoring
 
-Users can monitor multiple traffic locations from a single dashboard.
-
-### Location Features
-
-* Multiple Camera Locations
-* Camera Selection
-* Location Search
-* Custom Camera Source Support
-
-### Feed Status
-
-* Live
-* Offline
-* Camera Unavailable
-* Processing
-* Maintenance
-
-If no feed is available, the system provides proper feedback instead of displaying errors.
-
----
-
-## Live Traffic Feed Integration
-
-The platform continuously retrieves traffic footage from configured camera sources.
+Monitor multiple traffic locations simultaneously from a single dashboard.
 
 ### Features
 
-* Real-Time Feed Monitoring
-* Feed Health Monitoring
-* Automatic Reconnection
-* Source Availability Detection
-* Daily Feed Updates
+* Multi-Camera Support
+* Camera Selection
+* Location Search
+* Live Camera Status
+* Custom Stream Sources
 
-The system is designed to maintain consistent access to the latest available traffic footage for monitoring and analysis.
+### Feed Status Indicators
+
+* Live
+* Offline
+* Processing
+* Maintenance
+* Camera Unavailable
+
+Automatic recovery mechanisms ensure continuous monitoring whenever possible.
+
+---
+
+# Live Traffic Feed Processing
+
+The platform continuously processes incoming traffic streams.
+
+### Capabilities
+
+* Real-Time Video Analysis
+* Automatic Reconnection
+* Feed Health Monitoring
+* Source Availability Checks
+* Continuous Frame Processing
 
 ---
 
@@ -96,7 +138,7 @@ The system is designed to maintain consistent access to the latest available tra
 
 ## Vehicle Detection
 
-The system detects:
+Detects and classifies:
 
 * Cars
 * Motorcycles
@@ -104,234 +146,191 @@ The system detects:
 * Buses
 * Vans
 
-Technology:
+### Technology
 
 * YOLOv11
 * OpenCV
 
-For every detected vehicle:
+### Output
 
-Vehicle ID
-Vehicle Type
-Confidence Score
+* Vehicle ID
+* Vehicle Type
+* Bounding Box
+* Confidence Score
 
 ---
 
 ## Vehicle Tracking
 
-Every detected vehicle receives a unique tracking ID.
+Each detected vehicle receives a unique tracking identifier.
 
-Tracking continues until the vehicle exits the camera frame.
+Tracking persists until the vehicle exits the frame.
 
-Technology:
+### Technology
 
 * ByteTrack
+
+### Output
+
+* Tracking ID
+* Vehicle Path
+* Frame History
 
 ---
 
 ## Speed Estimation
 
-The system estimates real-world vehicle speed using calibrated road measurements.
+Estimate real-world vehicle speed using calibrated roadway measurements.
 
-Displayed Information:
+### Output
 
 * Vehicle ID
 * Vehicle Type
 * Current Speed
 * Speed Limit
-
----
-
-## Speed Prediction Engine
-
-Unlike traditional systems that only detect speeding after it occurs, VisionGuard AI predicts future speeding behavior.
-
-### Inputs
-
-* Current Speed
-* Acceleration
-* Vehicle Trajectory
-* Lane Changes
-* Traffic Density
-
-### Outputs
-
-* Predicted Speed
-* Overspeed Probability
-* Risk Score
-
----
-
-## Overspeed Detection
-
-The system automatically flags vehicles exceeding the configured speed limit.
-
-Captured Information:
-
-* License Plate Number
-* Vehicle Type
-* Vehicle Speed
-* Location
-* Timestamp
-* Evidence Snapshot
+* Overspeed Status
 
 ---
 
 ## Automatic Number Plate Recognition (ANPR)
 
-The system extracts license plate information from detected vehicles.
+Extracts vehicle registration numbers from traffic footage.
 
-Technology:
+### Technology
 
 * EasyOCR
 * PaddleOCR
 
-Captured Data:
+### Output
 
-* Plate Number
-* Confidence Score
-* Snapshot
-
----
-
-## Privacy-Focused Data Storage
-
-### Green Vehicles (No Violation)
-
-Vehicles that commit no violation are:
-
-* Processed temporarily
-* Not permanently stored
-* Automatically removed from memory
-
-### Red Vehicles (Violation Detected)
-
-Violating vehicles are permanently stored.
-
-Stored Information:
-
-* Plate Number
-* Violation Type
-* Timestamp
-* Location
-* Snapshot Evidence
-* Speed Information
-
----
-
-# Traffic Violation Detection
-
-## Red Light Jump Detection
-
-Detects vehicles crossing the stop line while the traffic signal is red.
-
-Stored Information:
-
-* Plate Number
-* Timestamp
-* Signal State
-* Evidence Image
-
----
-
-## Illegal Lane Cutting Detection
-
-Detects:
-
-* Unauthorized Lane Changes
-* Aggressive Lane Switching
-* Lane Boundary Violations
-
-Violation Type:
-
-* Illegal Lane Change
-
----
-
-## Reckless Driving Detection
-
-The AI identifies dangerous driving behavior.
-
-Includes:
-
-* Zig-Zag Driving
-* Aggressive Steering
-* Sudden Swerving
-* Dangerous Acceleration
-* Repeated Unsafe Maneuvers
-
-Violation Type:
-
-* Reckless Driving
+* License Plate Number
+* OCR Confidence Score
+* Plate Snapshot
 
 ---
 
 ## Helmet Detection
 
-For motorcycles:
-
-Detects:
+For motorcycles, the system determines:
 
 * Helmet Present
 * Helmet Missing
 
-Violation Type:
+### Violation Type
 
 * No Helmet
 
 ---
 
-## Passenger Counting
+## Rider Counting
 
-The system counts motorcycle riders.
+Automatically counts motorcycle occupants.
+
+### Supported Cases
+
+* Single Rider
+* Double Rider
+* Triple Rider
+
+### Violation Type
+
+* Triple Riding
+
+---
+
+# Traffic Violation Detection
+
+## Overspeed Detection
+
+Vehicles exceeding configured speed limits are automatically flagged.
+
+### Captured Evidence
+
+* License Plate Number
+* Vehicle Type
+* Vehicle Speed
+* Speed Limit
+* Timestamp
+* Location
+* Snapshot Evidence
+
+---
+
+## Red Light Violation Detection
+
+Detects vehicles crossing the stop line while the signal is red.
+
+### Captured Information
+
+* Plate Number
+* Timestamp
+* Signal State
+* Evidence Snapshot
+
+---
+
+## Illegal Lane Change Detection
 
 Detects:
 
-* Single Rider
-* Double Riding
-* Triple Riding
+* Unauthorized Lane Changes
+* Lane Boundary Violations
+* Aggressive Lane Switching
 
-Violation Type:
+### Violation Type
 
-* Triple Riding
-
----
-
-# Violation Watchlist
-
-## Today's Violators
-
-Displays all violating vehicles detected today.
-
-Information:
-
-* Plate Number
-* Violation Type
-* Time
-* Location
+* Illegal Lane Change
 
 ---
 
-## Weekly Violators
+## Violation Watchlist
 
-Displays all violating vehicles detected within the last 7 days.
+### Today's Violators
 
----
+Displays all violations recorded today.
 
-## Monthly Violators
+### Weekly Violators
 
-Displays all violating vehicles detected within the last 30 days.
+Displays violations detected within the last 7 days.
 
----
+### Monthly Violators
 
-## Custom Search
+Displays violations detected within the last 30 days.
 
-Search by:
+### Custom Search
 
-* Plate Number
+Search records using:
+
+* License Plate Number
 * Date Range
-* Location
 * Violation Type
+* Location
+
+---
+
+# Privacy-Focused Data Retention
+
+## Non-Violating Vehicles
+
+Vehicles that commit no violations are:
+
+* Processed temporarily
+* Not permanently stored
+* Automatically removed after processing
+
+## Violating Vehicles
+
+Only violation-related records are retained.
+
+Stored Information:
+
+* License Plate Number
+* Violation Type
+* Timestamp
+* Location
+* Evidence Image
+* Speed Data
+* Confidence Score
 
 ---
 
@@ -341,8 +340,9 @@ Search by:
 
 * Total Vehicles Detected
 * Peak Traffic Hours
-* Vehicle Distribution
-* Traffic Density
+* Vehicle Type Distribution
+* Traffic Density Trends
+* Camera Utilization Metrics
 
 ## Violation Analytics
 
@@ -350,22 +350,29 @@ Search by:
 * Red Light Violations
 * Helmet Violations
 * Triple Riding Cases
-* Reckless Driving Cases
-* Lane Violation Cases
+* Lane Violations
+
+## Visualizations
+
+* Interactive Charts
+* Traffic Heatmaps
+* Daily Reports
+* Monthly Trends
 
 ---
 
 # Real-Time Alert System
 
-The platform instantly alerts authorities when a violation occurs.
+Authorities receive instant notifications when violations occur.
 
-Alert Information:
+### Alert Information
 
 * Vehicle Number
 * Violation Type
 * Speed
 * Timestamp
-* Location
+* Camera Location
+* Evidence Snapshot
 
 ---
 
@@ -378,28 +385,41 @@ Every violation record contains:
 * Violation Type
 * Timestamp
 * Location
-* Speed
-* Confidence Score
+* Speed Information
+* OCR Confidence Score
+* Detection Confidence Score
 
 ---
 
-# System Architecture
+# System Workflow
 
+```text
 Traffic Camera Feed
-↓
+        │
+        ▼
 Vehicle Detection (YOLOv11)
-↓
+        │
+        ▼
 Vehicle Tracking (ByteTrack)
-↓
+        │
+        ▼
 Speed Estimation Engine
-↓
+        │
+        ▼
 Violation Detection Engine
-↓
+        │
+        ▼
 License Plate Recognition
-↓
+        │
+        ▼
 Violation Database
-↓
+        │
+        ▼
 Analytics Dashboard
+        │
+        ▼
+Real-Time Alerts
+```
 
 ---
 
@@ -413,14 +433,14 @@ Analytics Dashboard
 * ByteTrack
 * EasyOCR
 * PaddleOCR
-* TensorFlow
-* Scikit-Learn
 * NumPy
+* Scikit-Learn
 
 ## Backend
 
 * FastAPI
 * SQLAlchemy
+* Pydantic
 * JWT Authentication
 
 ## Frontend
@@ -429,30 +449,198 @@ Analytics Dashboard
 * Vite
 * Tailwind CSS
 * Chart.js
+* React Router
 
 ## Database
 
 * PostgreSQL
 
-## Deployment
+## DevOps & Deployment
 
+* Docker
 * Railway
 * Render
-* Docker
+* GitHub Actions
+
+---
+
+# System Architecture
+
+```text
+┌───────────────────────────────────────┐
+│        Traffic Camera Streams          │
+└─────────────────┬─────────────────────┘
+                  │
+                  ▼
+┌───────────────────────────────────────┐
+│      AI Processing Pipeline            │
+│                                       │
+│  YOLOv11 Vehicle Detection            │
+│  ByteTrack Vehicle Tracking           │
+│  Speed Estimation                     │
+│  OCR Recognition                      │
+│  Violation Detection                  │
+└─────────────────┬─────────────────────┘
+                  │
+                  ▼
+┌───────────────────────────────────────┐
+│         FastAPI Backend                │
+└─────────────────┬─────────────────────┘
+                  │
+                  ▼
+┌───────────────────────────────────────┐
+│          PostgreSQL Database           │
+└─────────────────┬─────────────────────┘
+                  │
+                  ▼
+┌───────────────────────────────────────┐
+│          React Dashboard               │
+└───────────────────────────────────────┘
+```
+
+---
+
+# Project Structure
+
+```text
+visionguard-ai/
+│
+├── backend/
+│   ├── api/
+│   ├── models/
+│   ├── services/
+│   ├── database/
+│   ├── auth/
+│   └── main.py
+│
+├── ai/
+│   ├── detection/
+│   ├── tracking/
+│   ├── speed_estimation/
+│   ├── ocr/
+│   └── violations/
+│
+├── frontend/
+│   ├── src/
+│   ├── components/
+│   ├── pages/
+│   ├── hooks/
+│   └── services/
+│
+├── datasets/
+├── docker/
+├── docs/
+├── tests/
+└── README.md
+```
+
+---
+
+# Installation
+
+## Prerequisites
+
+* Python 3.10+
+* Node.js 18+
+* PostgreSQL
+* Git
+
+---
+
+## Clone Repository
+
+```bash
+git clone https://github.com/yourusername/visionguard-ai.git
+
+cd visionguard-ai
+```
+
+---
+
+## Backend Setup
+
+```bash
+cd backend
+
+python -m venv venv
+
+source venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run server:
+
+```bash
+uvicorn main:app --reload
+```
+
+---
+
+## Frontend Setup
+
+```bash
+cd frontend
+
+npm install
+
+npm run dev
+```
+
+---
+
+# Security Features
+
+* JWT Authentication
+* Password Hashing (bcrypt)
+* Role-Based Access Control
+* Protected API Routes
+* Input Validation
+* Rate Limiting
+* Secure Session Handling
+
+---
+
+# Performance Metrics
+
+The dashboard tracks:
+
+* Detection Accuracy
+* OCR Accuracy
+* Average Vehicle Speed
+* Processing FPS
+* Daily Violations
+* Peak Traffic Density
 
 ---
 
 # Future Enhancements
 
-* AI Accident Prediction
-* Emergency Vehicle Detection
-* Smart Signal Optimization
+* Accident Detection
+* Emergency Vehicle Recognition
 * Automated Fine Generation
-* City-Wide Traffic Monitoring
+* Smart Signal Optimization
+* Multi-Camera Vehicle Re-Identification
 * Smart City Integration
+* AI-Based Traffic Forecasting
 
 ---
 
 # Project Goal
 
-VisionGuard AI aims to become a complete intelligent traffic monitoring platform capable of detecting, predicting, recording, and analyzing traffic violations in real time while improving road safety through Artificial Intelligence and Computer Vision.
+VisionGuard AI aims to provide an intelligent, scalable, and privacy-conscious traffic monitoring solution capable of detecting, recording, and analyzing traffic violations in real time.
+
+The project demonstrates the integration of Computer Vision, Deep Learning, OCR, Real-Time Analytics, and Full-Stack Web Development into a unified intelligent transportation system.
+
+---
+
+## Author
+
+**Your Name**
+
+* GitHub: https://github.com/yourusername
+* LinkedIn: https://linkedin.com/in/yourprofile
