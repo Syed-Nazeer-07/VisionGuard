@@ -1,0 +1,921 @@
+# VisionGuard AI v2
+
+## Overview
+
+VisionGuard AI is an AI-powered traffic monitoring and violation detection platform that runs primarily in the browser using ONNX Runtime Web. The platform analyzes traffic video streams, detects vehicles, tracks movement, estimates speed, identifies traffic violations, generates evidence, and provides analytics through a centralized dashboard.
+
+The architecture is designed to:
+
+* Minimize hosting costs
+* Avoid GPU servers
+* Preserve privacy
+* Scale easily
+* Store only violation-related data
+* Use free-tier infrastructure wherever possible
+
+---
+
+# Core Decisions (DO NOT CHANGE)
+
+## AI Execution
+
+* All AI inference runs in the browser.
+* Use ONNX Runtime Web.
+* Prefer WebGPU.
+* Automatically fall back to WASM.
+* Never introduce a GPU inference server.
+
+## Data Flow
+
+```text
+Video Source
+    ↓
+Browser AI Pipeline
+    ↓
+Violation Detection
+    ↓
+Supabase
+```
+
+## Backend Rules
+
+Use Supabase for:
+
+* Authentication
+* Database
+* Storage
+* Realtime
+* Row Level Security
+
+Do NOT build:
+
+* Custom authentication systems
+* Custom JWT services
+* User management backends
+* AI inference APIs
+
+## Stream Server
+
+FastAPI server exists only for:
+
+* /ocr
+* /relay
+* /media
+* /probe
+
+Nothing else.
+
+## Storage Policy
+
+Store:
+
+* Violations
+* Evidence
+* Analytics
+
+Do NOT store:
+
+* Non-violating vehicles
+* Raw traffic footage
+
+Only anonymous traffic statistics remain.
+
+## Human Review
+
+Every detected violation begins as:
+
+```text
+pending_review
+```
+
+Authority users must:
+
+* Approve
+* Reject
+
+before it becomes an official record.
+
+## Feature Flags
+
+Every AI module must be independently enabled or disabled.
+
+Required flags:
+
+```text
+speed_detection
+plate_detection
+helmet_detection
+triple_riding_detection
+red_light_detection
+lane_detection
+alerts
+```
+
+Disabling a module must never break the pipeline.
+
+---
+
+# Final Architecture
+
+```text
+Upload
+Webcam
+HLS Stream
+YouTube (later)
+        │
+        ▼
+Video Element
+        │
+        ▼
+Frame Sampler
+        │
+        ▼
+Web Worker
+
+YOLO11n
+    ↓
+ByteTrack
+    ↓
+Speed Engine
+    ↓
+Rule Engine
+    ↓
+Evidence Engine
+    ↓
+Plate Detection (violators only)
+    ↓
+OCR Server
+
+        │
+        ├──────────► Supabase
+        │              Database
+        │              Auth
+        │              Storage
+        │              Realtime
+        │
+        └──────────► Analytics UI
+```
+
+---
+
+# Technology Stack
+
+## Frontend
+
+* React
+* Vite
+* TypeScript
+* Tailwind CSS
+* shadcn/ui
+* React Router
+* Zustand
+* TanStack Query
+* Chart.js
+* onnxruntime-web
+* hls.js
+* react-hook-form
+* zod
+* jsPDF
+* Vitest
+
+## Backend Services
+
+* Supabase Auth
+* PostgreSQL
+* Storage
+* Realtime
+* Edge Functions
+* pg_cron
+
+## Stream Server
+
+* Python 3.11
+* FastAPI
+* EasyOCR
+* yt-dlp
+* ffmpeg
+* slowapi
+* Docker
+
+## Machine Learning
+
+* YOLO11n
+* ByteTrack
+* EasyOCR
+* Custom Helmet Detection Model
+* Custom Plate Detection Model
+
+## Hosting
+
+* Cloudflare Pages
+* Supabase
+* Hugging Face Spaces
+* GitHub Actions
+
+---
+
+# Project Structure
+
+```text
+visionguard-ai/
+
+apps/
+├── web/
+│   ├── src/
+│   ├── pipeline/
+│   ├── components/
+│   ├── pages/
+│   ├── hooks/
+│   ├── services/
+│   └── tests/
+
+├── stream-server/
+│   ├── app/
+│   ├── ocr.py
+│   ├── relay.py
+│   ├── media.py
+│   ├── probe.py
+│   └── auth.py
+
+supabase/
+├── migrations/
+
+ml/
+├── notebooks/
+
+docs/
+├── CONTEXT.md
+├── ARCHITECTURE.md
+├── PLAN.md
+└── evaluation.md
+```
+
+---
+
+# Development Rules For Antigravity
+
+## Mandatory Rules
+
+* Implement directly.
+* Finish requested features completely.
+* Keep code modular.
+* Use TypeScript everywhere in frontend code.
+* Write tests for all math and rule engines.
+* Favor working software over theoretical perfection.
+
+## Forbidden
+
+* Architecture reports
+* Audit reports
+* Code review reports
+* Large implementation summaries
+* Unnecessary refactors
+* Rewriting working systems
+* Showing code diffs
+* Requesting permission before every change
+
+## Output Style
+
+Keep responses concise:
+
+```text
+Plan:
+1. ...
+2. ...
+
+Implementing now.
+```
+
+No essays.
+
+---
+
+# Milestone 0
+
+## AI Proof Of Concept
+
+Objective:
+
+Verify browser-side inference works before building the application.
+
+Build:
+
+```text
+Upload Video
+    ↓
+Load YOLO11n ONNX
+    ↓
+Run Browser Inference
+    ↓
+Draw Boxes
+    ↓
+Show FPS
+```
+
+Success Criteria:
+
+* Model loads successfully
+* WebGPU works
+* WASM fallback works
+* Bounding boxes render correctly
+* Stable 8–15 FPS
+
+Do NOT continue until this milestone passes.
+
+---
+
+# Milestone 1
+
+## Scaffold
+
+Create monorepo:
+
+```text
+apps/web
+apps/stream-server
+supabase
+ml
+docs
+```
+
+Frontend:
+
+* React
+* Vite
+* TypeScript
+* Tailwind
+* shadcn/ui
+
+Pages:
+
+* Landing
+* Dashboard
+* Live Monitor
+* Analyze Video
+* Scene Setup
+* Cameras
+* Violations
+* Analytics
+* Reports
+* Alerts
+* Admin
+* Settings
+
+Responsive design required.
+
+---
+
+# Milestone 2
+
+## Authentication
+
+Implement Supabase Auth:
+
+* Register
+* Login
+* Logout
+* Forgot Password
+* Reset Password
+
+Roles:
+
+* Viewer
+* Authority
+* Admin
+
+Components:
+
+```text
+RequireAuth
+RequireRole
+```
+
+Use:
+
+* react-hook-form
+* zod
+
+---
+
+# Milestone 3
+
+## Database
+
+Create:
+
+* profiles
+* cameras
+* scene_profiles
+* analysis_runs
+* violations
+* traffic_stats
+* alerts
+* saved_reports
+* activity_logs
+
+Enable:
+
+* RLS
+* Realtime
+* Storage
+
+Create:
+
+* role helper functions
+* signup trigger
+* analytics views
+* violation search RPC
+
+---
+
+# Milestone 4
+
+## Detection Engine
+
+Scope:
+
+```text
+Video
+ ↓
+YOLO
+ ↓
+Boxes
+```
+
+Only:
+
+* Upload video
+* Load ONNX
+* Detection
+* Overlay rendering
+* Metrics panel
+
+No tracking.
+
+No OCR.
+
+No violations.
+
+Goal:
+
+```text
+Video → Detection Works
+```
+
+---
+
+# Milestone 5
+
+## Tracking
+
+Implement:
+
+* ByteTrack
+* Kalman Filter
+* Hungarian Matching
+* Track Lifecycle
+* Track Trails
+
+Track States:
+
+```text
+Tentative
+Confirmed
+Lost
+Removed
+```
+
+Goal:
+
+```text
+Vehicle IDs Persist Across Frames
+```
+
+---
+
+# Milestone 6
+
+## Scene Setup
+
+Allow users to configure:
+
+* Calibration rectangle
+* Stop line
+* Traffic light box
+* Lane boundaries
+* Detection zone
+
+Store coordinates normalized from 0–1.
+
+Fields:
+
+* Speed limit
+* Tolerance
+* Enabled rules
+
+---
+
+# Milestone 7
+
+## Speed Detection
+
+Implement:
+
+* Homography
+* Pixel-to-meter conversion
+* Speed estimation
+* Median smoothing
+
+Overspeed rule:
+
+```text
+speed > speed_limit + tolerance
+```
+
+for 3 consecutive samples.
+
+---
+
+# Milestone 8
+
+## Evidence Engine
+
+Store:
+
+* Snapshot image
+* Vehicle crop
+* Metadata
+
+Keep:
+
+```text
+Top 5 crops
+```
+
+per track.
+
+Delete evidence for non-violators.
+
+---
+
+# Milestone 9
+
+## Analyze Video
+
+Modes:
+
+### Watch Mode
+
+Normal playback.
+
+### Batch Mode
+
+Features:
+
+* Progress
+* ETA
+* Pause
+* Resume
+* Cancel
+* Fast Mode
+
+Requirements:
+
+* Process in chunks
+* Resume after refresh
+* Release memory correctly
+
+---
+
+# Milestone 10
+
+## Live Monitor
+
+Sources:
+
+* Webcam
+* HLS
+
+Support:
+
+* Single camera
+* Two camera grid
+* Four camera grid
+
+Features:
+
+* Auto reconnect
+* FPS adaptation
+* Status badges
+* Live violation feed
+
+---
+
+# Milestone 11
+
+## Red Light & Lane Rules
+
+Implement:
+
+### Signal Detection
+
+Methods:
+
+* HSV color detection
+* Manual mode
+* Timer mode
+
+### Red Light Rule
+
+Trigger:
+
+```text
+Vehicle crosses stop line while signal is red
+```
+
+### Lane Rule
+
+Trigger:
+
+```text
+Vehicle crosses solid lane boundary
+```
+
+Aggressive:
+
+```text
+2+ crossings in 5 seconds
+```
+
+Unit tests required.
+
+---
+
+# Milestone 12
+
+## Model Training
+
+Train:
+
+* helmet.onnx
+* plate.onnx
+
+Process:
+
+1. Download datasets
+2. Train YOLO11n
+3. Validate
+4. Export ONNX
+5. Store models
+
+Do not start until the pipeline is stable.
+
+---
+
+# Milestone 13
+
+## Helmet + Triple Riding
+
+Helmet Rule:
+
+```text
+No helmet in ≥60% of recent checks
+```
+
+Triple Riding Rule:
+
+```text
+3+ riders on motorcycle
+```
+
+Both use feature flags.
+
+---
+
+# Milestone 14
+
+## OCR + ANPR
+
+Pipeline:
+
+```text
+Plate Detection
+        ↓
+OCR
+        ↓
+Normalization
+        ↓
+Violation Record
+```
+
+Features:
+
+* OCR retry
+* pending_ocr status
+* Indian plate normalization
+* Confidence tracking
+
+---
+
+# Milestone 15
+
+## YouTube + Stream Server
+
+Implement:
+
+### OCR Endpoint
+
+```text
+POST /ocr
+```
+
+### Probe Endpoint
+
+```text
+GET /probe
+```
+
+### Relay Endpoint
+
+```text
+POST /relay/youtube
+```
+
+### Media Endpoint
+
+```text
+POST /media/youtube
+```
+
+Then integrate:
+
+* YouTube Live
+* YouTube Video
+
+This milestone is intentionally delayed.
+
+---
+
+# Milestone 16
+
+## Watchlist + Alerts
+
+Build:
+
+* Today Violations
+* Last 7 Days
+* Last 30 Days
+* Custom Search
+
+Violation Detail:
+
+* Evidence
+* Approve
+* Reject
+* Retry OCR
+
+Realtime Alerts:
+
+* Toast
+* Sound
+* Browser Notification
+* Inbox
+
+---
+
+# Milestone 17
+
+## Analytics
+
+Charts:
+
+* Vehicle Count
+* Peak Hours
+* Vehicle Types
+* Density Trends
+* Camera Utilization
+* Violations Over Time
+
+Exports:
+
+* CSV
+* PDF
+
+Dashboard KPI cards required.
+
+---
+
+# Milestone 18
+
+## Admin
+
+Features:
+
+* User Management
+* Role Changes
+* Activity Logs
+* Retention Settings
+* Evidence Cleanup
+* OCR Settings
+* Stream Server Settings
+
+Mask license plates for Viewer role.
+
+---
+
+# Milestone 19
+
+## Deployment
+
+Deploy:
+
+Frontend:
+
+* Cloudflare Pages
+
+Backend:
+
+* Supabase
+
+Stream Server:
+
+* Hugging Face Spaces
+
+Add:
+
+* GitHub Actions
+* Health Checks
+* Monitoring
+* Weekly Keepalive
+
+---
+
+# Timeline
+
+| Week | Milestones | Goal                      |
+| ---- | ---------- | ------------------------- |
+| 1    | 0–3        | Foundation                |
+| 2    | 4–5        | Detection + Tracking      |
+| 3    | 6–7        | Scene Setup + Speed       |
+| 4    | 8–9        | Evidence + Video Analysis |
+| 5    | 10–11      | Live Monitoring + Rules   |
+| 6    | 12–13      | Models + Violations       |
+| 7    | 14–15      | OCR + Stream Server       |
+| 8    | 16–17      | Alerts + Analytics        |
+| 9    | 18–19      | Admin + Deployment        |
+
+---
+
+# Golden Rule
+
+Never proceed to the next milestone until the current milestone is:
+
+1. Built
+2. Tested
+3. Working
+4. Committed
+
+Workflow:
+
+```text
+Build
+→ Test
+→ Commit
+→ Next Milestone
+```
+
+Never stack multiple broken milestones together.
+
+---
+
+# docs/CONTEXT.md
+
+```text
+Read docs/CONTEXT.md before every task.
+
+Do not change architecture decisions without explicit approval.
+
+Do not introduce additional backend services, inference servers, paid APIs, or authentication systems.
+
+All AI inference runs in-browser using ONNX Runtime Web.
+
+Backend = Supabase.
+
+FastAPI stream-server exists only for:
+- /ocr
+- /relay
+- /media
+- /probe
+
+Only violations are stored.
+
+Complete the current milestone fully before beginning the next milestone.
+
+Never start the next milestone if the current one is failing.
+
+Keep code modular.
+
+Write tests for all math and rule engines.
+
+Do not generate audits, reports, architecture reviews, or implementation summaries.
+```

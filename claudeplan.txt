@@ -1,0 +1,315 @@
+## VisionGuard AI: Build Plan
+
+### 1. Key Decisions (don't let the AI agent change these)
+
+- **AI runs in the browser.** YOLO11n is exported to ONNX and runs with ONNX Runtime Web (WebGPU, with a WASM fallback). The visitor's device does the work, so it's free, and uploaded videos never leave the device.
+- **One pipeline.** Every source (upload, webcam, stream, YouTube) becomes a `<video>` element, and the same TypeScript pipeline processes it.
+- **Supabase free tier** handles the database, login, roles, evidence images, and real-time alerts. It replaces FastAPI auth and custom JWT code.
+- **A small Python Stream Server** (FastAPI, Docker) on Hugging Face Spaces is used only for YouTube/stream relay and plate OCR. It can also run on your laptop through a Cloudflare Tunnel.
+- **The frontend is a static site** on Cloudflare Pages or Vercel.
+- **Scene Setup per camera.** The user draws calibration points, stop line, traffic light box, and lanes, because speed and violations depend on them.
+- **Human review.** Violations start as "pending review". An authority approves or rejects each one.
+- **Only violations are stored.** Other vehicles only add to anonymous counts.
+
+### 2. Architecture
+
+text
+
+```text
+Upload / Webcam / HLS stream / YouTube (via relay)
+                │
+                ▼
+     <video> → Frame Sampler → Web Worker:
+        YOLO11n detect → ByteTrack → Speed (homography)
+        → Helmet model / Rider count / Signal color
+        → Rule engine → Plate detector (violators only)
+                │
+     ┌──────────┴───────────────┐
+     ▼                          ▼
+Stream Server (HF Space)     Supabase
+ /ocr  /relay  /media         Postgres, Auth, Storage,
+ /probe                       Realtime alerts, pg_cron
+```
+
+### 3. Tech Stack
+
+- **Frontend:** React + Vite + TypeScript, Tailwind + shadcn/ui, React Router, TanStack Query, Zustand, Chart.js, onnxruntime-web, hls.js, zod, jsPDF, Vitest
+- **Backend:** Supabase (Postgres, Auth, Storage, Realtime, Edge Functions, pg_cron)
+- **Stream Server:** Python 3.11, FastAPI, yt-dlp, ffmpeg, EasyOCR, slowapi, Docker
+- **ML:** Ultralytics YOLO11, trained on free Colab/Kaggle GPUs, exported to ONNX
+- **Hosting:** Cloudflare Pages, Supabase, Hugging Face Spaces, GitHub Actions
+
+### 4. Folder Structure
+
+text
+
+```text
+visionguard-ai/
+├── apps/web/            React app (src/pipeline = AI engine, public/models = .onnx)
+├── apps/stream-server/  FastAPI (ocr.py, relay.py, media.py, probe.py, auth.py)
+├── supabase/migrations/ SQL schema, RLS, views, cron
+├── ml/notebooks/        train_helmet, train_plate
+├── docs/CONTEXT.md      rules for the AI agent
+└── plan.md
+```
+
+### 5. Database
+
+| Table                                      | Purpose                                                                                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `profiles`                                 | id, name, role (admin/authority/viewer), settings                                                                                    |
+| `cameras`                                  | name, location, source_type, source_url, status, scene_profile_id                                                                    |
+| `scene_profiles`                           | calibration points + real meters, speed limit, stop line, signal box, lane lines (solid/dashed), detection zone, enabled rules       |
+| `analysis_runs`                            | one processing session: source, progress, fps, totals, status                                                                        |
+| `violations`                               | type, vehicle type, plate, OCR and detection confidence, speed, signal state, time, video offset, snapshot/crop paths, review status |
+| `traffic_stats`                            | per-minute anonymous counts by type, avg speed, density, heat grid                                                                   |
+| `alerts`, `saved_reports`, `activity_logs` | inbox, saved filters, audit trail                                                                                                    |
+
+Turn on Row Level Security for every table. Store evidence in a private storage bucket accessed through signed URLs. A daily cron job deletes old evidence.
+
+### 6. AI Pipeline Logic
+
+- **Sampling:** use `requestVideoFrameCallback` and always use video time, not clock time. Analyze about 8 fps.
+- **Detection:** YOLO11n at 640px. Keep person, car, motorcycle, bus, truck, and traffic light. Use confidence 0.35 and NMS 0.5. Treat "van" as a size/aspect-ratio heuristic, since COCO has no van class.
+- **Tracking:** ByteTrack with a Kalman filter and two-stage IoU matching. The anchor point is the bottom-center of the box.
+- **Speed:** a homography from the 4 calibration points maps the anchor to meters. Speed is distance over about 1 second of video time, median-smoothed.
+- **Rules** (each vehicle triggers each type at most once): 
+  - **Overspeed:** speed above limit + tolerance for 3 samples in a row.
+  - **Red light:** signal box reads red (HSV color count) and the anchor crosses the stop line.
+  - **Lane change:** the anchor crosses a solid line. Two or more crossings within 5 seconds counts as aggressive.
+  - **No helmet:** the custom model flags no helmet in 60% or more of recent checks.
+  - **Triple riding:** 3 or more person boxes overlap one motorcycle.
+- **Evidence:** keep the 5 sharpest crops per vehicle. On a violation, make a snapshot. If the vehicle never violates, delete its crops.
+- **ANPR:** the plate model runs on the violator's crop. The crop goes to `/ocr` (EasyOCR), and the text is normalized to Indian plate formats (fixing O/0, I/1, B/8 mix-ups). If OCR fails, save with `pending_ocr` and allow a retry.
+
+### 7. Video Sources
+
+- **Upload:** a local object URL, so the file never uploads. Two modes: watch, or batch (fast, with progress bar, ETA, pause/resume). Batch runs in chunks and can resume after a refresh.
+- **Webcam/phone:** `getUserMedia` with the rear camera. Requires HTTPS, which the hosted site provides.
+- **HLS stream:** played with hls.js. If the stream blocks CORS, it goes through `/relay` automatically. Reconnects with backoff.
+- **YouTube live:** the server uses yt-dlp to get the manifest and proxies it with CORS headers.
+- **YouTube video:** the server downloads up to 720p mp4, serves it, and deletes it after 2 hours.
+- If YouTube blocks the cloud server, point the "Stream Server URL" setting at your laptop through the tunnel.
+- **Multi-camera:** grid of 1, 2, or 4 tiles. FPS drops automatically as you add tiles.
+
+### 8. Pages
+
+Landing, Login/Register/Reset, Dashboard, Live Monitor, Analyze Video, Scene Setup, Cameras, Violations (Today/7 days/30 days/Custom), Violation Detail (approve/reject, retry OCR, evidence PDF), Analytics, Reports (CSV/PDF), Alerts, Admin Users, Activity Logs, System Settings, Account Settings.
+
+### 9. Models to Train (Colab)
+
+1. Download a helmet dataset and an Indian license plate dataset from Roboflow Universe or Kaggle, in YOLO format.
+2. Train: `yolo detect train model=yolo11n.pt data=data.yaml imgsz=640 epochs=80`
+3. Export: `yolo export model=best.pt format=onnx imgsz=320 opset=12 simplify=True`
+4. Place `yolo11n.onnx`, `helmet.onnx`, and `plate.onnx` in `public/models/`.
+
+### 10. Laptop Setup (Surface, ARM64)
+
+Install Node.js (ARM64), Git, WSL2 with Ubuntu (for Python and ffmpeg), and Docker Desktop (ARM64). Use the cloud Supabase project for development. Check that WebGPU works in Edge or Chrome by opening `chrome://gpu`.
+
+---
+
+## Step-by-Step Antigravity Prompts
+
+Do one prompt at a time. Test, then commit to git before moving on.
+
+#### Prompt 0: Context (save as `docs/CONTEXT.md`, start every session with "Read docs/CONTEXT.md first")
+
+text
+
+```text
+Project: VisionGuard AI – traffic monitoring web app.
+Rules you must follow:
+- My machine: Windows 11 on ARM64 (Snapdragon X Elite), NO NVIDIA/CUDA. Python runs in WSL2 Ubuntu ARM64.
+- All AI inference runs IN THE BROWSER with onnxruntime-web (WebGPU first, WASM fallback) inside a Web Worker. Never add a GPU server.
+- Backend = Supabase (Postgres, Auth, Storage, Realtime, Edge Functions). No custom auth.
+- Small FastAPI "stream-server" only for /ocr, /relay, /media, /probe. Deploys to Hugging Face Spaces (Docker, port 7860).
+- Frontend: React + Vite + TypeScript + Tailwind + shadcn/ui, monorepo at apps/web.
+- Everything must be free to host. No paid APIs.
+- Only violations are stored; non-violating vehicles only as anonymous counts.
+- Write typed, modular code, small files, unit tests for all math and rules.
+- Before big changes, explain your plan briefly. Never delete working features.
+```
+
+#### Prompt 1: Scaffold
+
+text
+
+```text
+Create a monorepo: apps/web (React+Vite+TS+Tailwind+shadcn/ui+React Router+TanStack Query+Zustand+Vitest), apps/stream-server (empty FastAPI with /health), supabase/migrations, ml/, docs/. Add ESLint, Prettier, .gitignore, .env.example. Build a dark "control room" app layout with a sidebar and placeholder pages: Dashboard, Live Monitor, Analyze Video, Scene Setup, Cameras, Violations, Analytics, Reports, Alerts, Admin, Settings, plus a public Landing page. Make it responsive for phones.
+```
+
+#### Prompt 2: Auth
+
+text
+
+```text
+Integrate Supabase Auth: register, login, logout, forgot password, reset password, session persistence. Create RequireAuth and RequireRole components. Read the role from a profiles table. Redirect logged-in users to /app. Use zod + react-hook-form with good error messages.
+```
+
+#### Prompt 3: Database
+
+text
+
+```text
+Write a Supabase SQL migration for tables: profiles, cameras, scene_profiles, analysis_runs, violations, traffic_stats, alerts, saved_reports, activity_logs (columns as in plan.md section 5). Add: trigger to create profile on signup (role viewer), helper function current_role(), RLS policies (viewer read-only, authority read/write, admin all, users cannot change own role), private storage bucket "evidence", views for daily violation counts, peak hours, vehicle type distribution, camera utilization, and an RPC search_violations with filters + pagination. Give me the SQL to paste into the Supabase SQL editor.
+```
+
+#### Prompt 4: Detection engine
+
+text
+
+```text
+Build apps/web/src/pipeline. Create a Web Worker that loads /models/yolo11n.onnx with onnxruntime-web (try webgpu, fall back to wasm), does letterbox preprocessing to 640, decodes output [1,84,8400], applies class-wise NMS, keeps person/car/motorcycle/bus/truck/traffic light, maps boxes back to frame coordinates. Add frame sampler using requestVideoFrameCallback + createImageBitmap (transferred), with configurable analysis FPS and backpressure. Add overlay canvas drawing boxes with labels. Add a metrics panel (backend, inference ms, fps). Test page: upload a video and see boxes. Also give me the exact command to export yolo11n.onnx in WSL.
+```
+
+#### Prompt 5: Tracking
+
+text
+
+```text
+Implement ByteTrack in TypeScript (pipeline/worker/tracker): Kalman filter, two-stage IoU association with Hungarian matching, track states tentative/confirmed/lost/removed, class majority vote, history of {mediaTime, box, anchor}. Draw track IDs and short trail lines. Interpolate boxes between analysis frames for smooth display. Write Vitest tests with synthetic moving boxes.
+```
+
+#### Prompt 6: Scene Setup
+
+text
+
+```text
+Build the Scene Setup page: capture a frame from any source, then let the user draw on a canvas: 4-point calibration rectangle (enter real width and length in meters), stop line with approach side, traffic light box, lane lines (polylines marked solid or dashed), detection zone polygon. Inputs: speed limit, tolerance, enabled rules. Edit/drag points, undo, reset. Save to scene_profiles (coordinates normalized 0-1). Add a "test overlay" preview. Link profiles to cameras on the Cameras page (CRUD, location search, status badges).
+```
+
+#### Prompt 7: Speed + overspeed + saving violations
+
+text
+
+```text
+Add lib/geometry/homography.ts (DLT from 4 points, with tests). Compute speed per track from anchor world positions using video mediaTime, ~1s window, median smoothing, only inside the calibration area. Create rules/overspeed.ts. Add evidence buffer (5 best crops by size*confidence*sharpness), snapshot JPEG with highlighted box and caption. On violation: upload images to Supabase storage evidence/violations/{id}/, insert violations row status pending_review. Create analysis_runs rows and flush traffic_stats every 60s of video time. Discard data of non-violating tracks.
+```
+
+#### Prompt 8: Long videos
+
+text
+
+```text
+Make Analyze Video page: upload (drag & drop) with Watch mode and Batch mode. Batch mode processes as fast as possible with progress bar, ETA, speed (x real-time), pause/resume/cancel, Fast mode toggle (4 fps, 480px). Process in 5-minute chunks, save lastProcessedOffset, allow resume after refresh. Release memory properly (close ImageBitmaps). Warn if tab is hidden. Show results summary at the end.
+```
+
+#### Prompt 9: Live webcam + multi-camera
+
+text
+
+```text
+Build Live Monitor: tiles grid (1/2/4), each tile chooses a source (webcam device picker with rear camera on phones, HLS URL via hls.js, YouTube URL – placeholder for now) and a scene profile. Each tile has its own worker; auto-reduce analysis FPS as tiles increase. Status badges: Live, Offline, Processing, Maintenance, Camera Unavailable. Auto-reconnect with exponential backoff. Live violation feed sidebar.
+```
+
+#### Prompt 10: Red light + lane rules
+
+text
+
+```text
+Add signal.ts: classify traffic light box with HSV pixel counts (red/yellow/green/unknown), smoothed over 3 samples, plus manual timer mode and manual toggle mode. Add rules/redLight.ts (anchor crosses stop line from approach side while red, 0.5s grace) and rules/laneChange.ts (crossing solid line = violation; 2+ crossings in 5s = aggressive). Unit test both with synthetic tracks.
+```
+
+#### Prompt 11: Colab training notebook
+
+text
+
+```text
+Write ml/notebooks/train_helmet.ipynb and train_plate.ipynb for Google Colab: install ultralytics, download a Roboflow dataset (I will paste the download code), train yolo11n imgsz 640 epochs 80 patience 20, validate, show sample predictions, export ONNX imgsz 320 opset 12 simplify, and download the file. Also create apps/web/public/models/models.json describing each model's classes and input size.
+```
+
+#### Prompt 12: Helmet + triple riding
+
+text
+
+```text
+Load helmet.onnx in the worker. For motorcycle tracks, every ~1s crop the motorcycle + riders area, run helmet model, store results; no_helmet in ≥60% of last 5 checks → violation. For triple riding, count person boxes overlapping each motorcycle (intersection/person area ≥0.5); ≥3 in ≥60% of last 5 checks → violation. Unit tests.
+```
+
+#### Prompt 13: Stream server + ANPR
+
+text
+
+```text
+Build apps/stream-server: FastAPI with Supabase JWT verification, CORS for my frontend domain, slowapi rate limits. Endpoints: POST /ocr (EasyOCR on plate image, max 500KB, returns raw text + confidence), GET /probe?url= (stream health, block private IPs to prevent SSRF), POST /relay/youtube (yt-dlp gets live HLS manifest, proxy manifest and segments with CORS headers, no re-encoding), POST /media/youtube (download ≤720p mp4, serve with range requests, delete after 2h). Dockerfile for Hugging Face Spaces port 7860, README with HF Space metadata. Then in the frontend: run plate.onnx on violator crops, send best plate crop to /ocr, normalize Indian plates (incl. BH series, fix O/0 I/1 B/8 S/5 by position), retry OCR button, "Waking up server" message, connect YouTube option in Analyze and Monitor.
+```
+
+#### Prompt 14: Watchlist + review + alerts
+
+text
+
+```text
+Build Violations page: tabs Today / Last 7 days / Last 30 days / Custom, filters (plate, dates, type, location, status), table and card views, pagination via search_violations. Violation Detail: snapshot, crops (signed URLs), all data and confidences, approve/reject with note, edit plate, retry OCR, download evidence PDF. Real-time alerts: Supabase Realtime on violations insert → toast, sound, browser Notification, alerts inbox with unread count.
+```
+
+#### Prompt 15: Analytics + reports
+
+text
+
+```text
+Build Analytics page with Chart.js: total vehicles, peak hours, vehicle type distribution, density trends, camera utilization, violations by type over time, and a heatmap from traffic_stats heat_grid. Date range picker and camera filter. Dashboard KPI cards. Reports page: save filter sets, generate daily/monthly reports, export CSV and PDF (jsPDF).
+```
+
+#### Prompt 16: Admin + security
+
+text
+
+```text
+Admin pages: users list with role change (via Supabase Edge Function using service role), activity logs viewer, system settings (stream server URL, retention days, default thresholds). Log key actions to activity_logs. Add pg_cron job + Edge Function to delete expired evidence. Option to mask plates for viewer role. Review all RLS policies and list any gaps.
+```
+
+#### Prompt 17: Deploy
+
+text
+
+```text
+Prepare deployment: Cloudflare Pages for apps/web (build settings, _headers with COOP/COEP and long cache for /models, SPA redirects), environment variables list, Supabase auth redirect URLs, Hugging Face Space deploy steps for stream-server, GitHub Actions for lint/typecheck/tests, and a weekly keep-alive ping workflow. Give me a step-by-step checklist.
+```
+
+#### Prompt 18: Polish + docs
+
+text
+
+```text
+Polish the Landing page with features and a demo section. Add loading/empty/error states everywhere, keyboard and mobile checks. Update README.md with architecture, screenshots placeholders, setup, deployment, limitations, and evaluation results template (docs/evaluation.md).
+```
+
+#### Debug prompt (use whenever something breaks)
+
+text
+
+```text
+This is broken: [what you did] → [what happened] → [what you expected].
+Error/console output: [paste].
+Find the root cause first and explain it, then make the smallest fix. Don't rewrite unrelated code.
+```
+
+---
+
+### Timeline (about 8–10 weeks)
+
+| Weeks | Prompts | Result                                      |
+| ----- | ------- | ------------------------------------------- |
+| 1     | 0–3     | App shell, login, roles, database           |
+| 2–3   | 4–6     | Detection, tracking, Scene Setup            |
+| 4     | 7–8     | Speed, overspeed, evidence, long videos     |
+| 5     | 9–10    | Live webcam, multi-camera, red light, lanes |
+| 6     | 11–12   | Trained models, helmet, triple riding       |
+| 7     | 13      | Stream server, ANPR, YouTube                |
+| 8     | 14–16   | Watchlist, alerts, analytics, admin         |
+| 9–10  | 17–18   | Deploy, test, polish                        |
+
+### Rules for Vibe Coding
+
+- One prompt at a time. Test it, then commit.
+- If the AI breaks something, run `git checkout` back to the last commit rather than piling on fixes.
+- Keep `CONTEXT.md` updated as decisions change.
+- Test with short clips first, then long ones.
+
+### Honest Limits
+
+- Accuracy for night footage, blurry plates, and helmets will be imperfect, which is why human review exists.
+- YouTube relay can get blocked. Laptop mode is the fallback.
+- Free servers sleep, so the first OCR or YouTube request can be slow.
+- Use stock or your own footage. Real enforcement needs official authorization.
