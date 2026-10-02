@@ -16,10 +16,10 @@ import { Monitor } from './pages/Monitor'
 import Alerts from './pages/Alerts'
 import Analytics from './pages/Analytics'
 import Reports from './pages/Reports'
+import Settings from './pages/Settings'
 import { 
   Dashboard,
-  Admin,
-  Settings
+  Admin
 } from './pages/placeholders'
 
 function App() {

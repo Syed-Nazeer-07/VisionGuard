@@ -267,6 +267,26 @@ export type Database = {
           review_notes?: string | null
         }
       }
+      system_settings: {
+        Row: {
+          key: string
+          value: Json
+          updated_by: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          key: string
+          value: Json
+          updated_by?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          key?: string
+          value?: Json
+          updated_by?: string | null
+          updated_at?: string | null
+        }
+      }
     }
     Views: {
       [_ in never]: never

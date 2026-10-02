@@ -194,5 +194,31 @@ export const db = {
       if (error) throw error;
       return data;
     }
+  },
+  settings: {
+    async list() {
+      const { data, error } = await (supabase as any).from('system_settings').select('*');
+      if (error) throw error;
+      
+      const config: Record<string, any> = {};
+      for (const row of (data as any[]) || []) {
+        config[row.key] = row.value;
+      }
+      return config;
+    },
+    async update(updates: Record<string, any>) {
+      const { data: user } = await supabase.auth.getUser();
+      const userId = user?.user?.id;
+      
+      const payload = Object.entries(updates).map(([key, value]) => ({
+        key,
+        value,
+        updated_by: userId || null,
+        updated_at: new Date().toISOString()
+      })) as any[];
+      
+      const { error } = await (supabase as any).from('system_settings').upsert(payload, { onConflict: 'key' });
+      if (error) throw error;
+    }
   }
 }

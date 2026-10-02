@@ -4,6 +4,7 @@ import type { WorkerOutputMessage } from '../pipeline/types';
 import { db } from '../services/db';
 import { requestOcr } from '../pipeline/plate/service';
 import { uploadEvidence } from '../pipeline/evidence/storage';
+import { supabase } from '../lib/supabase';
 
 export default function Analyze() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -18,6 +19,22 @@ export default function Analyze() {
   const [peakSpeed, setPeakSpeed] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [sysSettings, setSysSettings] = useState<Record<string, any>>({});
+  
+  // Realtime settings updates
+  useEffect(() => {
+    db.settings.list().then(setSysSettings);
+    
+    const channel = supabase.channel('analyze-settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, () => {
+        db.settings.list().then(setSysSettings);
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
   
   const frameCountRef = useRef(0);
   const lastFpsTimeRef = useRef(performance.now());
@@ -187,8 +204,8 @@ export default function Analyze() {
         const calibration = {
           referenceWidth: 2,
           referenceHeight: 2,
-          speedLimit: 60,
-          tolerance: 10,
+          speedLimit: sysSettings.speed_limit_default ? Number(sysSettings.speed_limit_default) : 60,
+          tolerance: sysSettings.speed_tolerance_default ? Number(sysSettings.speed_tolerance_default) : 10,
           // Simple rectangle in normalized coordinates
           calibrationArea: [
             { x: 0.3, y: 0.5 },
@@ -205,12 +222,12 @@ export default function Analyze() {
           mediaTime: video.currentTime,
           calibration,
           featureFlags: {
-            speed_detection: true,
-            red_light_detection: false,
-            lane_detection: false,
-            helmet_detection: false,
-            triple_riding_detection: false,
-            plate_detection: true
+            speed_detection: sysSettings.feature_speed_detection !== false,
+            red_light_detection: sysSettings.feature_red_light_detection === true,
+            lane_detection: sysSettings.feature_lane_detection === true,
+            helmet_detection: sysSettings.feature_helmet_detection === true,
+            triple_riding_detection: sysSettings.feature_triple_riding_detection === true,
+            plate_detection: sysSettings.feature_plate_detection !== false
           }
         }, [bitmap]);
       } catch (err) {
