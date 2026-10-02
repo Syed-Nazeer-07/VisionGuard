@@ -15,9 +15,9 @@ import Cameras from './pages/Cameras'
 import { Monitor } from './pages/Monitor'
 import Alerts from './pages/Alerts'
 import Analytics from './pages/Analytics'
+import Reports from './pages/Reports'
 import { 
   Dashboard,
-  Reports,
   Admin,
   Settings
 } from './pages/placeholders'

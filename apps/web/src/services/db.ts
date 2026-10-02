@@ -167,5 +167,32 @@ export const db = {
       if (error) throw error;
       return data;
     }
+  },
+  reports: {
+    async getViolations(filters: { startDate?: string, endDate?: string, cameraId?: string, violationType?: string, status?: string }) {
+      let query = supabase.from('violations').select('*, cameras(name)').order('timestamp', { ascending: false });
+      
+      if (filters.startDate) query = query.gte('timestamp', filters.startDate);
+      if (filters.endDate) query = query.lte('timestamp', filters.endDate);
+      if (filters.cameraId) query = query.eq('camera_id', filters.cameraId);
+      if (filters.violationType) query = query.eq('type', filters.violationType);
+      if (filters.status) query = query.eq('status', filters.status);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+    async getAlerts(filters: { startDate?: string, endDate?: string, cameraId?: string, status?: string }) {
+      let query = supabase.from('alerts').select('*, cameras(name)').order('created_at', { ascending: false });
+      
+      if (filters.startDate) query = query.gte('created_at', filters.startDate);
+      if (filters.endDate) query = query.lte('created_at', filters.endDate);
+      if (filters.cameraId) query = query.eq('camera_id', filters.cameraId);
+      if (filters.status) query = query.eq('status', filters.status);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    }
   }
 }
