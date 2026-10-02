@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { drawBoundingBoxes } from '../pipeline/rendering/overlay';
 import type { WorkerOutputMessage } from '../pipeline/types';
 import { db } from '../services/db';
+import { requestOcr } from '../pipeline/plate/service';
 
 export default function Analyze() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -75,9 +76,21 @@ export default function Analyze() {
           
           msg.violations.forEach(async (v) => {
             try {
-              // Ensure we have at least one camera in DB to bind violations to.
               const cameras = await db.cameras.list();
               if (cameras.length > 0) {
+                // If there's a plate crop and ocr_status is pending, request OCR
+                if (v.metadata.plate_crop_path && v.metadata.ocr_status === 'pending') {
+                  try {
+                    const ocrRes = await requestOcr(v.metadata.plate_crop_path);
+                    v.metadata.plate_text = ocrRes.text;
+                    v.metadata.plate_confidence = ocrRes.confidence;
+                    v.metadata.ocr_status = 'completed';
+                  } catch (ocrErr) {
+                    v.metadata.ocr_status = 'failed';
+                    console.warn('OCR Request failed:', ocrErr);
+                  }
+                }
+
                 await db.violations.create({
                   camera_id: cameras[0].id,
                   type: v.type,
@@ -156,7 +169,8 @@ export default function Analyze() {
             red_light_detection: false,
             lane_detection: false,
             helmet_detection: false,
-            triple_riding_detection: false
+            triple_riding_detection: false,
+            plate_detection: true
           }
         }, [bitmap]);
       } catch (err) {

@@ -9,6 +9,8 @@ import { RedLightRule } from '../violations/rules/RedLightRule';
 import { LaneRule } from '../violations/rules/LaneRule';
 import { HelmetRule } from '../violations/rules/HelmetRule';
 import { TripleRidingRule } from '../violations/rules/TripleRidingRule';
+import { detectPlateRegion } from '../plate/detector';
+import { generatePlateCrop } from '../plate/crop';
 import type { WorkerMessage, Point } from '../types';
 
 env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
@@ -145,9 +147,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       offscreenCtx.drawImage(bitmap, 0, 0);
       const imageData = offscreenCtx.getImageData(0, 0, width, height);
       
-      // Close the bitmap to free memory immediately
-      bitmap.close();
-      
+      // We keep bitmap open for later use by generatePlateCrop
       const targetSize = 640;
       const { tensor, ratio, padW, padH } = preprocess(imageData, targetSize);
       
@@ -197,7 +197,32 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         fps: 30, // Passed or fixed for now
         calibration
       });
+
+      let plateDetectionEnabled = featureFlags?.plate_detection ?? false;
+
+      // Handle plate detection for violations
+      if (plateDetectionEnabled) {
+        for (const candidate of violations) {
+          const track = tracks.find(t => t.trackId === candidate.metadata.track_id);
+          if (track) {
+            const plate = detectPlateRegion(track);
+            if (plate) {
+              try {
+                // Generate base64 crop
+                const cropBase64 = await generatePlateCrop(bitmap, plate);
+                candidate.metadata.plate_crop_path = cropBase64;
+                candidate.metadata.ocr_status = 'pending';
+              } catch (cropErr) {
+                console.warn('Failed to generate plate crop', cropErr);
+              }
+            }
+          }
+        }
+      }
       
+      // Close bitmap after processing to avoid memory leaks
+      bitmap.close();
+
       self.postMessage({
         type: 'result',
         boxes,

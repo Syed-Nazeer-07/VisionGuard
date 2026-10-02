@@ -38,6 +38,11 @@ export const db = {
       const { data, error } = await (supabase as any).from('violations').insert(violation).select().single()
       if (error) throw error
       return data
+    },
+    async update(id: string, updates: Database['public']['Tables']['violations']['Update']) {
+      const { data, error } = await (supabase as any).from('violations').update(updates).eq('id', id).select().single()
+      if (error) throw error
+      return data
     }
   },
   stats: {

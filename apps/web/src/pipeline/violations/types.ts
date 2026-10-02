@@ -1,12 +1,17 @@
 import type { TrackedObject } from '../types';
 
 export type ViolationLifecycle = 'pending_review' | 'approved' | 'rejected';
+import type { OcrStatus } from '../plate/types';
 
 export interface ViolationMetadata {
   track_id: number;
   speed?: number;
   speed_limit?: number;
   evidence_metadata?: any;
+  plate_text?: string;
+  plate_confidence?: number;
+  plate_crop_path?: string;
+  ocr_status?: OcrStatus;
 }
 
 export interface ViolationCandidate {

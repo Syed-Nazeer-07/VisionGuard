@@ -1,26 +1,55 @@
 import { useState, useEffect } from 'react';
-import { ShieldAlert, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, CheckCircle, Clock, RefreshCw, Car } from 'lucide-react';
 import { db } from '../services/db';
 import type { Violation } from '../services/db';
+import { requestOcr } from '../pipeline/plate/service';
 
 export default function Violations() {
   const [violations, setViolations] = useState<Violation[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending_review' | 'approved' | 'rejected'>('all');
 
-  useEffect(() => {
-    async function loadViolations() {
-      try {
-        const data = await db.violations.list();
-        setViolations(data);
-      } catch (err) {
-        console.error('Failed to load violations', err);
-      } finally {
-        setLoading(false);
-      }
+  const loadViolations = async () => {
+    try {
+      setLoading(true);
+      const data = await db.violations.list();
+      setViolations(data);
+    } catch (err) {
+      console.error('Failed to load violations', err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadViolations();
   }, []);
+
+  const handleRetryOcr = async (violation: Violation) => {
+    const meta = violation.metadata as any;
+    if (!meta || !meta.plate_crop_path) return;
+
+    try {
+      // Optimistically update UI
+      setViolations(prev => prev.map(v => v.id === violation.id ? { ...v, metadata: { ...meta, ocr_status: 'pending' } } : v));
+      
+      const ocrRes = await requestOcr(meta.plate_crop_path);
+      const updatedMeta = {
+        ...meta,
+        plate_text: ocrRes.text,
+        plate_confidence: ocrRes.confidence,
+        ocr_status: 'completed'
+      };
+      
+      await db.violations.update(violation.id, { metadata: updatedMeta });
+      setViolations(prev => prev.map(v => v.id === violation.id ? { ...v, metadata: updatedMeta } : v));
+    } catch (err) {
+      console.warn('OCR Retry failed:', err);
+      const failedMeta = { ...meta, ocr_status: 'failed' };
+      await db.violations.update(violation.id, { metadata: failedMeta });
+      setViolations(prev => prev.map(v => v.id === violation.id ? { ...v, metadata: failedMeta } : v));
+    }
+  };
 
   const filteredViolations = violations.filter(v => statusFilter === 'all' || v.status === statusFilter);
 
@@ -52,7 +81,7 @@ export default function Violations() {
           </h1>
           <p className="text-gray-400">Review and manage detected traffic violations.</p>
         </div>
-        <div className="flex bg-gray-900 border border-gray-800 rounded-lg overflow-hidden p-1">
+        <div className="flex bg-gray-900 border border-gray-800 rounded-lg overflow-hidden p-1 mr-2">
           {['all', 'pending_review', 'approved', 'rejected'].map(status => (
             <button
               key={status}
@@ -67,6 +96,13 @@ export default function Violations() {
             </button>
           ))}
         </div>
+        <button 
+          onClick={loadViolations}
+          className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-md flex items-center gap-2 transition-colors border border-gray-700"
+        >
+          <RefreshCw className="w-4 h-4" />
+          Refresh
+        </button>
       </header>
 
       {loading ? (
@@ -120,6 +156,42 @@ export default function Violations() {
                       <div className="text-sm font-medium font-mono">#{meta.track_id || 'N/A'}</div>
                     </div>
                   </div>
+                  
+                  {meta.ocr_status && (
+                    <div className="mb-4 bg-gray-950 p-4 rounded-lg border border-gray-800 flex items-start gap-4">
+                      <div className="bg-gray-900 w-24 h-12 flex items-center justify-center rounded border border-gray-700 overflow-hidden shrink-0">
+                        {meta.plate_crop_path ? (
+                          <img src={meta.plate_crop_path} alt="Plate crop" className="max-w-full max-h-full object-contain" />
+                        ) : (
+                          <Car className="text-gray-600 w-6 h-6" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <span className="text-sm font-semibold tracking-wider bg-gray-800 px-2 py-0.5 rounded text-gray-200">
+                            {meta.plate_text || 'UNKNOWN'}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {meta.plate_confidence ? `${Math.round(meta.plate_confidence * 100)}% Conf.` : ''}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs">
+                          <span className={`capitalize ${meta.ocr_status === 'completed' ? 'text-green-400' : meta.ocr_status === 'failed' ? 'text-red-400' : 'text-yellow-400'}`}>
+                            Status: {meta.ocr_status}
+                          </span>
+                          {meta.ocr_status !== 'completed' && meta.plate_crop_path && (
+                            <button 
+                              onClick={() => handleRetryOcr(violation)}
+                              disabled={meta.ocr_status === 'pending'}
+                              className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 transition-colors disabled:opacity-50"
+                            >
+                              <RefreshCw className="w-3 h-3" /> Retry OCR
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   
                   {meta.evidence_metadata && (
                     <div className="bg-gray-950 p-3 rounded-lg border border-gray-800 mt-4 text-xs font-mono text-gray-400 overflow-x-auto">

@@ -29,6 +29,7 @@ export interface FeatureFlags {
   lane_detection: boolean;
   helmet_detection: boolean;
   triple_riding_detection: boolean;
+  plate_detection: boolean;
 }
 
 export interface InferenceMessage {
