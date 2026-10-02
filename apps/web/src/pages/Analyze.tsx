@@ -3,6 +3,7 @@ import { drawBoundingBoxes } from '../pipeline/rendering/overlay';
 import type { WorkerOutputMessage } from '../pipeline/types';
 import { db } from '../services/db';
 import { requestOcr } from '../pipeline/plate/service';
+import { uploadEvidence } from '../pipeline/evidence/storage';
 
 export default function Analyze() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -90,12 +91,33 @@ export default function Analyze() {
                     console.warn('OCR Request failed:', ocrErr);
                   }
                 }
+                
+                // Upload Evidence to Supabase Storage
+                let snapshotUrl: string | null = v.snapshot_url || null;
+                let plateCropPath: string | null = v.metadata.plate_crop_path || null;
+                
+                try {
+                  if (snapshotUrl && snapshotUrl.startsWith('data:image')) {
+                    snapshotUrl = await uploadEvidence(snapshotUrl, `vehicle_crops/${cameras[0].id}`);
+                  }
+                  
+                  if (plateCropPath && plateCropPath.startsWith('data:image')) {
+                    plateCropPath = await uploadEvidence(plateCropPath, `plate_crops/${cameras[0].id}`);
+                    v.metadata.plate_crop_path = plateCropPath;
+                  }
+                } catch (storageErr) {
+                  console.warn('Failed to upload evidence to storage:', storageErr);
+                  // fallback to not storing evidence if it fails, or maybe nullify
+                  snapshotUrl = null;
+                  v.metadata.plate_crop_path = undefined;
+                }
 
                 await db.violations.create({
                   camera_id: cameras[0].id,
                   type: v.type,
                   severity: v.severity,
                   status: v.status,
+                  snapshot_url: snapshotUrl || undefined,
                   timestamp: v.timestamp,
                   metadata: v.metadata as any
                 });

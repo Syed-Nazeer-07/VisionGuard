@@ -21,6 +21,7 @@ export interface ViolationCandidate {
   timestamp: string; // ISO string
   status: ViolationLifecycle;
   metadata: ViolationMetadata;
+  snapshot_url?: string;
 }
 
 export interface RuleContext {

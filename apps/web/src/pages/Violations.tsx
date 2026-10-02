@@ -3,6 +3,7 @@ import { ShieldAlert, AlertTriangle, CheckCircle, Clock, RefreshCw, Car } from '
 import { db } from '../services/db';
 import type { Violation } from '../services/db';
 import { requestOcr } from '../pipeline/plate/service';
+import { SecureImage } from '../components/ui/SecureImage';
 
 export default function Violations() {
   const [violations, setViolations] = useState<Violation[]>([]);
@@ -161,7 +162,7 @@ export default function Violations() {
                     <div className="mb-4 bg-gray-950 p-4 rounded-lg border border-gray-800 flex items-start gap-4">
                       <div className="bg-gray-900 w-24 h-12 flex items-center justify-center rounded border border-gray-700 overflow-hidden shrink-0">
                         {meta.plate_crop_path ? (
-                          <img src={meta.plate_crop_path} alt="Plate crop" className="max-w-full max-h-full object-contain" />
+                          <SecureImage path={meta.plate_crop_path} alt="Plate crop" className="max-w-full max-h-full object-contain" />
                         ) : (
                           <Car className="text-gray-600 w-6 h-6" />
                         )}

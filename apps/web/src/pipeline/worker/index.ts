@@ -11,6 +11,8 @@ import { HelmetRule } from '../violations/rules/HelmetRule';
 import { TripleRidingRule } from '../violations/rules/TripleRidingRule';
 import { detectPlateRegion } from '../plate/detector';
 import { generatePlateCrop } from '../plate/crop';
+import { evaluateEvidence } from '../evidence/scoring';
+import { addEvidenceCandidate, getBestEvidence, removeEvidence } from '../evidence/collector';
 import type { WorkerMessage, Point } from '../types';
 
 env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
@@ -183,6 +185,67 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
             track.isOverspeed = res.isOverspeed;
           }
         }
+        
+        // Evaluate evidence score
+        let hasPlate = false;
+        const plate = detectPlateRegion(track);
+        if (plate) hasPlate = true;
+        
+        const score = evaluateEvidence({
+          detectionConfidence: track.prob,
+          visibleArea: (track.w * track.h) / (targetSize * targetSize),
+          hasPlate
+        });
+        
+        // Let's generate a vehicle crop to keep as candidate if the score is good.
+        // But doing it for EVERY track EVERY frame is expensive.
+        // We can check if it beats the current best before doing canvas ops.
+        const currentBest = getBestEvidence(track.trackId);
+        if (!currentBest || score > currentBest.score) {
+          try {
+            // Vehicle Crop
+            const vw = Math.min(bitmap.width, Math.floor(track.w * ratio));
+            const vh = Math.min(bitmap.height, Math.floor(track.h * ratio));
+            const vx = Math.max(0, Math.floor((track.x * ratio) + padW));
+            const vy = Math.max(0, Math.floor((track.y * ratio) + padH));
+            
+            // To simplify in the worker without doing too much manual crop here, we just save the bounds
+            // Actually, let's just generate the vehicle crop
+            const vCanvas = new OffscreenCanvas(vw, vh);
+            const vCtx = vCanvas.getContext('2d');
+            vCtx?.drawImage(bitmap, vx, vy, vw, vh, 0, 0, vw, vh);
+            const vBlob = await vCanvas.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
+            
+            const reader = new FileReader();
+            reader.readAsDataURL(vBlob);
+            reader.onloadend = async () => {
+              const base64Data = reader.result as string;
+              
+              let plateCropBase64 = '';
+              if (plate && featureFlags?.plate_detection) {
+                try {
+                  plateCropBase64 = await generatePlateCrop(bitmap, plate);
+                } catch(e) {}
+              }
+              
+              addEvidenceCandidate(track.trackId, {
+                id: track.trackId.toString(),
+                type: 'vehicle_crop',
+                base64Data,
+                score,
+                metadata: {
+                  track_id: track.trackId,
+                  timestamp: new Date().toISOString(),
+                  speed: track.speed,
+                  confidence: track.prob,
+                  plate_crop_path: plateCropBase64 // we hijack this field for in-memory plate crop
+                }
+              });
+            };
+          } catch (e) {
+            console.warn('Failed to collect evidence', e);
+          }
+        }
       }
       
       for (const box of boxes) {
@@ -203,20 +266,19 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       // Handle plate detection for violations
       if (plateDetectionEnabled) {
         for (const candidate of violations) {
-          const track = tracks.find(t => t.trackId === candidate.metadata.track_id);
-          if (track) {
-            const plate = detectPlateRegion(track);
-            if (plate) {
-              try {
-                // Generate base64 crop
-                const cropBase64 = await generatePlateCrop(bitmap, plate);
-                candidate.metadata.plate_crop_path = cropBase64;
-                candidate.metadata.ocr_status = 'pending';
-              } catch (cropErr) {
-                console.warn('Failed to generate plate crop', cropErr);
-              }
+          const bestEvidence = getBestEvidence(candidate.metadata.track_id);
+          
+          if (bestEvidence) {
+            candidate.metadata.evidence_metadata = { score: bestEvidence.score };
+            candidate.snapshot_url = bestEvidence.base64Data; // Use the best vehicle crop as snapshot
+            if ((bestEvidence.metadata as any).plate_crop_path) {
+              candidate.metadata.plate_crop_path = (bestEvidence.metadata as any).plate_crop_path;
+              candidate.metadata.ocr_status = 'pending';
             }
           }
+          
+          // Cleanup evidence for flagged violations so we don't leak memory
+          removeEvidence(candidate.metadata.track_id);
         }
       }
       

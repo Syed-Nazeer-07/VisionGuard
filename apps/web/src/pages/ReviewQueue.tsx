@@ -3,6 +3,7 @@ import { ClipboardCheck, CheckCircle, XCircle, Clock, ShieldAlert, Image as Imag
 import { db } from '../services/db';
 import type { Violation } from '../services/db';
 import { useAuthStore } from '../store/auth';
+import { SecureImage } from '../components/ui/SecureImage';
 
 export default function ReviewQueue() {
   const [violations, setViolations] = useState<Violation[]>([]);
@@ -235,8 +236,8 @@ export default function ReviewQueue() {
                       {(selectedViolation.metadata as any)?.plate_crop_path ? (
                         <div className="flex gap-4 items-start">
                           <div className="bg-gray-950 p-2 rounded border border-gray-800">
-                            <img 
-                              src={(selectedViolation.metadata as any).plate_crop_path} 
+                            <SecureImage 
+                              path={(selectedViolation.metadata as any).plate_crop_path} 
                               alt="License Plate" 
                               className="h-12 object-contain"
                             />
@@ -261,7 +262,7 @@ export default function ReviewQueue() {
                     <h3 className="font-semibold text-gray-300 border-b border-gray-800 pb-2 mb-4">Evidence Snapshot</h3>
                     <div className="bg-gray-950 border border-gray-800 rounded-lg h-64 flex items-center justify-center text-gray-600">
                       {selectedViolation.snapshot_url ? (
-                        <img src={selectedViolation.snapshot_url} alt="Evidence" className="max-h-full max-w-full object-contain" />
+                        <SecureImage path={selectedViolation.snapshot_url} alt="Evidence" className="max-h-full max-w-full object-contain" />
                       ) : (
                         <div className="flex flex-col items-center gap-2">
                           <ImageIcon className="w-8 h-8 opacity-50" />
