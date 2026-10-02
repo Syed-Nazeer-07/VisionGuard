@@ -9,9 +9,10 @@ import {
   BarChart3, 
   FileText, 
   BellRing, 
-  Settings, 
+  Settings,
   Users,
-  LogOut
+  LogOut,
+  ClipboardCheck
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../store/auth'
@@ -23,6 +24,7 @@ const navItems = [
   { name: 'Analyze Video', path: '/app/analyze', icon: FileVideo },
   { name: 'Cameras', path: '/app/cameras', icon: Camera },
   { name: 'Violations', path: '/app/violations', icon: ShieldAlert },
+  { name: 'Review Queue', path: '/app/review-queue', icon: ClipboardCheck },
   { name: 'Analytics', path: '/app/analytics', icon: BarChart3 },
   { name: 'Reports', path: '/app/reports', icon: FileText },
   { name: 'Alerts', path: '/app/alerts', icon: BellRing },

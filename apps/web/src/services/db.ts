@@ -43,6 +43,30 @@ export const db = {
       const { data, error } = await (supabase as any).from('violations').update(updates).eq('id', id).select().single()
       if (error) throw error
       return data
+    },
+    async reviewViolation(id: string, status: 'approved' | 'rejected', notes?: string) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Unauthorized')
+      
+      const { data, error } = await (supabase as any).from('violations')
+        .update({ 
+          status, 
+          reviewed_by: user.id,
+          reviewed_at: new Date().toISOString(),
+          review_notes: notes || null
+        })
+        .eq('id', id)
+        .eq('status', 'pending_review') // Prevent re-reviewing
+        .select().single()
+        
+      if (error) throw error
+      return data
+    },
+    async approveViolation(id: string, notes?: string) {
+      return this.reviewViolation(id, 'approved', notes)
+    },
+    async rejectViolation(id: string, notes?: string) {
+      return this.reviewViolation(id, 'rejected', notes)
     }
   },
   stats: {

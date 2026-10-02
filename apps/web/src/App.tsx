@@ -10,6 +10,7 @@ import { Register } from './pages/auth/Register'
 import { ForgotPassword } from './pages/auth/ForgotPassword'
 import { ResetPassword } from './pages/auth/ResetPassword'
 import Violations from './pages/Violations'
+import ReviewQueue from './pages/ReviewQueue'
 import { 
   Dashboard,
   Monitor,
@@ -41,6 +42,7 @@ function App() {
               <Route path="cameras" element={<Cameras />} />
               <Route path="cameras/:id/scene" element={<SceneSetup />} />
               <Route path="violations" element={<Violations />} />
+              <Route path="review-queue" element={<ReviewQueue />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="reports" element={<Reports />} />
               <Route path="alerts" element={<Alerts />} />

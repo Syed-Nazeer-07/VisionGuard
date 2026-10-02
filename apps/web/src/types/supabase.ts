@@ -207,6 +207,9 @@ export type Database = {
           timestamp: string
           type: string
           metadata: Json | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          review_notes: string | null
         }
         Insert: {
           analysis_run_id?: string | null
@@ -218,6 +221,9 @@ export type Database = {
           timestamp?: string
           type: string
           metadata?: Json | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          review_notes?: string | null
         }
         Update: {
           analysis_run_id?: string | null
@@ -229,6 +235,9 @@ export type Database = {
           timestamp?: string
           type?: string
           metadata?: Json | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          review_notes?: string | null
         }
       }
     }
