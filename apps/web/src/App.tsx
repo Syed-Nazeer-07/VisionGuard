@@ -14,9 +14,9 @@ import ReviewQueue from './pages/ReviewQueue'
 import Cameras from './pages/Cameras'
 import { Monitor } from './pages/Monitor'
 import Alerts from './pages/Alerts'
+import Analytics from './pages/Analytics'
 import { 
   Dashboard,
-  Analytics,
   Reports,
   Admin,
   Settings

@@ -154,5 +154,18 @@ export const db = {
       if (error) throw error
       return data
     }
+  },
+  analytics: {
+    async getDashboard(cameraId?: string, startDate?: string, endDate?: string, violationType?: string) {
+      const args: any = {};
+      if (cameraId) args.p_camera_id = cameraId;
+      if (startDate) args.p_start_date = startDate;
+      if (endDate) args.p_end_date = endDate;
+      if (violationType) args.p_violation_type = violationType;
+      
+      const { data, error } = await supabase.rpc('get_analytics_summary', args);
+      if (error) throw error;
+      return data;
+    }
   }
 }
