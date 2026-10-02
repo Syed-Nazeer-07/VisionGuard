@@ -26,6 +26,16 @@ export const db = {
       const { data, error } = await (supabase as any).from('cameras').insert(camera).select().single()
       if (error) throw error
       return data
+    },
+    async update(id: string, camera: Partial<Database['public']['Tables']['cameras']['Update']>) {
+      const { data, error } = await (supabase as any).from('cameras').update(camera).eq('id', id).select().single()
+      if (error) throw error
+      return data
+    },
+    async delete(id: string) {
+      const { error } = await (supabase as any).from('cameras').delete().eq('id', id)
+      if (error) throw error
+      return true
     }
   },
   violations: {
@@ -95,6 +105,11 @@ export const db = {
   scene_profiles: {
     async upsert(profile: Database['public']['Tables']['scene_profiles']['Insert']) {
       const { data, error } = await (supabase as any).from('scene_profiles').upsert(profile).select().single()
+      if (error) throw error
+      return data
+    },
+    async get(cameraId: string) {
+      const { data, error } = await (supabase as any).from('scene_profiles').select('*').eq('camera_id', cameraId).maybeSingle()
       if (error) throw error
       return data
     }

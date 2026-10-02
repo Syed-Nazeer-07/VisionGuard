@@ -90,6 +90,8 @@ export type Database = {
           name: string
           status: string
           stream_url: string | null
+          source_type: string
+          enabled: boolean
         }
         Insert: {
           created_at?: string
@@ -99,6 +101,8 @@ export type Database = {
           name: string
           status?: string
           stream_url?: string | null
+          source_type?: string
+          enabled?: boolean
         }
         Update: {
           created_at?: string
@@ -108,6 +112,8 @@ export type Database = {
           name?: string
           status?: string
           stream_url?: string | null
+          source_type?: string
+          enabled?: boolean
         }
       }
       profiles: {

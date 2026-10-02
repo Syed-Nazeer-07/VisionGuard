@@ -11,10 +11,10 @@ import { ForgotPassword } from './pages/auth/ForgotPassword'
 import { ResetPassword } from './pages/auth/ResetPassword'
 import Violations from './pages/Violations'
 import ReviewQueue from './pages/ReviewQueue'
+import Cameras from './pages/Cameras'
+import { Monitor } from './pages/Monitor'
 import { 
   Dashboard,
-  Monitor,
-  Cameras,
   Analytics,
   Reports,
   Alerts,
