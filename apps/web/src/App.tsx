@@ -13,11 +13,11 @@ import Violations from './pages/Violations'
 import ReviewQueue from './pages/ReviewQueue'
 import Cameras from './pages/Cameras'
 import { Monitor } from './pages/Monitor'
+import Alerts from './pages/Alerts'
 import { 
   Dashboard,
   Analytics,
   Reports,
-  Alerts,
   Admin,
   Settings
 } from './pages/placeholders'

@@ -92,6 +92,47 @@ export const db = {
     }
   },
   alerts: {
+    async create(alert: Database['public']['Tables']['alerts']['Insert']) {
+      // Prevent duplicate active alerts
+      const { data: existing } = await (supabase as any)
+        .from('alerts')
+        .select('id')
+        .eq('type', alert.type)
+        .eq('camera_id', alert.camera_id)
+        .eq('status', 'active')
+        .maybeSingle()
+        
+      if (existing) {
+        return existing
+      }
+
+      const { data, error } = await (supabase as any).from('alerts').insert(alert).select().single()
+      if (error) throw error
+      return data
+    },
+    async list() {
+      const { data, error } = await (supabase as any).from('alerts').select('*, cameras(name)').order('created_at', { ascending: false })
+      if (error) throw error
+      return data
+    },
+    async update(id: string, updates: Database['public']['Tables']['alerts']['Update']) {
+      // Validate transitions
+      if (updates.status) {
+        const { data: current } = await (supabase as any).from('alerts').select('status').eq('id', id).single()
+        if (current) {
+          if (current.status === 'resolved') {
+            throw new Error('Cannot update a resolved alert')
+          }
+          if (current.status === 'acknowledged' && updates.status === 'active') {
+            throw new Error('Cannot revert acknowledged alert to active')
+          }
+        }
+      }
+
+      const { data, error } = await (supabase as any).from('alerts').update(updates).eq('id', id).select().single()
+      if (error) throw error
+      return data
+    },
     async getUnread() {
       const { data, error } = await (supabase as any).from('alerts').select('*').eq('is_read', false).order('created_at', { ascending: false })
       if (error) throw error

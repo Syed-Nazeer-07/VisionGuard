@@ -39,6 +39,13 @@ export type Database = {
           is_read: boolean
           message: string
           type: string
+          severity: string
+          camera_id: string | null
+          violation_id: string | null
+          status: string
+          acknowledged_at: string | null
+          resolved_at: string | null
+          acknowledged_by: string | null
         }
         Insert: {
           created_at?: string
@@ -46,6 +53,13 @@ export type Database = {
           is_read?: boolean
           message: string
           type: string
+          severity?: string
+          camera_id?: string | null
+          violation_id?: string | null
+          status?: string
+          acknowledged_at?: string | null
+          resolved_at?: string | null
+          acknowledged_by?: string | null
         }
         Update: {
           created_at?: string
@@ -53,6 +67,13 @@ export type Database = {
           is_read?: boolean
           message?: string
           type?: string
+          severity?: string
+          camera_id?: string | null
+          violation_id?: string | null
+          status?: string
+          acknowledged_at?: string | null
+          resolved_at?: string | null
+          acknowledged_by?: string | null
         }
       }
       analysis_runs: {

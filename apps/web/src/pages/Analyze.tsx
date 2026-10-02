@@ -89,6 +89,14 @@ export default function Analyze() {
                   } catch (ocrErr) {
                     v.metadata.ocr_status = 'failed';
                     console.warn('OCR Request failed:', ocrErr);
+                    
+                    // Generate OCR failure alert
+                    db.alerts.create({
+                      type: 'ocr_failure',
+                      severity: 'medium',
+                      message: `OCR failed for track #${v.metadata.track_id}`,
+                      camera_id: cameras[0].id
+                    }).catch(e => console.error('Failed to create alert:', e));
                   }
                 }
                 
@@ -112,7 +120,7 @@ export default function Analyze() {
                   v.metadata.plate_crop_path = undefined;
                 }
 
-                await db.violations.create({
+                const created = await db.violations.create({
                   camera_id: cameras[0].id,
                   type: v.type,
                   severity: v.severity,
@@ -121,6 +129,16 @@ export default function Analyze() {
                   timestamp: v.timestamp,
                   metadata: v.metadata as any
                 });
+
+                if (v.type === 'overspeed') {
+                  db.alerts.create({
+                    type: 'overspeed',
+                    severity: v.severity,
+                    message: `Overspeed violation detected: ${Math.round(v.metadata.speed || 0)} km/h`,
+                    camera_id: cameras[0].id,
+                    violation_id: created.id
+                  }).catch(e => console.error('Failed to create alert:', e));
+                }
               }
             } catch (err) {
               console.warn('Failed to save violation:', err);

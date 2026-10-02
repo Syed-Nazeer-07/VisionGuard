@@ -137,6 +137,13 @@ export function Monitor() {
       if (!profile) {
         setError('Missing scene profile for this camera. Please set up the scene first.');
         setStreamStatus('offline');
+        
+        db.alerts.create({
+          type: 'camera_offline',
+          severity: 'high',
+          message: `Camera ${cam.name} is missing a scene profile`,
+          camera_id: cam.id
+        }).catch(e => console.error('Failed to create alert:', e));
         return;
       }
       
@@ -144,6 +151,13 @@ export function Monitor() {
       if (probe.status !== 'online') {
         setError(`Stream is ${probe.status}: ${probe.error || 'Unknown error'}`);
         setStreamStatus('offline');
+        
+        db.alerts.create({
+          type: probe.status === 'offline' ? 'camera_offline' : 'stream_unhealthy',
+          severity: 'high',
+          message: `Stream for ${cam.name} is ${probe.status}: ${probe.error || 'Unknown error'}`,
+          camera_id: cam.id
+        }).catch(e => console.error('Failed to create alert:', e));
         return;
       }
       
