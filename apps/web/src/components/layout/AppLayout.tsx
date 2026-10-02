@@ -1,5 +1,5 @@
-
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
+import { ErrorBoundary } from '../ErrorBoundary'
 import { 
   LayoutDashboard, 
   MonitorPlay, 
@@ -95,7 +95,9 @@ export function AppLayout() {
           </h2>
         </header>
         <div className="p-8">
-          <Outlet />
+          <ErrorBoundary>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
     </div>

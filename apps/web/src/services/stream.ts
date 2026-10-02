@@ -18,32 +18,47 @@ export async function probeStream(url: string, sourceType: string): Promise<Prob
       return { status: 'online' };
     }
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    let attempt = 0;
+    const maxAttempts = 3;
+    let lastError = '';
 
-    const response = await fetch(`${STREAM_API_URL}/probe?url=${encodeURIComponent(url)}&type=${sourceType}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      signal: controller.signal
-    });
+    while (attempt < maxAttempts) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    clearTimeout(timeoutId);
+        const response = await fetch(`${STREAM_API_URL}/probe?url=${encodeURIComponent(url)}&type=${sourceType}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          signal: controller.signal
+        });
 
-    if (response.ok) {
-      const data = await response.json();
-      return {
-        status: data.is_active ? 'online' : 'offline',
-        metadata: data.metadata
-      };
-    } else {
-      return { status: 'offline', error: `HTTP ${response.status}` };
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          return {
+            status: data.is_active ? 'online' : 'offline',
+            metadata: data.metadata
+          };
+        } else {
+          lastError = `HTTP ${response.status}`;
+          attempt++;
+          if (attempt >= maxAttempts) break;
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } catch (err: any) {
+        lastError = err.name === 'AbortError' ? 'Probe timeout' : err.message;
+        attempt++;
+        if (attempt >= maxAttempts) break;
+        await new Promise(r => setTimeout(r, 1000));
+      }
     }
+    
+    return { status: 'offline', error: lastError };
   } catch (err: any) {
-    if (err.name === 'AbortError') {
-      return { status: 'offline', error: 'Probe timeout' };
-    }
     return { status: 'unknown', error: err.message };
   }
 }
