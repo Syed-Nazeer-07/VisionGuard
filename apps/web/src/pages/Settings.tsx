@@ -1,240 +1,249 @@
-import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, RefreshCw, AlertCircle, CheckCircle, ShieldAlert } from 'lucide-react';
-import { db } from '../services/db';
-import { supabase } from '../lib/supabase';
-import { useAuthStore } from '../store/auth';
+import { useState } from 'react'
+import { 
+  User, Bell, Shield, Key, Save, Mail, Smartphone,
+  Loader2, CheckCircle2
+} from 'lucide-react'
+import { cn } from '../lib/utils'
+import { useAuthStore } from '../store/auth'
+import { supabase } from '../lib/supabase'
 
 export default function Settings() {
-  const { role } = useAuthStore();
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState('profile')
+  const { user, role, profile, settings, updateSettings, updateProfile } = useAuthStore()
   
-  const [settings, setSettings] = useState<Record<string, any>>({});
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState('')
   
-  const canModify = role === 'Admin';
-  const canView = role === 'Admin' || role === 'Authority';
+  // Local state for forms
+  const [formData, setFormData] = useState({
+    name: profile?.name || user?.user_metadata?.full_name || '',
+    organization: profile?.organization || user?.user_metadata?.organization || '',
+    email_alerts: settings?.email_alerts ?? true,
+    system_alerts: settings?.system_alerts ?? true,
+    incident_alerts: settings?.incident_alerts ?? true,
+    report_notifications: settings?.report_notifications ?? true,
+  })
 
-  const fetchSettings = async () => {
-    if (!canView) return;
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await db.settings.list();
-      setSettings(data);
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch settings');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const TABS = [
+    { id: 'profile', label: 'My Profile', icon: User },
+    { id: 'security', label: 'Security & Auth', icon: Shield },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+  ]
 
-  useEffect(() => {
-    fetchSettings();
-
-    if (canView) {
-      const channel = supabase.channel('system-settings')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, () => {
-          fetchSettings();
-        })
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [canView]);
-
-  const handleChange = (key: string, value: any) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-  };
+  const handleChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }
 
   const handleSave = async () => {
-    if (!canModify) return;
-    
-    // Validation
-    if (Number(settings.evidence_retention_days) <= 0) {
-      setError('Evidence retention days must be > 0');
-      return;
-    }
-    if (Number(settings.speed_limit_default) <= 0) {
-      setError('Speed limit must be > 0');
-      return;
-    }
-    if (Number(settings.speed_tolerance_default) < 0) {
-      setError('Speed tolerance must be >= 0');
-      return;
-    }
-    
+    if (!user) return;
+    setIsSaving(true)
+    setSaveMessage('')
+
     try {
-      setSaving(true);
-      setError(null);
-      setSuccess(false);
-      
-      // Ensure strict typing before sending
-      const updates = {
-        evidence_retention_days: Number(settings.evidence_retention_days),
-        speed_limit_default: Number(settings.speed_limit_default),
-        speed_tolerance_default: Number(settings.speed_tolerance_default),
-        feature_speed_detection: Boolean(settings.feature_speed_detection),
-        feature_plate_detection: Boolean(settings.feature_plate_detection),
-        feature_helmet_detection: Boolean(settings.feature_helmet_detection),
-        feature_triple_riding_detection: Boolean(settings.feature_triple_riding_detection),
-        feature_red_light_detection: Boolean(settings.feature_red_light_detection),
-        feature_lane_detection: Boolean(settings.feature_lane_detection),
-        feature_alerts: Boolean(settings.feature_alerts),
-        maintenance_mode: Boolean(settings.maintenance_mode)
-      };
-      
-      await db.settings.update(updates);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      setError(err.message || 'Failed to save settings');
+      // Save Profile
+      if (activeTab === 'profile') {
+        const { error } = await supabase.from('profiles').update({
+          name: formData.name,
+          organization: formData.organization
+        }).eq('id', user.id)
+        if (error) throw error;
+        updateProfile({ name: formData.name, organization: formData.organization })
+      } 
+      // Save Settings
+      else if (activeTab === 'notifications') {
+        const newSettings = {
+          email_alerts: formData.email_alerts,
+          system_alerts: formData.system_alerts,
+          incident_alerts: formData.incident_alerts,
+          report_notifications: formData.report_notifications
+        }
+        const { error } = await supabase.from('user_settings').update(newSettings).eq('id', user.id)
+        if (error) throw error;
+        updateSettings(newSettings)
+      }
+
+      // Log the action
+      await supabase.from('audit_logs').insert([
+        { user_id: user.id, action: `Updated ${activeTab} settings`, metadata: { tab: activeTab } }
+      ])
+
+      setSaveMessage('Settings saved successfully.')
+      setTimeout(() => setSaveMessage(''), 3000)
+    } catch (err) {
+      console.error(err)
+      setSaveMessage('Failed to save settings.')
     } finally {
-      setSaving(false);
+      setIsSaving(false)
     }
-  };
-
-  if (!canView) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <ShieldAlert className="w-16 h-16 text-red-500 mb-4" />
-        <h2 className="text-2xl font-bold text-white mb-2">Access Denied</h2>
-        <p className="text-gray-400">You do not have permission to view System Settings.</p>
-      </div>
-    );
   }
-
-  if (loading && Object.keys(settings).length === 0) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500"></div>
-      </div>
-    );
-  }
-
-  const Toggle = ({ label, field }: { label: string, field: string }) => (
-    <div className="flex items-center justify-between p-4 bg-gray-800 rounded-lg border border-gray-700">
-      <span className="text-gray-300 font-medium">{label}</span>
-      <button
-        type="button"
-        disabled={!canModify}
-        onClick={() => handleChange(field, !settings[field])}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
-          settings[field] ? 'bg-indigo-600' : 'bg-gray-600'
-        } ${!canModify ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
-      >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-            settings[field] ? 'translate-x-6' : 'translate-x-1'
-          }`}
-        />
-      </button>
-    </div>
-  );
-
-  const InputField = ({ label, field, type = 'number', unit = '' }: { label: string, field: string, type?: string, unit?: string }) => (
-    <div className="flex flex-col gap-2 p-4 bg-gray-800 rounded-lg border border-gray-700">
-      <label className="text-gray-300 font-medium">{label}</label>
-      <div className="relative flex items-center">
-        <input
-          type={type}
-          disabled={!canModify}
-          value={settings[field] ?? ''}
-          onChange={(e) => handleChange(field, e.target.value)}
-          className="w-full bg-gray-900 border border-gray-700 text-white rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-        {unit && <span className="absolute right-4 text-gray-500">{unit}</span>}
-      </div>
-    </div>
-  );
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <header className="flex flex-col md:flex-row md:justify-between md:items-end gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-2 mb-2">
-            <SettingsIcon className="w-8 h-8 text-indigo-500" />
-            System Settings
-          </h1>
-          <p className="text-gray-400">Configure global parameters and feature flags.</p>
-        </div>
-        {canModify && (
-          <div className="flex gap-3">
+    <div className="flex flex-col md:flex-row gap-8">
+      
+      {/* Sidebar Navigation */}
+      <div className="w-full md:w-64 shrink-0">
+        <h2 className="text-[13px] font-bold text-slate-400 uppercase tracking-wider mb-4 px-3">Personal Settings</h2>
+        <nav className="space-y-1">
+          {TABS.map(tab => (
             <button
-              onClick={fetchSettings}
-              disabled={saving}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white rounded-lg transition-colors flex items-center gap-2"
+              key={tab.id}
+              onClick={() => {
+                setActiveTab(tab.id)
+                setSaveMessage('')
+              }}
+              className={cn(
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[14px] font-medium transition-all text-left",
+                activeTab === tab.id 
+                  ? "bg-white text-slate-900 shadow-sm border border-slate-200" 
+                  : "text-slate-600 hover:bg-white hover:text-slate-900 border border-transparent"
+              )}
             >
-              <RefreshCw className="w-4 h-4" />
-              Reset
+              <tab.icon className={cn("w-4 h-4", activeTab === tab.id ? "text-slate-900" : "text-slate-400")} />
+              {tab.label}
             </button>
-            <button
+          ))}
+        </nav>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+        
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">{TABS.find(t => t.id === activeTab)?.label}</h3>
+            <p className="text-[13px] text-slate-500 mt-1">Manage your account preferences and security settings.</p>
+          </div>
+          <div className="flex items-center gap-4">
+            {saveMessage && (
+              <span className="text-[13px] font-bold text-emerald-600 flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" /> {saveMessage}
+              </span>
+            )}
+            <button 
               onClick={handleSave}
-              disabled={saving}
-              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              disabled={isSaving}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-[13px] font-bold transition-all shadow-sm shadow-blue-500/20 disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save Changes'}
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
-        )}
-      </header>
-
-      {error && (
-        <div className="p-4 bg-red-900/50 border border-red-500/50 rounded-lg flex items-center gap-3 text-red-200">
-          <AlertCircle className="w-5 h-5 flex-shrink-0" />
-          <p>{error}</p>
         </div>
-      )}
 
-      {success && (
-        <div className="p-4 bg-emerald-900/50 border border-emerald-500/50 rounded-lg flex items-center gap-3 text-emerald-200">
-          <CheckCircle className="w-5 h-5 flex-shrink-0" />
-          <p>Settings saved successfully!</p>
-        </div>
-      )}
+        {/* Content */}
+        <div className="p-6 flex-1 bg-slate-50/30">
+          
+          {activeTab === 'profile' && (
+            <div className="max-w-2xl space-y-6">
+              
+              <div className="flex items-center gap-6 pb-6 border-b border-slate-200">
+                <div className="w-20 h-20 rounded-full bg-slate-200 flex items-center justify-center text-2xl font-bold text-slate-500 uppercase shrink-0 border-4 border-white shadow-sm overflow-hidden">
+                  {profile?.avatar ? (
+                    <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                  ) : (
+                    user?.email?.charAt(0) || 'U'
+                  )}
+                </div>
+                <div>
+                  <button className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-[13px] font-bold transition-all shadow-sm">
+                    Change Avatar
+                  </button>
+                  <p className="text-[12px] text-slate-500 mt-2">JPG, GIF or PNG. 1MB max.</p>
+                </div>
+              </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="space-y-6">
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4 border-b border-gray-800 pb-2">Evidence Settings</h2>
-            <InputField label="Evidence Retention Period" field="evidence_retention_days" unit="days" />
-          </section>
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">Full Name</label>
+                  <input 
+                    type="text" 
+                    value={formData.name}
+                    onChange={(e) => handleChange('name', e.target.value)}
+                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">Organization</label>
+                  <input 
+                    type="text" 
+                    value={formData.organization}
+                    onChange={(e) => handleChange('organization', e.target.value)}
+                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg text-[14px] focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">Email Address</label>
+                  <input type="email" disabled defaultValue={user?.email} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[14px] text-slate-500 cursor-not-allowed" />
+                </div>
+                <div>
+                  <label className="block text-[13px] font-bold text-slate-700 mb-2">Role</label>
+                  <input type="text" disabled defaultValue={role || 'Viewer'} className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-[14px] text-slate-500 cursor-not-allowed uppercase font-bold" />
+                </div>
+              </div>
 
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4 border-b border-gray-800 pb-2">Detection Defaults</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <InputField label="Default Speed Limit" field="speed_limit_default" unit="km/h" />
-              <InputField label="Default Tolerance" field="speed_tolerance_default" unit="km/h" />
             </div>
-          </section>
+          )}
 
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4 border-b border-gray-800 pb-2">System Settings</h2>
-            <Toggle label="Maintenance Mode" field="maintenance_mode" />
-            <p className="text-sm text-gray-500 mt-2">When enabled, non-admin users will be temporarily restricted.</p>
-          </section>
-        </div>
+          {activeTab === 'security' && (
+            <div className="max-w-2xl space-y-6">
+              <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-[14px] flex items-center gap-2"><Key className="w-4 h-4 text-slate-400" /> Password</h4>
+                  <p className="text-[13px] text-slate-500 mt-1">Change your password. We recommend a strong, unique password.</p>
+                </div>
+                <button className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-4 py-2 rounded-lg text-[13px] font-bold transition-all shadow-sm">
+                  Update Password
+                </button>
+              </div>
 
-        <div className="space-y-6">
-          <section>
-            <h2 className="text-xl font-semibold text-white mb-4 border-b border-gray-800 pb-2">Feature Flags</h2>
-            <div className="flex flex-col gap-3">
-              <Toggle label="Speed Detection" field="feature_speed_detection" />
-              <Toggle label="License Plate Detection (OCR)" field="feature_plate_detection" />
-              <Toggle label="Helmet Detection" field="feature_helmet_detection" />
-              <Toggle label="Triple Riding Detection" field="feature_triple_riding_detection" />
-              <Toggle label="Red Light Detection" field="feature_red_light_detection" />
-              <Toggle label="Lane Violation Detection" field="feature_lane_detection" />
-              <Toggle label="System Alerts" field="feature_alerts" />
+              <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-bold text-slate-900 text-[14px] flex items-center gap-2"><Smartphone className="w-4 h-4 text-slate-400" /> Two-Factor Auth</h4>
+                    <p className="text-[13px] text-slate-500 mt-1">Add an extra layer of security to your account.</p>
+                  </div>
+                  <button className="bg-blue-50 text-blue-700 hover:bg-blue-100 px-4 py-2 rounded-lg text-[13px] font-bold transition-all shadow-sm">
+                    Enable 2FA
+                  </button>
+                </div>
+              </div>
             </div>
-            <p className="text-sm text-gray-500 mt-3">Disabling a feature flag completely halts the respective pipeline operations immediately across all nodes.</p>
-          </section>
+          )}
+
+          {activeTab === 'notifications' && (
+            <div className="max-w-2xl space-y-6">
+              <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-sm space-y-4">
+                <h4 className="font-bold text-slate-900 text-[14px] flex items-center gap-2 border-b border-slate-100 pb-3"><Mail className="w-4 h-4 text-slate-400" /> Email Notifications</h4>
+                
+                {[
+                  { key: 'incident_alerts', label: 'Critical Incidents', desc: 'Email me when a critical severity incident occurs.' },
+                  { key: 'report_notifications', label: 'Daily Digest & Reports', desc: 'Send me generated reports and summaries.' },
+                  { key: 'system_alerts', label: 'System Alerts', desc: 'Notify me of camera downtimes and platform maintenance.' }
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center justify-between pt-2">
+                    <div>
+                      <div className="font-bold text-slate-900 text-[13px]">{item.label}</div>
+                      <div className="text-[12px] text-slate-500">{item.desc}</div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        className="sr-only peer" 
+                        checked={formData[item.key as keyof typeof formData] as boolean} 
+                        onChange={(e) => handleChange(item.key, e.target.checked)}
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
         </div>
       </div>
+
     </div>
-  );
+  )
 }

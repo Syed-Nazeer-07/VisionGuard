@@ -6,7 +6,7 @@ export class Track {
   public trackId: number;
   public state: TrackState;
   public kf: KalmanFilter;
-  public age: number = 0;
+  public frameCount: number = 0;
   public timeSinceUpdate: number = 0;
   
   // Last known info
@@ -25,7 +25,7 @@ export class Track {
 
   predict() {
     this.kf.predict();
-    this.age++;
+    this.frameCount++;
     this.timeSinceUpdate++;
   }
 
@@ -36,7 +36,7 @@ export class Track {
     this.prob = box.prob;
     this.timeSinceUpdate = 0;
     
-    if (this.state === 'Tentative' && this.age >= 3) {
+    if (this.state === 'Tentative' && this.frameCount >= 3) {
       this.state = 'Confirmed';
     }
   }

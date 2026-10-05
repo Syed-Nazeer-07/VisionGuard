@@ -11,7 +11,7 @@ const registerSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   confirmPassword: z.string(),
-  role: z.enum(['Viewer', 'Authority', 'Admin'] as const),
+  role: z.enum(['Viewer', 'Operator', 'Supervisor', 'Admin'] as const),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -125,7 +125,8 @@ export function Register() {
               )}
             >
               <option value="Viewer">Viewer</option>
-              <option value="Authority">Authority</option>
+              <option value="Operator">Operator</option>
+              <option value="Supervisor">Supervisor</option>
               <option value="Admin">Admin</option>
             </select>
             {errors.role && <p className="mt-1 text-xs text-red-400">{errors.role.message}</p>}

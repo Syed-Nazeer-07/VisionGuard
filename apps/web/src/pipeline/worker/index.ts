@@ -14,9 +14,7 @@ import { generatePlateCrop } from '../plate/crop';
 import { evaluateEvidence } from '../evidence/scoring';
 import { addEvidenceCandidate, getBestEvidence, removeEvidence } from '../evidence/collector';
 import type { WorkerMessage, Point } from '../types';
-
-env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/';
-
+env.wasm.wasmPaths = '/';
 let session: InferenceSession | null = null;
 let provider: string = '';
 const tracker = new ByteTracker();
@@ -95,7 +93,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       self.postMessage({ type: 'ready', provider });
     } catch (error) {
       console.error('Failed to load ONNX model:', error);
-      self.postMessage({ type: 'error', error: String(error) });
+      self.postMessage({ type: 'error', error: error instanceof Error ? error.message : (error && typeof error === 'object' && 'message' in error ? String((error as any).message) : String(error)) });
     }
   } else if (msg.type === 'inference') {
     if (!session) {

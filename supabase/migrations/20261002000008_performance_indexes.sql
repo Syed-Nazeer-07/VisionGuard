@@ -14,6 +14,7 @@ CREATE INDEX IF NOT EXISTS idx_traffic_stats_camera_id ON traffic_stats(camera_i
 CREATE INDEX IF NOT EXISTS idx_traffic_stats_timestamp ON traffic_stats(timestamp DESC);
 
 CREATE INDEX IF NOT EXISTS idx_analysis_runs_camera_id ON analysis_runs(camera_id);
-CREATE INDEX IF NOT EXISTS idx_analysis_runs_start_time ON analysis_runs(start_time DESC);
+CREATE INDEX IF NOT EXISTS idx_analysis_runs_started_at
+ON analysis_runs(started_at DESC);
 
 -- Also index evidence bucket objects if possible (Storage manages its own indexes)

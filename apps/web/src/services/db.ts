@@ -49,6 +49,12 @@ export const db = {
       if (error) throw error
       return data
     },
+    async createBatch(violations: Database['public']['Tables']['violations']['Insert'][]) {
+      if (violations.length === 0) return []
+      const { data, error } = await (supabase as any).from('violations').insert(violations).select()
+      if (error) throw error
+      return data
+    },
     async update(id: string, updates: Database['public']['Tables']['violations']['Update']) {
       const { data, error } = await (supabase as any).from('violations').update(updates).eq('id', id).select().single()
       if (error) throw error
@@ -219,6 +225,42 @@ export const db = {
       
       const { error } = await (supabase as any).from('system_settings').upsert(payload, { onConflict: 'key' });
       if (error) throw error;
+    }
+  },
+  analysisRuns: {
+    async create(run: Database['public']['Tables']['analysis_runs']['Insert']) {
+      const { data, error } = await (supabase as any).from('analysis_runs').insert(run).select().single()
+      if (error) throw error
+      return data
+    },
+    async update(id: string, updates: Database['public']['Tables']['analysis_runs']['Update']) {
+      const { data, error } = await (supabase as any).from('analysis_runs').update(updates).eq('id', id).select().single()
+      if (error) throw error
+      return data
+    }
+  },
+  auditLogs: {
+    async create(log: any) {
+      const { data, error } = await (supabase as any).from('audit_logs').insert(log).select().single()
+      if (error) throw error
+      return data
+    }
+  },
+  evidence: {
+    async listByCase(caseId: string) {
+      const { data, error } = await (supabase as any).from('evidence').select('*').eq('case_id', caseId).order('capture_timestamp', { ascending: false })
+      if (error) throw error
+      return data
+    },
+    async listByIncident(incidentId: string) {
+      const { data, error } = await (supabase as any).from('evidence').select('*').eq('incident_id', incidentId).order('capture_timestamp', { ascending: false })
+      if (error) throw error
+      return data
+    },
+    async update(id: string, updates: any) {
+      const { data, error } = await (supabase as any).from('evidence').update(updates).eq('id', id).select().single()
+      if (error) throw error
+      return data
     }
   }
 }

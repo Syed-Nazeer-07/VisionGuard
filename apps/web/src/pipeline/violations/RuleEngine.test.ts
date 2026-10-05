@@ -42,7 +42,7 @@ const CONFIRMED_TRACK: TrackedObject = {
   className: 'car',
   classId: 2,
   prob: 0.9,
-  age: 5,
+  frameCount: 5,
   speed: 100,
   isOverspeed: true
 };

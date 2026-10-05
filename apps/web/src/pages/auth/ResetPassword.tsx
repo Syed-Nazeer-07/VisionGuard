@@ -23,7 +23,7 @@ export function ResetPassword() {
 
   // Wait until we have a session to reset the password for
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: any) => {
       if (!session) {
         // If they visit this URL directly without the hash, redirect to login
         // Sometimes the hash is consumed by Supabase and a session is created automatically.
@@ -44,17 +44,30 @@ export function ResetPassword() {
     setIsLoading(true)
     setError(null)
     
-    const { error } = await supabase.auth.updateUser({
+    const { data: { user }, error: authError } = await supabase.auth.updateUser({
       password: data.password,
     })
 
-    setIsLoading(false)
-
-    if (error) {
-      setError(error.message)
-    } else {
-      navigate('/app')
+    if (authError) {
+      setError(authError.message)
+      setIsLoading(false)
+      return
     }
+
+    if (user) {
+      // Check if this was a first-time activation (Pending status)
+      const { data: profile } = await supabase.from('profiles').select('status').eq('id', user.id).single()
+      if (profile && profile.status === 'Pending') {
+        await supabase.from('profiles').update({ 
+          status: 'Active',
+          accepted_at: new Date().toISOString()
+        }).eq('id', user.id)
+        await supabase.from('audit_logs').insert([{ user_id: user.id, action: 'USER_ACTIVATED' }])
+      }
+    }
+
+    setIsLoading(false)
+    navigate('/app')
   }
 
   return (

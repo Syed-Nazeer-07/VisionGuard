@@ -15,7 +15,7 @@ export default function Alerts() {
   const [cameraFilter, setCameraFilter] = useState<string>('all');
 
   const { role, user } = useAuthStore();
-  const canManage = role === 'Authority' || role === 'Admin';
+  const canManage = role === 'Admin';
 
   const fetchAlerts = async () => {
     try {

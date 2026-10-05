@@ -35,7 +35,8 @@ export function drawBoundingBoxes(
     ctx.setLineDash([]); // Reset dash
 
     // Label background
-    let label = `ID:${track.trackId} ${track.className} ${(track.prob * 100).toFixed(0)}% Age:${track.age}`;
+    const classNameFormatted = track.className.charAt(0).toUpperCase() + track.className.slice(1);
+    let label = `${classNameFormatted} #${track.trackId} (${(track.prob * 100).toFixed(0)}%)`;
     if (track.speed !== undefined) {
       label += ` | ${Math.round(track.speed)} km/h`;
     }

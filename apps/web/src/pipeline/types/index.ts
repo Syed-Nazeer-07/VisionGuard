@@ -51,7 +51,7 @@ export type TrackState = 'Tentative' | 'Confirmed' | 'Lost' | 'Removed';
 export interface TrackedObject extends BoundingBox {
   trackId: number;
   state: TrackState;
-  age: number;
+  frameCount: number;
   speed?: number;
   isOverspeed?: boolean;
 }

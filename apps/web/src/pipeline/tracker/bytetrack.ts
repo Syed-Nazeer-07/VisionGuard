@@ -64,7 +64,7 @@ export class ByteTracker {
 
     // Export current tracking results
     return this.tracks
-      .filter(t => t.state === 'Confirmed' || (t.state === 'Tentative' && t.age >= 1))
+      .filter(t => t.state === 'Confirmed' || (t.state === 'Tentative' && t.frameCount >= 1))
       .map(t => {
         const state = t.kf.getState();
         return {
@@ -77,7 +77,7 @@ export class ByteTracker {
           className: t.className,
           trackId: t.trackId,
           state: t.state,
-          age: t.age
+          frameCount: t.frameCount
         };
       });
   }
