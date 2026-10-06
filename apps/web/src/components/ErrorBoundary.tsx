@@ -43,10 +43,15 @@ export class ErrorBoundary extends Component<Props, State> {
               Try Again
             </button>
             <button
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors"
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                if (window.history.length > 1) {
+                  window.history.back();
+                }
+              }}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors cursor-pointer"
             >
-              Reload Page
+              Go Back
             </button>
           </div>
         </div>

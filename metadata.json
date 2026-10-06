@@ -1,0 +1,8 @@
+{
+  "name": "VisionGuard",
+  "description": "AI-Powered Traffic Violation Detection & Video Analytics Platform for modern roadway operations.",
+  "prompt": "VisionGuard AI Traffic Violation Detection and Video Analytics Platform",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "visionguard",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "lint": "npm run lint -w web"
+  }
+}

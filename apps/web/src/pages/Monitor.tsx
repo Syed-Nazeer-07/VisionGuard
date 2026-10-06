@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
   Search, Filter, Maximize2, AlertCircle, 
   Camera as CameraIcon, ShieldAlert, CheckCircle2,
@@ -8,7 +9,6 @@ import { cn } from '../lib/utils'
 import { supabase } from '../lib/supabase'
 import { useAuthStore } from '../store/auth'
 import Hls from 'hls.js'
-import { useRef } from 'react'
 
 function CameraStream({ cam }: { cam: any }) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -41,7 +41,7 @@ function CameraStream({ cam }: { cam: any }) {
     return () => {
       if (hls) hls.destroy();
     }
-  }, [cam]);
+  }, [cam?.id, cam?.stream_url, cam?.source_url, cam?.source_type]);
 
   if (!cam || (!cam.stream_url && !cam.source_url)) {
     return (
@@ -63,6 +63,7 @@ function CameraStream({ cam }: { cam: any }) {
 }
 
 export function Monitor() {
+  const navigate = useNavigate()
   const [activeLayout, setActiveLayout] = useState('grid-4')
   const { role } = useAuthStore()
   
@@ -163,7 +164,12 @@ export function Monitor() {
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
           {cameras.map(cam => (
-            <div key={cam.id} className="p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer group flex items-start gap-3 border border-transparent hover:border-slate-100">
+            <div 
+              key={cam.id} 
+              onClick={() => navigate(`/app/analyze?camera=${cam.id}`)}
+              className="p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer group flex items-start gap-3 border border-transparent hover:border-slate-100"
+              title="Click to analyze camera stream"
+            >
               <div className="mt-0.5">
                 {cam.status === 'online' ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> :
                  cam.status === 'warning' ? <AlertCircle className="w-4 h-4 text-amber-500" /> :
@@ -248,8 +254,12 @@ export function Monitor() {
                   <button className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-lg text-white transition-colors cursor-pointer">
                     <Settings2 className="w-4 h-4" />
                   </button>
-                  <button className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-lg text-white transition-colors cursor-pointer">
-                    <Activity className="w-4 h-4" />
+                  <button 
+                    onClick={() => navigate(`/app/analyze?camera=${cam.id}`)}
+                    className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-lg text-white transition-colors cursor-pointer"
+                    title="Launch Live AI Analysis on this camera"
+                  >
+                    <Activity className="w-4 h-4 text-emerald-400" />
                   </button>
                 </div>
                 <button className="p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-lg text-white transition-colors cursor-pointer">

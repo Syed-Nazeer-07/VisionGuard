@@ -287,6 +287,73 @@ export type Database = {
           updated_at?: string | null
         }
       }
+      video_assets: {
+        Row: {
+          id: string
+          filename: string
+          storage_path: string
+          file_size: number | null
+          duration: number | null
+          uploaded_by: string | null
+          uploaded_at: string | null
+          processing_status: 'created' | 'pending' | 'uploading' | 'uploaded' | 'processing' | 'completed' | 'failed' | 'paused'
+          metadata: Json | null
+        }
+        Insert: {
+          id?: string
+          filename: string
+          storage_path?: string
+          file_size?: number | null
+          duration?: number | null
+          uploaded_by?: string | null
+          uploaded_at?: string | null
+          processing_status?: 'created' | 'pending' | 'uploading' | 'uploaded' | 'processing' | 'completed' | 'failed' | 'paused'
+          metadata?: Json | null
+        }
+        Update: {
+          id?: string
+          filename?: string
+          storage_path?: string
+          file_size?: number | null
+          duration?: number | null
+          uploaded_by?: string | null
+          uploaded_at?: string | null
+          processing_status?: 'created' | 'pending' | 'uploading' | 'uploaded' | 'processing' | 'completed' | 'failed' | 'paused'
+          metadata?: Json | null
+        }
+      }
+      analysis_logs: {
+        Row: {
+          id: string
+          video_id: string | null
+          camera_id: string | null
+          analysis_run_id: string | null
+          timestamp: string
+          category: 'SYSTEM' | 'UPLOAD' | 'PROCESSING' | 'MODEL' | 'DETECTION' | 'TRACKING' | 'INCIDENT' | 'EVIDENCE' | 'PERSISTENCE' | 'ERROR'
+          message: string
+          metadata: Json | null
+        }
+        Insert: {
+          id?: string
+          video_id?: string | null
+          camera_id?: string | null
+          analysis_run_id?: string | null
+          timestamp?: string
+          category: 'SYSTEM' | 'UPLOAD' | 'PROCESSING' | 'MODEL' | 'DETECTION' | 'TRACKING' | 'INCIDENT' | 'EVIDENCE' | 'PERSISTENCE' | 'ERROR'
+          message: string
+          metadata?: Json | null
+        }
+        Update: {
+          id?: string
+          video_id?: string | null
+          camera_id?: string | null
+          analysis_run_id?: string | null
+          timestamp?: string
+          category?: 'SYSTEM' | 'UPLOAD' | 'PROCESSING' | 'MODEL' | 'DETECTION' | 'TRACKING' | 'INCIDENT' | 'EVIDENCE' | 'PERSISTENCE' | 'ERROR'
+          message?: string
+          metadata?: Json | null
+        }
+      }
     }
     Views: {
       [_ in never]: never

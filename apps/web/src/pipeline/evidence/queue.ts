@@ -1,10 +1,12 @@
 import { supabase } from '../../lib/supabase';
 import { db } from '../../services/db';
+import { analysisLogger } from '../../services/analysisLogger';
 
 export interface EvidenceJob {
   incident_id: string;
   camera_id: string | null;
   video_id?: string | null;
+  analysis_run_id?: string | null;
   base64Data: string;
   type: 'snapshot' | 'plate_crop';
   capture_timestamp: string;
@@ -136,6 +138,7 @@ class EvidenceQueueSystem {
           camera_id: job.camera_id,
           incident_id: job.incident_id,
           video_id: job.video_id || null,
+          analysis_run_id: job.analysis_run_id || null,
           file_type: job.type,
           file_url: filePath,
           file_path: filePath,
@@ -176,13 +179,28 @@ class EvidenceQueueSystem {
           
           this.metrics.uploaded++;
           db.auditLogs.create({ action: 'EVIDENCE_UPLOADED', metadata: { evidenceId, incidentId: job.incident_id } }).catch(()=>{});
+
+          analysisLogger.log({
+            video_id: job.video_id || null,
+            camera_id: job.camera_id || null,
+            analysis_run_id: job.analysis_run_id || null,
+            category: 'EVIDENCE',
+            message: `Evidence snapshot uploaded (${job.type})`
+          });
         } else {
           throw new Error('Max retries exceeded: ' + String(lastError));
         }
 
-      } catch (err) {
+      } catch (err: any) {
         this.metrics.failed++;
         console.error('Evidence queue error:', err);
+        analysisLogger.log({
+          video_id: job.video_id || null,
+          camera_id: job.camera_id || null,
+          analysis_run_id: job.analysis_run_id || null,
+          category: 'ERROR',
+          message: `Evidence upload failed: ${err?.message || 'Storage error'}`
+        });
       } finally {
         const elapsed = performance.now() - startTime;
         this.metrics.totalTimeMs += elapsed;

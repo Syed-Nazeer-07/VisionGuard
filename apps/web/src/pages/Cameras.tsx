@@ -68,7 +68,13 @@ export function Cameras() {
   }
 
   const handleDelete = async (cam: any) => {
-    if (!window.confirm(`Are you sure you want to delete ${cam.name}?`)) return
+    try {
+      if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Are you sure you want to delete ${cam.name}?`)) {
+        return
+      }
+    } catch {
+      // In iframe sandbox where window.confirm may be restricted, continue deletion
+    }
     try {
       await supabase.from('cameras').update({ is_deleted: true }).eq('id', cam.id)
       await supabase.from('audit_logs').insert([{ user_id: user?.id, action: `Deleted Camera ${cam.camera_identifier || cam.id}` }])
@@ -228,6 +234,13 @@ export function Cameras() {
                     </td>
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => navigate(`/app/analyze?camera=${cam.id}`)}
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                          title="Launch Live AI Analysis"
+                        >
+                          <Play className="w-4 h-4 text-emerald-600" />
+                        </button>
                         <button 
                           onClick={() => handleOpenDetails(cam)}
                           className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"

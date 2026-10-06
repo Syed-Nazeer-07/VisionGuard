@@ -15,8 +15,6 @@ function serveOnnxWasmPlugin(): Plugin {
           if (fs.existsSync(filePath)) {
             const ext = path.extname(cleanPath)
             res.setHeader('Content-Type', ext === '.wasm' ? 'application/wasm' : 'application/javascript')
-            res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
-            res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp')
             res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
             res.writeHead(200)
             fs.createReadStream(filePath).pipe(res)
@@ -33,10 +31,11 @@ function serveOnnxWasmPlugin(): Plugin {
 export default defineConfig({
   plugins: [serveOnnxWasmPlugin(), react(), tailwindcss()],
   server: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin',
-      'Cross-Origin-Embedder-Policy': 'require-corp',
-    },
+    host: '0.0.0.0',
+    port: 3000,
+    strictPort: true,
+    allowedHosts: true,
+    hmr: false,
   },
   test: {
     environment: 'happy-dom',

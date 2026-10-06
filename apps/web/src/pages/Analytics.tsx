@@ -162,13 +162,13 @@ export default function Analytics() {
       return
     }
 
-    const headers = ['Incident ID', 'Type', 'Severity', 'Status', 'Camera', 'Created At']
+    const headers = ['Incident ID', 'Type', 'Severity', 'Status', 'Location / Source', 'Created At']
     const rows = incidents.map(inc => [
       inc.id,
       inc.incident_type,
       inc.severity,
       inc.status,
-      inc.camera?.name || 'Unknown',
+      inc.camera?.name || inc.location || (inc.video_id ? 'Uploaded Video Asset' : 'Roadway Source'),
       inc.created_at
     ])
 

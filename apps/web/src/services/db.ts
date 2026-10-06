@@ -262,5 +262,37 @@ export const db = {
       if (error) throw error
       return data
     }
+  },
+  videoAssets: {
+    async get(id: string) {
+      const { data, error } = await (supabase as any).from('video_assets').select('*').eq('id', id).single()
+      if (error) throw error
+      return data
+    },
+    async list() {
+      const { data, error } = await (supabase as any).from('video_assets').select('*').order('uploaded_at', { ascending: false })
+      if (error) throw error
+      return data
+    },
+    async update(id: string, updates: any) {
+      const { data, error } = await (supabase as any).from('video_assets').update(updates).eq('id', id).select().single()
+      if (error) throw error
+      return data
+    }
+  },
+  analysisLogs: {
+    async list(filters: { videoId?: string; cameraId?: string }) {
+      let query = (supabase as any).from('analysis_logs').select('*')
+      if (filters.videoId) query = query.eq('video_id', filters.videoId)
+      if (filters.cameraId) query = query.eq('camera_id', filters.cameraId)
+      const { data, error } = await query.order('timestamp', { ascending: true })
+      if (error) throw error
+      return data
+    },
+    async create(log: any) {
+      const { data, error } = await (supabase as any).from('analysis_logs').insert(log).select().single()
+      if (error) throw error
+      return data
+    }
   }
 }

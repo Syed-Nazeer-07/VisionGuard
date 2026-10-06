@@ -91,7 +91,7 @@ export function AppLayout() {
 
         {/* Logo Area */}
         <div className="h-[72px] flex items-center px-6 border-b border-slate-100 shrink-0">
-          <Link to="/" className="flex items-center space-x-3 group outline-none overflow-hidden whitespace-nowrap">
+          <Link to="/app" className="flex items-center space-x-3 group outline-none overflow-hidden whitespace-nowrap">
             <div className="bg-slate-900 p-1.5 rounded-lg flex-shrink-0">
               <Shield className="w-5 h-5 text-white" />
             </div>

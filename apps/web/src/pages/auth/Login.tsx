@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { useAuthStore } from '../../store/auth';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Shield, Eye, EyeOff, Mail, Lock, User, Building, AlertTriangle, CheckCircle2 } from 'lucide-react';
@@ -33,6 +34,15 @@ export function Login() {
   const location = useLocation();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   
+  const session = useAuthStore(state => state.session);
+  const initialized = useAuthStore(state => state.initialized);
+
+  useEffect(() => {
+    if (initialized && session) {
+      navigate('/app', { replace: true });
+    }
+  }, [initialized, session, navigate]);
+
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -63,17 +73,56 @@ export function Login() {
     setError(null);
     setSuccessMsg(null);
     
-    const { error } = await supabase.auth.signInWithPassword({
-      email: data.email,
-      password: data.password,
-    });
+    sessionStorage.removeItem('visionguard_logged_out');
+    
+    const isMock = !import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder');
+    if (isMock) {
+      setTimeout(() => {
+        const demoUser = {
+          id: 'demo-admin-id',
+          email: data.email || 'admin@transport.gov',
+          user_metadata: { full_name: 'System Administrator' },
+          app_metadata: {},
+          aud: 'authenticated',
+          created_at: new Date().toISOString()
+        } as any;
+        const demoSession = {
+          access_token: 'demo-token',
+          token_type: 'bearer',
+          user: demoUser
+        } as any;
+        const demoProfile = {
+          id: 'demo-admin-id',
+          email: data.email || 'admin@transport.gov',
+          role: 'Admin',
+          status: 'Active',
+          name: 'System Administrator',
+          organization: 'Department of Transportation'
+        };
+        localStorage.setItem('visionguard_demo_session', JSON.stringify({ session: demoSession, profile: demoProfile, settings: {} }));
+        useAuthStore.getState().setAuth(demoSession, demoProfile, {});
+        setIsLoading(false);
+        navigate('/app', { replace: true });
+      }, 300);
+      return;
+    }
 
-    setIsLoading(false);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: data.email,
+        password: data.password,
+      });
 
-    if (error) {
-      setError(error.message);
-    } else {
-      navigate('/app');
+      setIsLoading(false);
+
+      if (error) {
+        setError(error.message);
+      } else {
+        navigate('/app', { replace: true });
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setError(err?.message || 'Authentication failed');
     }
   };
 
@@ -82,28 +131,46 @@ export function Login() {
     setError(null);
     setSuccessMsg(null);
     
-    const { error } = await supabase.auth.signUp({
-      email: data.email,
-      password: data.password,
-      options: {
-        data: {
-          full_name: data.fullName,
-          organization: data.organization,
-          role: 'Viewer'
-        }
-      }
-    });
-
-    setIsLoading(false);
-
-    if (error) {
-      setError(error.message);
-    } else {
-      setSuccessMsg('Registration successful! Please sign in.');
+    const isMock = !import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder');
+    if (isMock) {
       setTimeout(() => {
-        setMode('login');
-        setSuccessMsg(null);
-      }, 2000);
+        setIsLoading(false);
+        setSuccessMsg('Registration successful! Please sign in.');
+        setTimeout(() => {
+          setMode('login');
+          setSuccessMsg(null);
+        }, 1500);
+      }, 300);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: {
+          data: {
+            full_name: data.fullName,
+            organization: data.organization,
+            role: 'Viewer'
+          }
+        }
+      });
+
+      setIsLoading(false);
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setSuccessMsg('Registration successful! Please sign in.');
+        setTimeout(() => {
+          setMode('login');
+          setSuccessMsg(null);
+        }, 2000);
+      }
+    } catch (err: any) {
+      setIsLoading(false);
+      setError(err?.message || 'Registration failed');
     }
   };
 

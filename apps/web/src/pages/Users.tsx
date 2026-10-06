@@ -123,7 +123,6 @@ export function Users() {
       setIsDrawerOpen(false)
     } catch (err: any) {
       console.error(err)
-      alert(err.message)
     } finally {
       setIsSubmitting(false)
     }
@@ -131,7 +130,13 @@ export function Users() {
 
   const handleToggleStatus = async (u: any) => {
     const newStatus = u.status === 'Disabled' ? 'Active' : 'Disabled'
-    if (!window.confirm(`Are you sure you want to ${newStatus === 'Disabled' ? 'disable' : 'enable'} this account?`)) return
+    try {
+      if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Are you sure you want to ${newStatus === 'Disabled' ? 'disable' : 'enable'} this account?`)) {
+        return
+      }
+    } catch {
+      // Continue safely if window.confirm is restricted in iframe
+    }
     
     await supabase.from('profiles').update({ status: newStatus }).eq('id', u.id)
     await supabase.from('audit_logs').insert([{ 
