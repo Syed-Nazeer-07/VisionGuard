@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import type { VideoAsset } from '../services/db'
 import type { Json } from '../types/supabase'
+import { storageProviderFor } from '../services/videoStorage'
 
 export type UploadStatus = 'uploading' | 'uploaded' | 'failed'
 
@@ -12,15 +13,29 @@ export function getUploadStatus(asset: Pick<VideoAsset, 'metadata' | 'storage_pa
   return asset.storage_path ? 'uploaded' : null
 }
 
-/** Public URL of the canonical Storage copy, or null when the upload never completed. */
-export function getStoredVideoUrl(asset: Pick<VideoAsset, 'storage_path'>): string | null {
-  if (!asset.storage_path) return null
-  const { data } = supabase.storage.from('videos').getPublicUrl(asset.storage_path)
-  return data?.publicUrl || null
+/**
+ * Streamable URL for this asset's own stored file, resolved by the provider recorded on the row
+ * (B2: short-lived presigned URL from the video-storage Edge Function). Throws VideoUnavailableError
+ * when the asset has no stored file — it never substitutes another video.
+ */
+export function resolveVideoUrl(asset: Pick<VideoAsset, 'id' | 'storage_path' | 'storage_provider'>): Promise<string> {
+  return storageProviderFor(asset).getVideoUrl(asset)
+}
+
+export function storageProviderLabel(asset: Pick<VideoAsset, 'storage_provider'>): string {
+  return storageProviderFor(asset).label
+}
+
+export function formatBytes(bytes: number | null | undefined): string {
+  if (!bytes) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
+  return `${parseFloat((bytes / Math.pow(1024, i)).toFixed(i >= 3 ? 2 : 1))} ${units[i]}`
 }
 
 export interface StorageInfo {
-  objectExists: boolean
+  /** null = not checkable in the database (B2 objects are verified by the Edge Function on playback). */
+  objectExists: boolean | null
   objectSize: number | null
   /** Earlier asset whose stored file is byte-identical (same size + MD5 eTag), if any. */
   identicalToVideoId: string | null
@@ -28,7 +43,7 @@ export interface StorageInfo {
 
 interface StorageInfoRow {
   video_id: string
-  object_exists: boolean
+  object_exists: boolean | null
   object_size: number | null
   identical_to_video_id: string | null
 }
@@ -66,7 +81,7 @@ export function getAssetAvailability(
   const status = getUploadStatus(asset)
   if (status === 'failed') return { kind: 'upload_failed', detail: typeof meta.upload_error === 'string' ? meta.upload_error : 'unknown error' }
   if (!asset.storage_path) return { kind: 'upload_incomplete' }
-  if (info && !info.objectExists) return { kind: 'file_missing' }
+  if (info && info.objectExists === false) return { kind: 'file_missing' }
   return { kind: 'available' }
 }
 

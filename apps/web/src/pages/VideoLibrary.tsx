@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { VideoAsset } from '../services/db'
-import { fallbackVideoNumbers, fetchStorageInfo, getAssetAvailability, videoDisplayName, type StorageInfo } from '../lib/videoAssets'
+import { fallbackVideoNumbers, fetchStorageInfo, formatBytes, getAssetAvailability, storageProviderLabel, videoDisplayName, type StorageInfo } from '../lib/videoAssets'
+import { storageProviderFor } from '../services/videoStorage'
 import { uploadManager, type ActiveUpload } from '../services/uploadManager'
 import { Film, Search, Play, Trash2, Clock, UploadCloud, RefreshCw } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
@@ -62,25 +63,13 @@ export function VideoLibrary() {
     }
 
     setActionError(null)
-    // Delete the row first: RLS decides whether this user may delete it. Storage is cleaned up after.
-    const { data, error } = await supabase.from('video_assets').delete().eq('id', video.id).select('id')
-    if (error || !data || data.length === 0) {
-      setActionError(`Could not delete ${name}: ${error?.message || 'not permitted (only the uploader or a Supervisor/Admin can delete)'}`)
-      return
+    // The provider deletes the row (RLS decides who may) and then its stored object.
+    try {
+      await storageProviderFor(video).deleteVideo(video)
+      setVideos(prev => prev.filter(v => v.id !== video.id))
+    } catch (e) {
+      setActionError(`Could not delete ${name}: ${e instanceof Error ? e.message : String(e)}`)
     }
-    if (video.storage_path) {
-      const { error: storageErr } = await supabase.storage.from('videos').remove([video.storage_path])
-      if (storageErr) console.warn('Video file removal failed:', storageErr)
-    }
-    setVideos(prev => prev.filter(v => v.id !== video.id))
-  }
-
-  const formatSize = (bytes: number) => {
-    if (!bytes) return '0 B'
-    const k = 1024
-    const sizes = ['B', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
   // Fallback numbering is only used until the display_number column exists.
@@ -198,7 +187,10 @@ export function VideoLibrary() {
                       </div>
                     </td>
                     <td className="px-5 py-4 text-[13px] text-slate-600 font-medium">
-                      {formatSize(video.file_size ?? 0)}
+                      <div>{formatBytes(video.file_size)}</div>
+                      <span className="inline-flex mt-1 px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-600" title="Storage provider">
+                        {storageProviderLabel(video)}
+                      </span>
                     </td>
                     <td className="px-5 py-4">
                       <span title={statusTitle} className={cn(
@@ -217,13 +209,6 @@ export function VideoLibrary() {
                       {video.uploaded_at ? `${formatDistanceToNow(new Date(video.uploaded_at))} ago` : '—'}
                     </td>
                     <td className="px-5 py-4 text-right space-x-2">
-                      <button
-                        onClick={() => navigate(`/app/video-review?video=${encodeURIComponent(video.id)}`)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-[13px] font-bold hover:bg-indigo-100 transition-colors shadow-sm cursor-pointer"
-                        title={`Replay persisted detections for ${name}`}
-                      >
-                        <Film className="w-3.5 h-3.5 text-indigo-600" /> Replay Review
-                      </button>
                       <button
                         onClick={() => navigate(`/app/analyze?video=${encodeURIComponent(video.id)}`)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-[13px] font-bold hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"

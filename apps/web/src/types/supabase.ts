@@ -340,6 +340,7 @@ export type Database = {
           processing_status: VideoProcessingStatus
           metadata: Json | null
           display_number: number | null
+          storage_provider: 'supabase' | 'b2'
         }
         Insert: {
           id?: string
@@ -352,6 +353,7 @@ export type Database = {
           processing_status?: VideoProcessingStatus
           metadata?: Json | null
           display_number?: number | null
+          storage_provider?: 'supabase' | 'b2'
         }
         Update: {
           id?: string
@@ -364,6 +366,7 @@ export type Database = {
           processing_status?: VideoProcessingStatus
           metadata?: Json | null
           display_number?: number | null
+          storage_provider?: 'supabase' | 'b2'
         }
       }
       analysis_logs: {

@@ -1,44 +1,50 @@
-import * as tus from 'tus-js-client'
-import { supabase, supabaseConfig } from '../lib/supabase'
+import { supabase } from '../lib/supabase'
 import type { UploadStatus } from '../lib/videoAssets'
 import type { Json } from '../types/supabase'
 import { analysisLogger } from './analysisLogger'
+import { storageProviderFor, uploadStorageProvider, type StorageProviderId, type UploadProgress } from './videoStorage'
 
 export interface ActiveUpload {
   videoId: string
   fileName: string
   fileSize: number
-  /** Bytes sent so far, as reported by the upload transport (never simulated). */
+  provider: StorageProviderId
+  providerLabel: string
+  /** Bytes sent so far, as reported by the transport (never simulated). */
   bytesUploaded: number
+  /** Bytes the storage service has confirmed as stored. */
+  bytesStored: number
   /** 0–100, derived from bytesUploaded / fileSize. */
   progress: number
+  /** Measured over the last few seconds; null until there is enough data. */
+  bytesPerSecond: number | null
+  etaSeconds: number | null
   status: UploadStatus
-  storagePath: string
+  storagePath: string | null
   error: string | null
   createdTimestamp: string
-  /** Object URL for immediate playback in this tab. The Storage copy is canonical. */
-  localPreviewUrl: string
+  /** Object URL for immediate playback in this tab (null once released). The stored copy is canonical. */
+  localPreviewUrl: string | null
 }
 
 type UploadListener = (upload: ActiveUpload) => void
+type Metadata = Record<string, Json | undefined>
 
-const VIDEOS_BUCKET = 'videos'
-// Supabase resumable uploads require exactly 6 MB chunks.
-const TUS_CHUNK_SIZE = 6 * 1024 * 1024
 const PROGRESS_NOTIFY_INTERVAL_MS = 250
+const SPEED_WINDOW_MS = 8000
 
 /**
- * Owns uploads outside the React tree so they survive route changes and Analyze remounts.
+ * Owns uploads outside the React tree so they survive SPA route changes and Analyze remounts.
  *
- * Sequence: video_assets row (processing_status 'pending', metadata.upload_status 'uploading')
- * → resumable TUS upload to videos/<video_id>/original.<ext> (6 MB chunks, per-chunk retry, real
- * progress) → row updated with storage_path + upload_status 'uploaded'. Any failure marks the row
- * 'failed' with the real error and is logged as ERROR.
+ * Sequence: video_assets row (processing_status 'pending', storage_provider, metadata.upload_status
+ * 'uploading') → provider upload (B2 multipart by default) → row updated with storage_path +
+ * upload_status 'uploaded'. Failures mark the row upload_status 'failed' with the real error.
  */
 class UploadManagerService {
   private uploads = new Map<string, ActiveUpload>()
   private listeners = new Map<string, Set<UploadListener>>()
   private lastNotify = new Map<string, number>()
+  private samples = new Map<string, Array<{ t: number; bytes: number }>>()
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -60,6 +66,19 @@ class UploadManagerService {
     return Array.from(this.uploads.values())
   }
 
+  /**
+   * Revoke the local preview URL when nothing needs it any more. While the transfer is still running
+   * the local copy is the only playable source for that video, so it is kept until the upload ends.
+   */
+  public releasePreview(videoId: string): boolean {
+    const upload = this.uploads.get(videoId)
+    if (!upload?.localPreviewUrl || upload.status === 'uploading') return false
+    URL.revokeObjectURL(upload.localPreviewUrl)
+    upload.localPreviewUrl = null
+    this.notify(upload)
+    return true
+  }
+
   public subscribe(videoId: string, listener: UploadListener): () => void {
     let set = this.listeners.get(videoId)
     if (!set) {
@@ -67,12 +86,10 @@ class UploadManagerService {
       this.listeners.set(videoId, set)
     }
     set.add(listener)
-
     const current = this.uploads.get(videoId)
     if (current) {
       try { listener({ ...current }) } catch (e) { console.warn('Upload listener failed:', e) }
     }
-
     return () => { set.delete(listener) }
   }
 
@@ -84,13 +101,13 @@ class UploadManagerService {
   }
 
   /**
-   * Creates the video_assets row, then uploads to Storage in the background.
+   * Creates the video_assets row, then uploads in the background.
    * Resolves as soon as the row exists (with its video_id); rejects with the real error otherwise.
    */
-  public async startUpload(file: File, selectedAt: string = new Date().toISOString()): Promise<{ videoId: string; storagePath: string; localPreviewUrl: string }> {
-    const fileExt = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4'
+  public async startUpload(file: File, selectedAt: string = new Date().toISOString()): Promise<{ videoId: string }> {
+    const provider = uploadStorageProvider()
     const contentType = file.type || 'video/mp4'
-    const baseMetadata: Record<string, Json> = {
+    const baseMetadata: Metadata = {
       client_uploaded_at: selectedAt,
       original_filename: file.name,
       content_type: contentType
@@ -101,6 +118,7 @@ class UploadManagerService {
       .insert({
         filename: file.name,
         storage_path: '',
+        storage_provider: provider.id,
         file_size: file.size,
         processing_status: 'pending',
         metadata: { ...baseMetadata, upload_status: 'uploading' }
@@ -113,16 +131,19 @@ class UploadManagerService {
     }
 
     const videoId: string = assetData.id
-    // One object per asset, keyed by its id: two uploads can never share or overwrite a path.
-    const storagePath = `${videoId}/original.${fileExt}`
     const record: ActiveUpload = {
       videoId,
       fileName: file.name,
       fileSize: file.size,
+      provider: provider.id,
+      providerLabel: provider.label,
       bytesUploaded: 0,
+      bytesStored: 0,
       progress: 0,
+      bytesPerSecond: null,
+      etaSeconds: null,
       status: 'uploading',
-      storagePath,
+      storagePath: null,
       error: null,
       createdTimestamp: selectedAt,
       localPreviewUrl: URL.createObjectURL(file)
@@ -130,142 +151,121 @@ class UploadManagerService {
     this.uploads.set(videoId, record)
     this.notify(record)
 
-    const sizeMb = (file.size / (1024 * 1024)).toFixed(2)
-    analysisLogger.log({ video_id: videoId, category: 'UPLOAD', timestamp: selectedAt, message: `File selected: ${file.name} (${sizeMb} MB, ${contentType})` })
-    analysisLogger.log({ video_id: videoId, category: 'UPLOAD', message: `Video asset created (id ${videoId})` })
+    analysisLogger.log({ video_id: videoId, category: 'UPLOAD', timestamp: selectedAt, message: `File selected: ${file.name} (${mb(file.size)}, ${contentType})` })
+    analysisLogger.log({ video_id: videoId, category: 'UPLOAD', message: `Video asset created (id ${videoId}, storage: ${provider.label})` })
 
     // Detached from any component lifecycle on purpose.
-    void this.executeStorageUpload(file, record, baseMetadata, contentType)
+    void this.executeUpload(file, record)
 
-    return { videoId, storagePath, localPreviewUrl: record.localPreviewUrl }
+    return { videoId }
   }
 
-  private async markFailed(record: ActiveUpload, message: string, baseMetadata: Record<string, Json>) {
+  /** Merge into the row's current metadata so server-written keys (e.g. the B2 upload session) survive. */
+  private async updateAsset(videoId: string, patch: Record<string, Json>, metadataPatch: Metadata): Promise<string | null> {
+    const { data: current, error: readErr } = await supabase.from('video_assets').select('metadata').eq('id', videoId).maybeSingle()
+    if (readErr) return readErr.message
+    const existing = current?.metadata && typeof current.metadata === 'object' && !Array.isArray(current.metadata) ? current.metadata as Metadata : {}
+    const { error } = await supabase
+      .from('video_assets')
+      .update({ ...patch, metadata: { ...existing, ...metadataPatch } })
+      .eq('id', videoId)
+    return error ? error.message : null
+  }
+
+  private async markFailed(record: ActiveUpload, message: string) {
     record.status = 'failed'
     record.error = message
+    record.bytesPerSecond = null
+    record.etaSeconds = null
     this.notify(record)
 
     analysisLogger.log({ video_id: record.videoId, category: 'ERROR', message: `Upload failed: ${message}` })
 
-    const { error } = await supabase
-      .from('video_assets')
-      .update({
-        processing_status: 'failed',
-        metadata: { ...baseMetadata, upload_status: 'failed', upload_error: message }
-      })
-      .eq('id', record.videoId)
-    if (error) {
-      console.error('Failed to record upload failure on video_assets:', error)
-      analysisLogger.log({ video_id: record.videoId, category: 'ERROR', message: `Could not record upload failure on video_assets: ${error.message}` })
-    }
-  }
-
-  private async executeStorageUpload(file: File, record: ActiveUpload, baseMetadata: Record<string, Json>, contentType: string) {
-    const { videoId, storagePath } = record
-    const totalMb = (file.size / (1024 * 1024)).toFixed(1)
-    analysisLogger.log({ video_id: videoId, category: 'UPLOAD', message: `Upload started → ${VIDEOS_BUCKET}/${storagePath} (${totalMb} MB, resumable)` })
-
-    try {
-      if (supabaseConfig.isMock) {
-        const { error } = await supabase.storage.from(VIDEOS_BUCKET).upload(storagePath, file, { upsert: false, contentType })
-        if (error) throw error
-      } else {
-        await this.tusUpload(file, record, contentType)
-      }
-    } catch (err) {
-      console.error('Storage upload failed:', err)
-      await this.markFailed(record, describeUploadError(err), baseMetadata)
-      return
-    }
-
-    const { error: updateErr } = await supabase
-      .from('video_assets')
-      .update({
-        storage_path: storagePath,
-        metadata: { ...baseMetadata, upload_status: 'uploaded', upload_completed_at: new Date().toISOString() }
-      })
-      .eq('id', videoId)
-    if (updateErr) {
-      await this.markFailed(record, `file stored at ${VIDEOS_BUCKET}/${storagePath}, but video_assets update failed: ${updateErr.message}`, baseMetadata)
-      return
-    }
-
-    record.bytesUploaded = record.fileSize
-    record.progress = 100
-    record.status = 'uploaded'
-    this.notify(record)
-    analysisLogger.log({ video_id: videoId, category: 'UPLOAD', message: `Upload completed: ${VIDEOS_BUCKET}/${storagePath}` })
-  }
-
-  private tusUpload(file: File, record: ActiveUpload, contentType: string): Promise<void> {
-    const { videoId, storagePath } = record
-    let lastLoggedDecile = 0
-
-    return new Promise<void>((resolve, reject) => {
-      const upload = new tus.Upload(file, {
-        endpoint: `${supabaseConfig.url}/storage/v1/upload/resumable`,
-        chunkSize: TUS_CHUNK_SIZE,
-        retryDelays: [0, 3000, 5000, 10000, 20000],
-        uploadDataDuringCreation: true,
-        removeFingerprintOnSuccess: true,
-        headers: {
-          apikey: supabaseConfig.anonKey,
-          'x-upsert': 'false'
-        },
-        metadata: {
-          bucketName: VIDEOS_BUCKET,
-          objectName: storagePath,
-          contentType,
-          cacheControl: '3600'
-        },
-        // Long uploads can outlive an access token: attach the current (auto-refreshed) one to every request.
-        onBeforeRequest: async (req) => {
-          const { data, error } = await supabase.auth.getSession()
-          if (error || !data.session) throw new Error(`Not authenticated for upload: ${error?.message ?? 'no active session'}`)
-          req.setHeader('authorization', `Bearer ${data.session.access_token}`)
-        },
-        onProgress: (bytesSent, bytesTotal) => {
-          record.bytesUploaded = bytesSent
-          record.progress = bytesTotal > 0 ? Math.floor((bytesSent / bytesTotal) * 100) : 0
-          if (performance.now() - (this.lastNotify.get(videoId) ?? 0) >= PROGRESS_NOTIFY_INTERVAL_MS) this.notify(record)
-        },
-        // Logged progress uses bytes the server has acknowledged.
-        onChunkComplete: (_chunk, bytesAccepted, bytesTotal) => {
-          const decile = Math.floor((bytesAccepted / bytesTotal) * 10)
-          if (decile > lastLoggedDecile && decile < 10) {
-            lastLoggedDecile = decile
-            analysisLogger.log({
-              video_id: videoId,
-              category: 'UPLOAD',
-              message: `Upload progress: ${decile * 10}% (${(bytesAccepted / (1024 * 1024)).toFixed(1)} / ${(bytesTotal / (1024 * 1024)).toFixed(1)} MB stored)`
-            })
-          }
-        },
-        onError: (error) => reject(error),
-        onSuccess: () => resolve()
-      })
-      upload.start()
+    const updateErr = await this.updateAsset(record.videoId, { processing_status: 'failed' }, {
+      upload_status: 'failed',
+      upload_error: message,
+      upload_failed_at: new Date().toISOString()
     })
+    if (updateErr) {
+      console.error('Failed to record upload failure on video_assets:', updateErr)
+      analysisLogger.log({ video_id: record.videoId, category: 'ERROR', message: `Could not record upload failure on video_assets: ${updateErr}` })
+    }
+  }
+
+  private onProgress(record: ActiveUpload, p: UploadProgress, loggedDecile: { value: number }) {
+    const now = performance.now()
+    record.bytesUploaded = p.bytesSent
+    record.bytesStored = p.bytesStored
+    record.progress = p.bytesTotal > 0 ? Math.floor((p.bytesSent / p.bytesTotal) * 100) : 0
+
+    const samples = this.samples.get(record.videoId) ?? []
+    samples.push({ t: now, bytes: p.bytesSent })
+    while (samples.length > 2 && now - samples[0].t > SPEED_WINDOW_MS) samples.shift()
+    this.samples.set(record.videoId, samples)
+    const first = samples[0]
+    const elapsed = (now - first.t) / 1000
+    if (elapsed >= 2 && p.bytesSent > first.bytes) {
+      record.bytesPerSecond = (p.bytesSent - first.bytes) / elapsed
+      record.etaSeconds = Math.round((p.bytesTotal - p.bytesSent) / record.bytesPerSecond)
+    }
+
+    const decile = Math.floor((p.bytesStored / p.bytesTotal) * 10)
+    if (decile > loggedDecile.value && decile < 10) {
+      loggedDecile.value = decile
+      analysisLogger.log({
+        video_id: record.videoId,
+        category: 'UPLOAD',
+        message: `Upload progress: ${decile * 10}% (${mb(p.bytesStored)} of ${mb(p.bytesTotal)} stored${record.bytesPerSecond ? `, ${mb(record.bytesPerSecond)}/s` : ''})`
+      })
+    }
+
+    if (now - (this.lastNotify.get(record.videoId) ?? 0) >= PROGRESS_NOTIFY_INTERVAL_MS) this.notify(record)
+  }
+
+  private async executeUpload(file: File, record: ActiveUpload) {
+    const provider = storageProviderFor({ storage_provider: record.provider })
+    const { videoId } = record
+    const loggedDecile = { value: 0 }
+    analysisLogger.log({ video_id: videoId, category: 'UPLOAD', message: `Upload started → ${provider.label} (${mb(file.size)})` })
+
+    let storagePath: string
+    try {
+      const result = await provider.uploadVideo(file, videoId, {
+        onProgress: p => this.onProgress(record, p, loggedDecile),
+        onLog: message => analysisLogger.log({ video_id: videoId, category: 'UPLOAD', message })
+      })
+      storagePath = result.storagePath
+    } catch (err) {
+      console.error('Video upload failed:', err)
+      await this.markFailed(record, err instanceof Error ? err.message : String(err))
+      return
+    }
+
+    const updateErr = await this.updateAsset(videoId, { storage_path: storagePath, storage_provider: provider.id }, {
+      upload_status: 'uploaded',
+      upload_completed_at: new Date().toISOString(),
+      upload_error: null
+    })
+    if (updateErr) {
+      await this.markFailed(record, `file stored (${provider.label}: ${storagePath}), but video_assets update failed: ${updateErr}`)
+      return
+    }
+
+    record.storagePath = storagePath
+    record.bytesUploaded = record.fileSize
+    record.bytesStored = record.fileSize
+    record.progress = 100
+    record.bytesPerSecond = null
+    record.etaSeconds = null
+    record.status = 'uploaded'
+    this.samples.delete(videoId)
+    this.notify(record)
+    analysisLogger.log({ video_id: videoId, category: 'UPLOAD', message: `Upload completed: ${provider.label} ${storagePath} (${mb(file.size)})` })
   }
 }
 
-function describeUploadError(err: unknown): string {
-  if (err instanceof tus.DetailedError && err.originalResponse) {
-    const status = err.originalResponse.getStatus()
-    const body = err.originalResponse.getBody()
-    let detail = body
-    try {
-      const parsed = JSON.parse(body) as { message?: string; error?: string }
-      detail = parsed.message || parsed.error || body
-    } catch {
-      // body is not JSON; keep it verbatim
-    }
-    const hint = status === 413 ? ' — the file exceeds the Supabase Storage upload size limit for this project' : ''
-    return `HTTP ${status}: ${detail || err.message}${hint}`
-  }
-  if (err instanceof Error) return err.message
-  if (err && typeof err === 'object' && 'message' in err) return String((err as { message: unknown }).message)
-  return String(err)
+function mb(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export const uploadManager = new UploadManagerService()

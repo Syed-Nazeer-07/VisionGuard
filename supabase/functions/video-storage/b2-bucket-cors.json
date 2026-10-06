@@ -1,0 +1,10 @@
+[
+  {
+    "corsRuleName": "visionguard-s3-browser",
+    "allowedOrigins": ["http://localhost:3000"],
+    "allowedOperations": ["s3_get", "s3_head", "s3_put", "s3_post"],
+    "allowedHeaders": ["*"],
+    "exposeHeaders": ["ETag", "Content-Range", "Accept-Ranges"],
+    "maxAgeSeconds": 3600
+  }
+]

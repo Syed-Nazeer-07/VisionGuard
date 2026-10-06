@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
   Upload, Cpu, CheckCircle2, Loader2, Activity, ShieldAlert,
-  AlertTriangle, Film, Play, Camera as CameraIcon, Radio, Pause, Square, RotateCcw
+  AlertTriangle, Film, Play, Camera as CameraIcon, Radio, Pause, Square, RotateCcw, X
 } from 'lucide-react';
 import Hls from 'hls.js';
 import { drawBoundingBoxes } from '../pipeline/rendering/overlay';
@@ -13,9 +13,10 @@ import { requestOcr } from '../pipeline/plate/service';
 import { evidenceQueue } from '../pipeline/evidence/queue';
 import { supabase } from '../lib/supabase';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
+import { liveAnalysisSession, sourceKeyOf } from '../services/liveAnalysisSession';
 import { analysisLogger } from '../services/analysisLogger';
 import { AnalysisLogPanel } from '../components/analysis/AnalysisLogPanel';
-import { availabilityMessage, fetchStorageInfo, getAssetAvailability, getStoredVideoUrl, videoDisplayName } from '../lib/videoAssets';
+import { availabilityMessage, fetchStorageInfo, getAssetAvailability, resolveVideoUrl, storageProviderLabel, videoDisplayName } from '../lib/videoAssets';
 import type { Json } from '../types/supabase';
 
 // ---------------------------------------------------------------------------------------------
@@ -168,8 +169,11 @@ export default function Analyze() {
   const [searchParams, setSearchParams] = useSearchParams();
   const videoParam = searchParams.get('video');
   const cameraParam = searchParams.get('camera');
-  // The URL is the single source of truth for the selected asset.
-  const selectionKey = videoParam ? `video:${videoParam}` : cameraParam ? `camera:${cameraParam}` : '';
+  // The active source lives in the in-memory Live Analysis session: it survives SPA navigation and is
+  // reset by a browser refresh. ?video= / ?camera= are explicit entry points (e.g. Video Library →
+  // Analyze): they take precedence, are copied into the session and then removed from the URL.
+  const session = useSyncExternalStore(liveAnalysisSession.subscribe, liveAnalysisSession.get);
+  const selectionKey = videoParam ? `video:${videoParam}` : cameraParam ? `camera:${cameraParam}` : sourceKeyOf(session);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -818,6 +822,7 @@ export default function Analyze() {
     const source: SourceContext = { kind: 'video', id: asset.id, name: videoDisplayName(asset), location: null };
     activeSourceRef.current = source;
     setSourceInfo(source);
+    liveAnalysisSession.setVideoLabel(asset.id, source.name);
     void loadSavedSummary(source, seq);
 
     // Upload started from this tab (survives navigation): show its real state.
@@ -850,10 +855,19 @@ export default function Analyze() {
       return;
     }
     const availability = getAssetAvailability(asset, assetInfo, upload?.status === 'uploading');
-    const storedUrl = getStoredVideoUrl(asset);
-    if (availability.kind === 'available' && storedUrl) {
-      attachMedia(storedUrl, false); // this asset's canonical persistent copy
-    } else if (upload) {
+    if (availability.kind === 'available') {
+      // This asset's canonical persistent copy, resolved by its storage provider (B2: presigned URL).
+      try {
+        const url = await resolveVideoUrl(asset);
+        if (seq !== loadSeqRef.current) return;
+        attachMedia(url, false);
+      } catch (e) {
+        if (seq !== loadSeqRef.current) return;
+        const msg = `Could not open this video's stored file (${storageProviderLabel(asset)}): ${describeError(e)}`;
+        setSourceState('SOURCE_ERROR', msg);
+        analysisLogger.log({ ...logForSource(source), category: 'ERROR', message: msg });
+      }
+    } else if (upload?.localPreviewUrl) {
       attachMedia(upload.localPreviewUrl, false); // this tab's local copy of the file being uploaded
     } else {
       setSourceState('SOURCE_ERROR', availabilityMessage(availability) ?? 'This video has no playable stored file.');
@@ -882,7 +896,15 @@ export default function Analyze() {
     attachMedia(playback.url, playback.hls);
   };
 
-  // Selected asset follows the URL. Changing ?video= / ?camera= tears down the previous source
+  // Explicit ?video= / ?camera= → session, then drop the params (a refresh must not restore the selection).
+  useEffect(() => {
+    if (!videoParam && !cameraParam) return;
+    if (videoParam) liveAnalysisSession.selectVideo(videoParam);
+    else if (cameraParam) liveAnalysisSession.selectCamera(cameraParam);
+    setSearchParams({}, { replace: true });
+  }, [videoParam, cameraParam, setSearchParams]);
+
+  // Selected asset follows the active source. Changing ?video= / ?camera= tears down the previous source
   // (closing its run) before the new one loads; sequence ids discard stale async results.
   useEffect(() => {
     setError(null);
@@ -1081,7 +1103,7 @@ export default function Analyze() {
     try {
       const { videoId } = await uploadManager.startUpload(file, selectedAt);
       setPendingFile(null);
-      setSearchParams({ video: videoId });
+      liveAnalysisSession.selectVideo(videoId); // the new upload becomes the active Live Analysis source
     } catch (err) {
       const msg = describeError(err);
       console.error('Upload could not start:', err);
@@ -1103,13 +1125,56 @@ export default function Analyze() {
   };
 
   const openFilePicker = () => fileInputRef.current?.click();
-  const selectCamera = (id: string) => setSearchParams({ camera: id });
+  const cameraName = (id: string | null) => (id ? cameras.find(c => c.id === id)?.name ?? null : null);
+
+  const selectCamera = (id: string) => {
+    const prev = liveAnalysisSession.get();
+    if (prev.mode === 'camera' && prev.cameraId === id) return;
+    if (prev.mode === 'uploaded-video' && prev.videoId) {
+      analysisLogger.log({ camera_id: id, category: 'SYSTEM', message: `Switched from uploaded video (${prev.videoLabel ?? prev.videoId.slice(0, 8)}) to camera ${cameraName(id) ?? ''}`.trim() });
+    }
+    liveAnalysisSession.selectCamera(id);
+  };
+
+  // Camera mode keeps the uploaded video retained; it re-opens the camera chosen earlier this session, if any.
+  const enterCameraMode = () => {
+    const prev = liveAnalysisSession.get();
+    if (prev.mode === 'camera') return;
+    if (prev.cameraId && prev.videoId) {
+      analysisLogger.log({ camera_id: prev.cameraId, category: 'SYSTEM', message: `Switched from uploaded video (${prev.videoLabel ?? prev.videoId.slice(0, 8)}) to camera ${cameraName(prev.cameraId) ?? ''}`.trim() });
+    }
+    liveAnalysisSession.selectCamera(prev.cameraId);
+  };
+
+  const returnToUploadedVideo = () => {
+    const prev = liveAnalysisSession.get();
+    if (prev.mode === 'uploaded-video') return;
+    if (prev.videoId) {
+      const from = cameraName(prev.cameraId);
+      analysisLogger.log({ video_id: prev.videoId, category: 'SYSTEM', message: `Returned to uploaded video${from ? ` from camera ${from}` : ''}` });
+    }
+    liveAnalysisSession.showUploadedVideo();
+  };
+
+  // Clears only the Live Analysis selection; the video_assets row and stored file are untouched.
+  const clearActiveVideo = () => {
+    const prev = liveAnalysisSession.get();
+    if (!prev.videoId) return;
+    analysisLogger.log({ video_id: prev.videoId, category: 'SYSTEM', message: 'Active video cleared from Live Analysis (the asset remains in Video Library)' });
+    liveAnalysisSession.clearVideo(); // selection effect cleanup stops any active run and resets the player
+    uploadManager.releasePreview(prev.videoId);
+    setPendingFile(null);
+  };
 
   // -------------------------------------------------------------------------------------------
   // Render
   // -------------------------------------------------------------------------------------------
   const displayState: string = sourceState !== 'SOURCE_READY' ? sourceState : runState === 'NONE' ? 'SOURCE_READY' : runState;
-  const sourceMode = sourceInfo?.kind ?? (cameraParam ? 'camera' : 'video');
+  const sourceMode: 'video' | 'camera' = videoParam ? 'video' : cameraParam ? 'camera' : session.mode === 'camera' ? 'camera' : 'video';
+  const segmentClass = (active: boolean) =>
+    `inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 ${
+      active ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+    }`;
   const showVideo = sourceState === 'SOURCE_READY' || (sourceState === 'SOURCE_LOADING' && !!sourceInfo);
   const canStart = sourceState === 'SOURCE_READY' && modelStatus === 'ready' && (runState === 'NONE' || runState === 'STOPPED' || runState === 'COMPLETED');
 
@@ -1139,15 +1204,46 @@ export default function Analyze() {
         </div>
 
         <div className="flex items-center gap-3">
-          {cameras.length > 0 && (
+          <div role="group" aria-label="Analysis source" className="inline-flex items-center gap-0.5 rounded-xl border border-slate-300 bg-white p-0.5 shadow-sm">
+            <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">Source</span>
+            <button
+              id="analyze-source-uploaded"
+              type="button"
+              aria-pressed={sourceMode === 'video'}
+              onClick={returnToUploadedVideo}
+              className={segmentClass(sourceMode === 'video')}
+              title={session.videoId ? `Uploaded video: ${session.videoLabel ?? session.videoId}` : 'No active uploaded video'}
+            >
+              <Film className="w-3.5 h-3.5" />
+              Uploaded Video{sourceMode === 'camera' && session.videoLabel ? ` · ${session.videoLabel}` : ''}
+            </button>
+            <button
+              id="analyze-source-camera"
+              type="button"
+              aria-pressed={sourceMode === 'camera'}
+              onClick={enterCameraMode}
+              disabled={cameras.length === 0}
+              className={segmentClass(sourceMode === 'camera')}
+              title={cameras.length === 0 ? 'No cameras configured' : 'Analyze a live camera'}
+            >
+              <CameraIcon className="w-3.5 h-3.5" />
+              Camera
+            </button>
+          </div>
+
+          {sourceMode === 'camera' && cameras.length > 0 && (
             <select
               id="analyze-camera-select"
               aria-label="Select live camera for analysis"
               className="bg-white border border-slate-300 text-slate-800 rounded-xl px-3 py-2.5 text-xs font-bold shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
-              value={sourceInfo?.kind === 'camera' ? sourceInfo.id : ''}
-              onChange={(e) => { if (e.target.value) selectCamera(e.target.value); }}
+              value={sourceInfo?.kind === 'camera' ? sourceInfo.id : (session.cameraId ?? '')}
+              onChange={(e) => {
+                if (e.target.value === '__uploaded_video__') returnToUploadedVideo();
+                else if (e.target.value) selectCamera(e.target.value);
+              }}
             >
-              <option value="">-- Switch to Camera --</option>
+              <option value="" disabled>-- Select a camera --</option>
+              <option value="__uploaded_video__">← Back to Uploaded Video{session.videoLabel ? ` (${session.videoLabel})` : ''}</option>
               {cameras.map(cam => (
                 <option key={cam.id} value={cam.id} disabled={!cam.source_url && !cam.stream_url}>
                   📹 {cam.name} {(!cam.source_url && !cam.stream_url) ? '(No URL)' : ''}
@@ -1195,9 +1291,9 @@ export default function Analyze() {
           status={currentUpload.status === 'uploading' ? 'UPLOADING' : currentUpload.status === 'uploaded' ? 'UPLOADED' : 'FAILED'}
           detail={
             currentUpload.status === 'uploading'
-              ? `${formatMb(currentUpload.bytesUploaded)} of ${formatMb(currentUpload.fileSize)} sent to videos/${currentUpload.storagePath} — playing the local copy meanwhile. Keep this tab open until the upload finishes.`
+              ? `${formatMb(currentUpload.bytesUploaded)} of ${formatMb(currentUpload.fileSize)} sent to ${currentUpload.providerLabel}${currentUpload.bytesPerSecond ? ` · ${formatMb(currentUpload.bytesPerSecond)}/s` : ''}${currentUpload.etaSeconds !== null ? ` · about ${formatDuration(currentUpload.etaSeconds)} left` : ''} — playing the local copy meanwhile. You can switch pages; keep this tab open until it finishes.`
               : currentUpload.status === 'uploaded'
-                ? `Stored at videos/${currentUpload.storagePath}`
+                ? `Stored in ${currentUpload.providerLabel}: ${currentUpload.storagePath ?? ''}`
                 : `Upload failed: ${currentUpload.error ?? 'unknown error'}`
           }
           progress={currentUpload.status === 'uploading' ? currentUpload.progress : null}
@@ -1309,18 +1405,27 @@ export default function Analyze() {
                   <AlertTriangle className="w-8 h-8 text-rose-400 mx-auto mb-3" />
                   <h3 className="text-white font-semibold text-base mb-1">Source unavailable</h3>
                   <p className="text-slate-300 text-xs">{sourceError}</p>
+                  {sourceMode === 'camera' && session.videoId && (
+                    <button
+                      type="button"
+                      onClick={returnToUploadedVideo}
+                      className="mt-4 inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer"
+                    >
+                      <Film className="w-3.5 h-3.5" /> Back to Uploaded Video{session.videoLabel ? ` (${session.videoLabel})` : ''}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
 
-            {sourceState === 'IDLE' && (
+            {sourceState === 'IDLE' && sourceMode === 'video' && (
               <div className="absolute inset-4 flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-slate-700 p-8 text-center text-slate-300">
                 <div className="p-4 rounded-full bg-indigo-500/15">
                   <Film className="w-10 h-10 text-indigo-400" />
                 </div>
                 <div>
-                  <div className="text-lg font-semibold text-white">Select a Camera Stream or Upload an MP4</div>
-                  <div className="text-sm text-slate-400 mt-1">Then press Start Inference to run detection, tracking and violation analysis.</div>
+                  <div className="text-lg font-semibold text-white">No active video</div>
+                  <div className="text-sm text-slate-400 mt-1">Upload an MP4, open one from Video Library, or switch to a camera. Then press Start Inference.</div>
                 </div>
                 <div className="flex gap-3">
                   <button
@@ -1330,16 +1435,43 @@ export default function Analyze() {
                   >
                     <Upload className="w-4 h-4" /> Upload MP4
                   </button>
+                  <Link
+                    to="/app/videos"
+                    className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg font-medium border border-slate-700"
+                  >
+                    <Film className="w-4 h-4 text-indigo-300" /> Video Library
+                  </Link>
                   {cameras.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => selectCamera(cameras[0].id)}
+                      onClick={enterCameraMode}
                       className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg font-medium cursor-pointer border border-slate-700"
                     >
-                      <CameraIcon className="w-4 h-4 text-emerald-400" /> Use Camera ({cameras[0].name})
+                      <CameraIcon className="w-4 h-4 text-emerald-400" /> Switch to Camera
                     </button>
                   )}
                 </div>
+              </div>
+            )}
+
+            {sourceState === 'IDLE' && sourceMode === 'camera' && (
+              <div className="absolute inset-4 flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-slate-700 p-8 text-center text-slate-300">
+                <div className="p-4 rounded-full bg-emerald-500/15">
+                  <CameraIcon className="w-10 h-10 text-emerald-400" />
+                </div>
+                <div>
+                  <div className="text-lg font-semibold text-white">Select a camera</div>
+                  <div className="text-sm text-slate-400 mt-1">Choose a camera from the list above to start a live source.</div>
+                </div>
+                {session.videoId && (
+                  <button
+                    type="button"
+                    onClick={returnToUploadedVideo}
+                    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium cursor-pointer shadow-md"
+                  >
+                    <Film className="w-4 h-4" /> Back to Uploaded Video{session.videoLabel ? ` (${session.videoLabel})` : ''}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -1412,12 +1544,23 @@ export default function Analyze() {
             {contentNote && <div className="mt-1 text-amber-700">{contentNote}</div>}
           </div>
           {sourceInfo.kind === 'video' && (
-            <Link
-              to={`/app/video-review?video=${sourceInfo.id}`}
-              className="text-indigo-600 hover:text-indigo-800 font-semibold hover:underline flex items-center gap-1"
-            >
-              Open persistent analysis in Video Review →
-            </Link>
+            <div className="flex items-center gap-3 shrink-0">
+              <button
+                id="analyze-clear-video"
+                type="button"
+                onClick={clearActiveVideo}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 font-semibold cursor-pointer"
+                title="Remove this video from Live Analysis (it stays in Video Library)"
+              >
+                <X className="w-3.5 h-3.5" /> Clear Video
+              </button>
+              <Link
+                to={`/app/video-review?video=${sourceInfo.id}`}
+                className="text-indigo-600 hover:text-indigo-800 font-semibold hover:underline flex items-center gap-1"
+              >
+                Open persistent analysis in Video Review →
+              </Link>
+            </div>
           )}
         </div>
       )}
@@ -1444,6 +1587,13 @@ export default function Analyze() {
 
 function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  if (m < 60) return `${m}m ${seconds % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
 function UploadCard({ fileName, fileSize, status, detail, progress, onDismiss }: {

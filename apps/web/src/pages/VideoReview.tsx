@@ -5,7 +5,7 @@ import { Film, Activity, FileWarning, Image, ChevronRight, Eye, Terminal, AlertT
 import { cn } from '../lib/utils';
 import { db, type AnalysisRun, type VideoAsset } from '../services/db';
 import { getSignedUrl } from '../pipeline/evidence/storage';
-import { availabilityMessage, fallbackVideoNumbers, fetchStorageInfo, getAssetAvailability, getStoredVideoUrl, videoDisplayName } from '../lib/videoAssets';
+import { availabilityMessage, fallbackVideoNumbers, fetchStorageInfo, getAssetAvailability, resolveVideoUrl, storageProviderLabel, videoDisplayName } from '../lib/videoAssets';
 import { uploadManager } from '../services/uploadManager';
 import { AnalysisLogPanel } from '../components/analysis/AnalysisLogPanel';
 import type { Json } from '../types/supabase';
@@ -200,8 +200,17 @@ export default function VideoReview() {
       }
       if (cancelled) return;
       const availability = getAssetAvailability(typedAsset, info, uploadManager.getUpload(typedAsset.id)?.status === 'uploading');
-      const videoUrl = availability.kind === 'available' ? getStoredVideoUrl(typedAsset) : null;
-      if (!videoUrl) {
+      let videoUrl: string | null = null;
+      if (availability.kind === 'available') {
+        // Same provider abstraction as Analyze (B2: presigned, range-capable URL from the Edge Function).
+        try {
+          videoUrl = await resolveVideoUrl(typedAsset);
+        } catch (e) {
+          if (cancelled) return;
+          setPlaybackError(`Could not open this video's stored file (${storageProviderLabel(typedAsset)}): ${e instanceof Error ? e.message : String(e)}`);
+        }
+        if (cancelled) return;
+      } else {
         const reason = availabilityMessage(availability);
         setPlaybackError(availability.kind === 'uploading'
           ? 'This video is still uploading from this tab; replay is available once the upload completes.'
