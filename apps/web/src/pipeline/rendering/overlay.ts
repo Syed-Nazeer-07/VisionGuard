@@ -10,12 +10,28 @@ export function drawBoundingBoxes(
 ) {
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-  const scaleX = canvasWidth / videoWidth;
-  const scaleY = canvasHeight / videoHeight;
+  const videoRatio = videoWidth / videoHeight;
+  const canvasRatio = canvasWidth / canvasHeight;
+
+  let renderWidth = canvasWidth;
+  let renderHeight = canvasHeight;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (videoRatio > canvasRatio) {
+    renderHeight = canvasWidth / videoRatio;
+    offsetY = (canvasHeight - renderHeight) / 2;
+  } else {
+    renderWidth = canvasHeight * videoRatio;
+    offsetX = (canvasWidth - renderWidth) / 2;
+  }
+
+  const scaleX = renderWidth / videoWidth;
+  const scaleY = renderHeight / videoHeight;
 
   for (const track of tracks) {
-    const x = (track.x - track.w / 2) * scaleX;
-    const y = (track.y - track.h / 2) * scaleY;
+    const x = (track.x - track.w / 2) * scaleX + offsetX;
+    const y = (track.y - track.h / 2) * scaleY + offsetY;
     const w = track.w * scaleX;
     const h = track.h * scaleY;
 
@@ -36,9 +52,11 @@ export function drawBoundingBoxes(
 
     // Label background
     const classNameFormatted = track.className.charAt(0).toUpperCase() + track.className.slice(1);
-    let label = `${classNameFormatted} #${track.trackId} (${(track.prob * 100).toFixed(0)}%)`;
+    let label = `${classNameFormatted} #${track.trackId} | Conf: ${(track.prob * 100).toFixed(0)}%`;
     if (track.speed !== undefined) {
       label += ` | ${Math.round(track.speed)} km/h`;
+    } else {
+      label += ` | Speed unavailable`;
     }
     ctx.font = isConfirmed ? 'bold 14px sans-serif' : '12px sans-serif';
     const textMetrics = ctx.measureText(label);

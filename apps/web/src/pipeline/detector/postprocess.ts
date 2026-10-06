@@ -25,7 +25,7 @@ export function nonMaxSuppression(boxes: BoundingBox[], iouThreshold: number): B
   for (const box of boxes) {
     let shouldSelect = true;
     for (const selectedBox of selected) {
-      if (box.classId === selectedBox.classId && iou(box, selectedBox) > iouThreshold) {
+      if (iou(box, selectedBox) > iouThreshold) {
         shouldSelect = false;
         break;
       }

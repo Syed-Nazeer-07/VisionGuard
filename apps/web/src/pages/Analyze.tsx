@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import {
   Upload, Cpu, CheckCircle2, Loader2, Activity, ShieldAlert,
   AlertTriangle, Film, Play, Camera as CameraIcon, Radio, Pause, Square, RotateCcw, X
-} from 'lucide-react';
+, Maximize2, Minimize2} from 'lucide-react';
 import Hls from 'hls.js';
 import { drawBoundingBoxes } from '../pipeline/rendering/overlay';
 import type { ResultMessage, WorkerOutputMessage } from '../pipeline/types';
@@ -86,6 +86,7 @@ interface QueuedIncident {
 
 interface SessionMetrics {
   framesProcessed: number;
+  droppedFrames: number;
   detectionsGenerated: number;
   incidentsCreated: number;
   incidentsSuppressed: number;
@@ -108,12 +109,19 @@ interface AnalysisSession {
   lastTrackFlush: number;
   metricsErrorLogged: boolean;
   closed: boolean;
+  logState: {
+    lastLogTime: number;
+    lastFramesProcessed: number;
+    lastDroppedFrames: number;
+    createdTracks: number;
+  };
 }
 
 interface LiveMetrics {
   fps: number;
   latency: number;
   frames: number;
+  droppedFrames: number;
   detections: number;
   created: number;
   suppressed: number;
@@ -128,7 +136,7 @@ interface SavedSummary {
   runs: number;
 }
 
-const EMPTY_METRICS: LiveMetrics = { fps: 0, latency: 0, frames: 0, detections: 0, created: 0, suppressed: 0, saved: 0, tracked: 0, queue: 0 };
+const EMPTY_METRICS: LiveMetrics = { fps: 0, latency: 0, frames: 0, droppedFrames: 0, detections: 0, created: 0, suppressed: 0, saved: 0, tracked: 0, queue: 0 };
 const MODEL_PATH = '/models/yolo11n.onnx';
 const MODEL_NAME = 'YOLO11n';
 
@@ -175,7 +183,18 @@ export default function Analyze() {
   const session = useSyncExternalStore(liveAnalysisSession.subscribe, liveAnalysisSession.get);
   const selectionKey = videoParam ? `video:${videoParam}` : cameraParam ? `camera:${cameraParam}` : sourceKeyOf(session);
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === containerRef.current);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -428,12 +447,7 @@ export default function Analyze() {
             referenceHeight: 2,
             speedLimit: s.speed_limit_default ? Number(s.speed_limit_default) : 60,
             tolerance: s.speed_tolerance_default ? Number(s.speed_tolerance_default) : 10,
-            calibrationArea: [
-              { x: 0.3, y: 0.5 },
-              { x: 0.7, y: 0.5 },
-              { x: 0.9, y: 0.9 },
-              { x: 0.1, y: 0.9 }
-            ]
+            calibrationArea: [] // Empty means uncalibrated
           },
           featureFlags: {
             speed_detection: s.feature_speed_detection !== false,
@@ -452,10 +466,12 @@ export default function Analyze() {
         void closeSession(session, 'failed', msg);
         setRunState('STOPPED');
         videoRef.current?.pause();
-      });
-    }
+        });
+      } else if (isWorkerBusyRef.current) {
+        session.metrics.droppedFrames++;
+      }
 
-    scheduleNext(video);
+      scheduleNext(video);
   };
 
   const startLoop = () => {
@@ -555,6 +571,7 @@ export default function Analyze() {
           fps: m.fps,
           latency: m.latency,
           frames: m.framesProcessed,
+          droppedFrames: m.droppedFrames,
           detections: m.detectionsGenerated,
           created: m.incidentsCreated,
           suppressed: m.incidentsSuppressed,
@@ -591,11 +608,15 @@ export default function Analyze() {
     if (canvas && video) {
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
-          canvas.width = video.clientWidth;
-          canvas.height = video.clientHeight;
-        }
-        drawBoundingBoxes(ctx, msg.tracks, canvas.width, canvas.height, video.videoWidth, video.videoHeight);
+          if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
+            canvas.width = video.clientWidth;
+            canvas.height = video.clientHeight;
+          }
+          if (canvas.style.width !== `${video.clientWidth}px`) canvas.style.width = `${video.clientWidth}px`;
+          if (canvas.style.height !== `${video.clientHeight}px`) canvas.style.height = `${video.clientHeight}px`;
+          if (canvas.style.left !== `${video.offsetLeft}px`) canvas.style.left = `${video.offsetLeft}px`;
+          if (canvas.style.top !== `${video.offsetTop}px`) canvas.style.top = `${video.offsetTop}px`;
+          drawBoundingBoxes(ctx, msg.tracks, canvas.width, canvas.height, video.videoWidth, video.videoHeight);
       }
     }
 
@@ -617,6 +638,7 @@ export default function Analyze() {
           trajectory: []
         };
         session.tracked.set(tr.trackId, rec);
+        session.logState.createdTracks++;
       }
       rec.last_seen_timestamp = t;
       rec.frame_count++;
@@ -631,13 +653,40 @@ export default function Analyze() {
       }
     }
 
-    if (msg.tracks.length > 0) {
-      analysisLogger.logDetection(
-        logFor(session).video_id,
-        logFor(session).camera_id,
-        session.runId,
-        `Detected ${msg.tracks.length} object(s): ${msg.tracks.slice(0, 3).map(x => `${x.className} #${session.trackIdOffset + x.trackId}`).join(', ')}${msg.tracks.length > 3 ? ` +${msg.tracks.length - 3} more` : ''}`
-      );
+    const now = Date.now();
+    if (now - session.logState.lastLogTime >= 5000) {
+      const processed = session.metrics.framesProcessed - session.logState.lastFramesProcessed;
+      const dropped = session.metrics.droppedFrames - session.logState.lastDroppedFrames;
+      const fps = Math.round(processed / ((now - session.logState.lastLogTime) / 1000));
+      
+      analysisLogger.log({
+        ...logFor(session),
+        category: 'PROCESSING',
+        message: `Pipeline: ${fps} FPS | ${dropped} dropped | ${Math.round(msg.inferenceTime)}ms latency`
+      });
+
+      const classCounts = msg.boxes.reduce((acc, b) => {
+        acc[b.className] = (acc[b.className] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      const classDist = Object.entries(classCounts).map(([c, n]) => `${c}: ${n}`).join(', ');
+
+      analysisLogger.log({
+        ...logFor(session),
+        category: 'DETECTION',
+        message: `Objects: ${msg.boxes.length} | ${classDist || 'none'}`
+      });
+
+      analysisLogger.log({
+        ...logFor(session),
+        category: 'TRACKING',
+        message: `Active tracks: ${msg.tracks.length} | Created recently: ${session.logState.createdTracks}`
+      });
+
+      session.logState.lastLogTime = now;
+      session.logState.lastFramesProcessed = session.metrics.framesProcessed;
+      session.logState.lastDroppedFrames = session.metrics.droppedFrames;
+      session.logState.createdTracks = 0;
     }
 
     if (msg.violations && msg.violations.length > 0) handleViolations(session, msg.violations, t);
@@ -1002,13 +1051,14 @@ export default function Analyze() {
         tracked: new Map(),
         incidentQueue: [],
         dedupe: new Map(),
-        metrics: { framesProcessed: 0, detectionsGenerated: 0, incidentsCreated: 0, incidentsSuppressed: 0, incidentsSaved: 0, fps: 0, latency: 0 },
+        metrics: { framesProcessed: 0, droppedFrames: 0, detectionsGenerated: 0, incidentsCreated: 0, incidentsSuppressed: 0, incidentsSaved: 0, fps: 0, latency: 0 },
         fpsWindowStart: now,
         fpsWindowFrames: 0,
         lastMetricsPersist: now,
         lastTrackFlush: now,
         metricsErrorLogged: false,
-        closed: false
+        closed: false,
+        logState: { lastLogTime: now, lastFramesProcessed: 0, lastDroppedFrames: 0, createdTracks: 0 }
       };
       sessionRef.current = session;
       workerRef.current?.postMessage({ type: 'reset_tracker' });
@@ -1017,7 +1067,7 @@ export default function Analyze() {
 
       const { provider: p, fallbackReason } = providerRef.current;
       analysisLogger.log({ ...logFor(session), category: 'PROCESSING', message: `Analysis run #${runId.slice(0, 8)} started on ${source.name}` });
-      analysisLogger.log({ ...logFor(session), category: 'MODEL', message: `Inference backend: ${p.toUpperCase()}${fallbackReason ? ` (${fallbackReason})` : ''}` });
+      analysisLogger.log({ ...logFor(session), category: 'MODEL', message: `Inference backend: ${p.toUpperCase()}${fallbackReason ? ` (${fallbackReason})` : ''} | Input: 640x640 | Conf: 0.15, IoU: 0.45` });
       analysisLogger.log({ ...logFor(session), category: 'TRACKING', message: `Tracker initialized (track ids from #${trackIdOffset + 1})` });
 
       if (source.kind === 'video') {
@@ -1157,6 +1207,14 @@ export default function Analyze() {
   };
 
   // Clears only the Live Analysis selection; the video_assets row and stored file are untouched.
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen().catch(err => console.error(err));
+    } else {
+      document.exitFullscreen();
+    }
+  };
+
   const clearActiveVideo = () => {
     const prev = liveAnalysisSession.get();
     if (!prev.videoId) return;
@@ -1360,7 +1418,8 @@ export default function Analyze() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch min-h-[460px]">
         <div className="lg:col-span-8 flex flex-col gap-3">
           <div
-            className="relative bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center min-h-[440px] max-h-[68vh] border border-slate-800 shadow-xl"
+              ref={containerRef}
+              className={`relative bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center min-h-[440px] border border-slate-800 shadow-xl ${isFullscreen ? 'w-full h-screen' : 'max-h-[68vh]'}`}
             onDragOver={e => e.preventDefault()}
             onDrop={handleDrop}
           >
@@ -1368,6 +1427,7 @@ export default function Analyze() {
               id="analyze-video"
               ref={videoRef}
               controls
+              controlsList="nofullscreen"
               playsInline
               crossOrigin="anonymous"
               muted
@@ -1377,7 +1437,7 @@ export default function Analyze() {
               onPause={onPause}
               onEnded={onEnded}
               onError={onMediaError}
-              className={`max-h-[68vh] w-auto z-10 ${showVideo ? '' : 'hidden'}`}
+              className={`max-w-full max-h-full w-auto h-auto z-10 ${showVideo ? '' : 'hidden'}`}
             />
             <canvas
               ref={canvasRef}
@@ -1389,6 +1449,15 @@ export default function Analyze() {
                 top: videoRef.current?.offsetTop
               }}
             />
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="absolute top-4 right-4 z-40 p-2 bg-black/50 hover:bg-black/70 text-white rounded-lg backdrop-blur-sm transition-colors"
+                title="Toggle Fullscreen"
+              >
+                {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+              </button>
+
 
             {sourceState === 'SOURCE_LOADING' && (
               <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/70">
@@ -1578,7 +1647,7 @@ export default function Analyze() {
           color="text-rose-600"
         />
         <MetricCard label="Tracked Objects" value={live.tracked.toLocaleString()} color="text-cyan-600" />
-        <MetricCard label="Frames Processed" value={live.frames.toLocaleString()} color="text-blue-600" />
+        <MetricCard label="Frames" value={<>{live.frames.toLocaleString()} <span className="text-sm text-slate-400 font-normal">| {live.droppedFrames.toLocaleString()} dropped</span></>} color="text-blue-600" />
         <MetricCard label="Queue Depth" value={live.queue.toLocaleString()} color="text-slate-700" />
       </div>
     </div>

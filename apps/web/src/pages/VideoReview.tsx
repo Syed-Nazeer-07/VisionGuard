@@ -252,8 +252,24 @@ export default function VideoReview() {
       if (!video.videoWidth) return;
 
       const now = video.currentTime;
-      const sx = canvas.width / video.videoWidth;
-      const sy = canvas.height / video.videoHeight;
+        const videoRatio = video.videoWidth / video.videoHeight;
+        const canvasRatio = canvas.width / canvas.height;
+
+        let renderWidth = canvas.width;
+        let renderHeight = canvas.height;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        if (videoRatio > canvasRatio) {
+          renderHeight = canvas.width / videoRatio;
+          offsetY = (canvas.height - renderHeight) / 2;
+        } else {
+          renderWidth = canvas.height * videoRatio;
+          offsetX = (canvas.width - renderWidth) / 2;
+        }
+
+        const sx = renderWidth / video.videoWidth;
+        const sy = renderHeight / video.videoHeight;
 
       for (const t of tracksRef.current) {
         const traj = trajectoryOf(t);
@@ -267,14 +283,14 @@ export default function VideoReview() {
         let started = false;
         for (const p of traj) {
           if (p.time < now - 3 || p.time > now) continue;
-          const cx = (p.bbox[0] + p.bbox[2] / 2) * sx;
-          const cy = (p.bbox[1] + p.bbox[3]) * sy;
+          const cx = (p.bbox[0] + p.bbox[2] / 2) * sx + offsetX;
+          const cy = (p.bbox[1] + p.bbox[3]) * sy + offsetY;
           if (!started) { ctx.moveTo(cx, cy); started = true; } else ctx.lineTo(cx, cy);
         }
         ctx.stroke();
 
         const [bx, by, bw, bh] = cur.bbox;
-        const x = bx * sx, y = by * sy, w = bw * sx, h = bh * sy;
+        const x = bx * sx + offsetX, y = by * sy + offsetY, w = bw * sx, h = bh * sy;
         ctx.strokeStyle = '#06b6d4';
         ctx.lineWidth = 2.5;
         ctx.strokeRect(x, y, w, h);
@@ -390,6 +406,7 @@ export default function VideoReview() {
                     ref={videoRef}
                     src={data.videoUrl}
                     controls
+                    controlsList="nofullscreen"
                     crossOrigin="anonymous"
                     playsInline
                     muted

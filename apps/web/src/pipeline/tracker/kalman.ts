@@ -32,8 +32,8 @@ export class KalmanFilter {
   }
 
   update(cx: number, cy: number, w: number, h: number) {
-    // Measurement noise R
-    const r = [10, 10, 10, 10];
+    // Measurement noise R - reduced to trust the YOLO detection more (tighter boxes)
+    const r = [1, 1, 1, 1];
     const z = [cx, cy, w, h];
 
     for (let i = 0; i < 4; i++) {

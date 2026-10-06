@@ -194,8 +194,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       
       const inferenceTime = performance.now() - start;
       
-      const confidenceThreshold = 0.35;
-      const iouThreshold = 0.5;
+      const confidenceThreshold = 0.15;
+      const iouThreshold = 0.45;
       let boxes = processOutput(output.data as Float32Array, confidenceThreshold, iouThreshold);
       
       // Filter for target classes (person, car, motorcycle, bus, truck, traffic light)
@@ -205,14 +205,21 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       const tracks = tracker.update(boxes);
       
       for (const track of tracks) {
-        // Normalize coordinates to 0-1 for speed tracking (homography expects normalized)
+        // Convert coordinates from model space to original video pixels for rendering
         track.x = (track.x - padW) / ratio;
         track.y = (track.y - padH) / ratio;
         track.w = track.w / ratio;
         track.h = track.h / ratio;
 
         if (speedEstimator) {
-          const res = speedEstimator.update(track.trackId, track, mediaTime);
+          // Homography uses 0-1 normalized coordinates
+          const normalizedBox = {
+            x: track.x / width,
+            y: track.y / height,
+            w: track.w / width,
+            h: track.h / height
+          };
+          const res = speedEstimator.update(track.trackId, normalizedBox, mediaTime);
           if (res) {
             track.speed = res.speed;
             track.isOverspeed = res.isOverspeed;

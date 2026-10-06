@@ -22,3 +22,11 @@ input[type="submit"],
 input[type="reset"] {
   cursor: pointer !important;
 }
+
+/* Disable native video fullscreen buttons to enforce composite viewer fullscreen */
+video::-webkit-media-controls-fullscreen-button {
+    display: none !important;
+}
+video::-moz-media-controls-fullscreen-button {
+    display: none !important;
+}
