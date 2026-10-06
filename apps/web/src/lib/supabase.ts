@@ -10,6 +10,13 @@ if (isMock) {
   console.info('[VisionGuard] Running in preview/demo mode with in-memory store.')
 }
 
+/** Endpoint details for calls supabase-js does not cover (e.g. resumable TUS uploads). */
+export const supabaseConfig = {
+  url: (supabaseUrl ?? '').replace(/\/+$/, ''),
+  anonKey: supabaseAnonKey ?? '',
+  isMock
+}
+
 // Initial mock data seed
 const now = new Date()
 const seedCameras = [

@@ -5,7 +5,8 @@ import { Film, Activity, FileWarning, Image, ChevronRight, Eye, Terminal, AlertT
 import { cn } from '../lib/utils';
 import { db, type AnalysisRun, type VideoAsset } from '../services/db';
 import { getSignedUrl } from '../pipeline/evidence/storage';
-import { fallbackVideoNumbers, getStoredVideoUrl, getUploadStatus, videoDisplayName } from '../lib/videoAssets';
+import { availabilityMessage, fallbackVideoNumbers, fetchStorageInfo, getAssetAvailability, getStoredVideoUrl, videoDisplayName } from '../lib/videoAssets';
+import { uploadManager } from '../services/uploadManager';
 import { AnalysisLogPanel } from '../components/analysis/AnalysisLogPanel';
 import type { Json } from '../types/supabase';
 
@@ -60,6 +61,7 @@ interface ReviewData {
   evidence: EvidenceRow[];
   evidenceUrls: Record<string, { thumb: string; full: string }>;
   warnings: string[];
+  identicalTo: VideoAsset | null;
 }
 
 type Tab = 'timeline' | 'tracks' | 'evidence' | 'logs';
@@ -129,13 +131,6 @@ export default function VideoReview() {
     return () => { cancelled = true; };
   }, []);
 
-  // Without ?video=, select the most recent asset through the URL (the URL stays authoritative).
-  useEffect(() => {
-    if (!videoId && !listLoading && videos.length > 0) {
-      setSearchParams({ video: videos[0].id }, { replace: true });
-    }
-  }, [videoId, listLoading, videos, setSearchParams]);
-
   // Everything shown for the review is loaded for exactly `videoId`. Switching A → B clears A's
   // state synchronously and discards any of A's requests that resolve late.
   useEffect(() => {
@@ -190,18 +185,33 @@ export default function VideoReview() {
       if (cancelled) return;
 
       const typedAsset = asset as VideoAsset;
-      const videoUrl = getStoredVideoUrl(typedAsset);
+      // Only this asset's own stored file is ever played; nothing falls back to another video.
+      let storageInfo: Awaited<ReturnType<typeof fetchStorageInfo>> | null = null;
+      try {
+        storageInfo = await fetchStorageInfo();
+      } catch (e) {
+        warnings.push(`stored file check: ${e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e)}`);
+      }
+      const info = storageInfo?.get(typedAsset.id);
+      let identicalTo: VideoAsset | null = null;
+      if (info?.identicalToVideoId) {
+        const { data: twin } = await supabase.from('video_assets').select('*').eq('id', info.identicalToVideoId).maybeSingle();
+        identicalTo = (twin as VideoAsset | null) ?? null;
+      }
+      if (cancelled) return;
+      const availability = getAssetAvailability(typedAsset, info, uploadManager.getUpload(typedAsset.id)?.status === 'uploading');
+      const videoUrl = availability.kind === 'available' ? getStoredVideoUrl(typedAsset) : null;
       if (!videoUrl) {
-        const status = getUploadStatus(typedAsset);
-        setPlaybackError(status === 'failed'
-          ? 'The upload of this video failed, so there is no stored copy to replay.'
-          : 'No stored copy of this video exists (its upload did not complete), so it cannot be replayed.');
+        const reason = availabilityMessage(availability);
+        setPlaybackError(availability.kind === 'uploading'
+          ? 'This video is still uploading from this tab; replay is available once the upload completes.'
+          : `${reason ?? 'No stored file exists for this video.'} It cannot be replayed.`);
       }
 
       // Default to the latest run that produced tracks, so overlays from different runs never overlap.
       const runWithTracks = runs.find(r => tracks.some(t => t.analysis_run_id === r.id));
       setSelectedRunId(runWithTracks ? runWithTracks.id : ALL_RUNS);
-      setData({ asset: typedAsset, videoUrl, runs, tracks, incidents, evidence, evidenceUrls, warnings });
+      setData({ asset: typedAsset, videoUrl, runs, tracks, incidents, evidence, evidenceUrls, warnings, identicalTo });
       setDetailLoading(false);
     })();
 
@@ -381,6 +391,11 @@ export default function VideoReview() {
                   <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-10 w-full h-full" />
                 </div>
               ) : null}
+              {data.identicalTo && (
+                <div className="mt-3 w-full max-w-4xl bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg text-xs">
+                  This asset's stored file is byte-identical to {videoDisplayName(data.identicalTo, fallbackNumbers)} (same size and checksum) — the same source file was uploaded more than once. Tracks, incidents and evidence shown here belong to {assetName} only.
+                </div>
+              )}
               {playbackError && (
                 <div className="mt-3 w-full max-w-4xl bg-rose-50 border border-rose-200 text-rose-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4" /> {playbackError}

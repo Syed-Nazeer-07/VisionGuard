@@ -12,10 +12,10 @@ import { db, type VideoAsset } from '../services/db';
 import { requestOcr } from '../pipeline/plate/service';
 import { evidenceQueue } from '../pipeline/evidence/queue';
 import { supabase } from '../lib/supabase';
-import { uploadManager } from '../services/uploadManager';
+import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { analysisLogger } from '../services/analysisLogger';
 import { AnalysisLogPanel } from '../components/analysis/AnalysisLogPanel';
-import { getStoredVideoUrl, getUploadStatus, videoDisplayName } from '../lib/videoAssets';
+import { availabilityMessage, fetchStorageInfo, getAssetAvailability, getStoredVideoUrl, videoDisplayName } from '../lib/videoAssets';
 import type { Json } from '../types/supabase';
 
 // ---------------------------------------------------------------------------------------------
@@ -190,8 +190,11 @@ export default function Analyze() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [live, setLive] = useState<LiveMetrics>(EMPTY_METRICS);
   const [saved, setSaved] = useState<SavedSummary | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [isCreatingUpload, setIsCreatingUpload] = useState(false);
+  // File chosen but its video_assets row not created yet (shown immediately on selection)
+  const [pendingFile, setPendingFile] = useState<{ name: string; size: number; error: string | null } | null>(null);
+  // Upload state of the currently selected video, if this tab is/was uploading it
+  const [currentUpload, setCurrentUpload] = useState<ActiveUpload | null>(null);
+  const [contentNote, setContentNote] = useState<string | null>(null);
 
   // Refs read by worker/frame callbacks (never stale)
   const sourceStateRef = useRef<SourceState>('IDLE');
@@ -763,6 +766,7 @@ export default function Analyze() {
       hls.attachMedia(video);
     } else {
       video.src = url; // assigned exactly once per selected source
+      video.load();
     }
   };
 
@@ -816,26 +820,43 @@ export default function Analyze() {
     setSourceInfo(source);
     void loadSavedSummary(source, seq);
 
+    // Upload started from this tab (survives navigation): show its real state.
     const upload = uploadManager.getUpload(asset.id);
-    if (upload && upload.status !== 'uploaded') {
+    if (upload) {
       uploadUnsubRef.current = uploadManager.subscribe(asset.id, up => {
         if (activeSourceRef.current !== source) return;
-        setUploadProgress(up.status === 'uploading' ? up.progress : null);
-        if (up.status === 'failed') setError(`Upload to storage failed: ${up.error ?? 'unknown error'}. Analysis results cannot be replayed until the video is uploaded again.`);
+        setCurrentUpload(up);
       });
     }
 
+    // State of THIS asset's own Storage object (existence + identical-content check).
+    let info: Awaited<ReturnType<typeof fetchStorageInfo>> | null = null;
+    try {
+      info = await fetchStorageInfo();
+    } catch (e) {
+      console.warn('Storage info unavailable:', e);
+    }
+    if (seq !== loadSeqRef.current) return;
+    const assetInfo = info?.get(asset.id);
+
+    if (assetInfo?.identicalToVideoId) {
+      const { data: twin } = await supabase.from('video_assets').select('id, display_number, filename').eq('id', assetInfo.identicalToVideoId).maybeSingle();
+      if (seq !== loadSeqRef.current) return;
+      setContentNote(`This asset's stored file is byte-identical to ${twin ? videoDisplayName(twin as VideoAsset) : 'another video'} (same size and checksum) — the same source file was uploaded more than once.`);
+    }
+
+    if (upload?.status === 'failed') {
+      setSourceState('SOURCE_ERROR', `The upload of this video failed: ${upload.error ?? 'unknown error'}. Upload the file again.`);
+      return;
+    }
+    const availability = getAssetAvailability(asset, assetInfo, upload?.status === 'uploading');
     const storedUrl = getStoredVideoUrl(asset);
-    if (storedUrl) {
-      attachMedia(storedUrl, false); // canonical persistent copy
-    } else if (upload && upload.status !== 'failed') {
-      attachMedia(upload.localPreviewUrl, false); // immediate local playback while the upload runs
+    if (availability.kind === 'available' && storedUrl) {
+      attachMedia(storedUrl, false); // this asset's canonical persistent copy
+    } else if (upload) {
+      attachMedia(upload.localPreviewUrl, false); // this tab's local copy of the file being uploaded
     } else {
-      const status = getUploadStatus(asset);
-      const uploadError = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata) ? asset.metadata.upload_error : null;
-      setSourceState('SOURCE_ERROR', status === 'failed'
-        ? `The upload of this video failed${uploadError ? `: ${String(uploadError)}` : ''}. Upload the file again.`
-        : 'No stored copy of this video exists — its upload did not complete. Upload the file again.');
+      setSourceState('SOURCE_ERROR', availabilityMessage(availability) ?? 'This video has no playable stored file.');
     }
   };
 
@@ -867,7 +888,8 @@ export default function Analyze() {
     setError(null);
     setSaveError(null);
     setSaved(null);
-    setUploadProgress(null);
+    setCurrentUpload(null);
+    setContentNote(null);
     setActiveRunId(null);
     setLive(EMPTY_METRICS);
     setRunState('NONE');
@@ -1043,21 +1065,28 @@ export default function Analyze() {
     void closeSession(session, 'completed', 'end of video');
   };
 
-  // Upload: create the asset, then select it via the URL (the selection effect plays it locally)
+  // Upload: show the selection immediately, create the asset row, then select it via the URL
+  // (the selection effect plays the local copy while uploadManager uploads in the background).
   const handleFile = async (file: File) => {
+    const selectedAt = new Date().toISOString();
     if (!file.type.startsWith('video/') && !/\.(mp4|webm|mov|m4v)$/i.test(file.name)) {
-      setError('Please select a valid video file (MP4, WebM, or MOV).');
+      const msg = `"${file.name}" is not a supported video file (type: ${file.type || 'unknown'}). Select an MP4, WebM or MOV file.`;
+      console.warn('Upload validation failed:', msg);
+      setPendingFile({ name: file.name, size: file.size, error: msg });
+      setError(msg);
       return;
     }
-    setIsCreatingUpload(true);
+    setPendingFile({ name: file.name, size: file.size, error: null });
     setError(null);
     try {
-      const { videoId } = await uploadManager.startUpload(file);
+      const { videoId } = await uploadManager.startUpload(file, selectedAt);
+      setPendingFile(null);
       setSearchParams({ video: videoId });
     } catch (err) {
-      setError(describeError(err));
-    } finally {
-      setIsCreatingUpload(false);
+      const msg = describeError(err);
+      console.error('Upload could not start:', err);
+      setPendingFile({ name: file.name, size: file.size, error: msg });
+      setError(`Upload could not start: ${msg}`);
     }
   };
 
@@ -1131,11 +1160,11 @@ export default function Analyze() {
             id="analyze-upload-video-btn"
             type="button"
             onClick={openFilePicker}
-            disabled={isCreatingUpload}
+            disabled={!!pendingFile && !pendingFile.error}
             className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 active:scale-[0.98] text-white px-5 py-2.5 rounded-xl font-semibold shadow-md shadow-indigo-500/20 transition-all cursor-pointer text-xs"
           >
-            {isCreatingUpload ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {isCreatingUpload ? 'Creating asset…' : 'Upload MP4'}
+            {pendingFile && !pendingFile.error ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {pendingFile && !pendingFile.error ? 'Creating video record…' : 'Upload MP4'}
           </button>
         </div>
 
@@ -1149,15 +1178,30 @@ export default function Analyze() {
         />
       </header>
 
-      {uploadProgress !== null && (
-        <div className="mb-6 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
-          <div className="flex justify-between items-center text-xs font-semibold text-indigo-900 mb-2">
-            <span className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading to persistent storage — playing local preview meanwhile</span>
-          </div>
-          <div className="w-full bg-indigo-200/60 rounded-full h-2 overflow-hidden">
-            <div className="bg-indigo-600 h-full rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
-          </div>
-        </div>
+      {pendingFile && (
+        <UploadCard
+          fileName={pendingFile.name}
+          fileSize={pendingFile.size}
+          status={pendingFile.error ? 'FAILED' : 'CREATING RECORD'}
+          detail={pendingFile.error ?? 'Creating the video_assets record…'}
+          progress={null}
+          onDismiss={pendingFile.error ? () => setPendingFile(null) : undefined}
+        />
+      )}
+      {!pendingFile && currentUpload && (
+        <UploadCard
+          fileName={currentUpload.fileName}
+          fileSize={currentUpload.fileSize}
+          status={currentUpload.status === 'uploading' ? 'UPLOADING' : currentUpload.status === 'uploaded' ? 'UPLOADED' : 'FAILED'}
+          detail={
+            currentUpload.status === 'uploading'
+              ? `${formatMb(currentUpload.bytesUploaded)} of ${formatMb(currentUpload.fileSize)} sent to videos/${currentUpload.storagePath} — playing the local copy meanwhile. Keep this tab open until the upload finishes.`
+              : currentUpload.status === 'uploaded'
+                ? `Stored at videos/${currentUpload.storagePath}`
+                : `Upload failed: ${currentUpload.error ?? 'unknown error'}`
+          }
+          progress={currentUpload.status === 'uploading' ? currentUpload.progress : null}
+        />
       )}
 
       <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-3" id="analyze-status-bar">
@@ -1365,6 +1409,7 @@ export default function Analyze() {
             {saved && (
               <span className="ml-2">· Saved: {saved.runs} run(s), {saved.tracks} tracked object(s), {saved.incidents} incident(s)</span>
             )}
+            {contentNote && <div className="mt-1 text-amber-700">{contentNote}</div>}
           </div>
           {sourceInfo.kind === 'video' && (
             <Link
@@ -1393,6 +1438,48 @@ export default function Analyze() {
         <MetricCard label="Frames Processed" value={live.frames.toLocaleString()} color="text-blue-600" />
         <MetricCard label="Queue Depth" value={live.queue.toLocaleString()} color="text-slate-700" />
       </div>
+    </div>
+  );
+}
+
+function formatMb(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function UploadCard({ fileName, fileSize, status, detail, progress, onDismiss }: {
+  fileName: string;
+  fileSize: number;
+  status: 'CREATING RECORD' | 'UPLOADING' | 'UPLOADED' | 'FAILED';
+  detail: string;
+  progress: number | null;
+  onDismiss?: () => void;
+}) {
+  const failed = status === 'FAILED';
+  return (
+    <div id="analyze-upload-card" className={`mb-6 rounded-xl p-4 border ${failed ? 'bg-red-50 border-red-200' : status === 'UPLOADED' ? 'bg-emerald-50 border-emerald-200' : 'bg-indigo-50 border-indigo-100'}`}>
+      <div className="flex justify-between items-start gap-3 text-xs">
+        <div className="min-w-0">
+          <div className="font-semibold text-slate-900 truncate flex items-center gap-2">
+            {(status === 'UPLOADING' || status === 'CREATING RECORD') && <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600 shrink-0" />}
+            {failed && <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />}
+            {status === 'UPLOADED' && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+            <span className="truncate">{fileName}</span>
+            <span className="text-slate-500 font-normal shrink-0">{formatMb(fileSize)}</span>
+          </div>
+          <div className={`mt-1 ${failed ? 'text-red-700' : 'text-slate-600'}`}>{detail}</div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`px-2 py-0.5 rounded font-bold tracking-wider ${failed ? 'bg-red-100 text-red-700' : status === 'UPLOADED' ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}`}>
+            {status}{progress !== null ? ` ${progress}%` : ''}
+          </span>
+          {onDismiss && <button type="button" onClick={onDismiss} className="text-slate-400 hover:text-slate-600 font-bold">✕</button>}
+        </div>
+      </div>
+      {progress !== null && (
+        <div className="mt-2 w-full bg-indigo-200/60 rounded-full h-2 overflow-hidden">
+          <div className="bg-indigo-600 h-full rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
+        </div>
+      )}
     </div>
   );
 }

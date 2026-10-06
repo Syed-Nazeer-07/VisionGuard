@@ -21,6 +21,8 @@ export interface LogInput {
   category: LogCategory
   message: string
   metadata?: Record<string, Json | undefined>
+  /** When the event actually happened (ISO). Defaults to now. */
+  timestamp?: string
 }
 
 type LogListener = (entry: AnalysisLogEntry) => void
@@ -97,7 +99,7 @@ class AnalysisLoggerService {
       video_id: input.video_id ?? null,
       camera_id: input.camera_id ?? null,
       analysis_run_id: input.analysis_run_id ?? null,
-      timestamp: new Date().toISOString(),
+      timestamp: input.timestamp ?? new Date().toISOString(),
       category: input.category,
       message: input.message,
       metadata: input.metadata ?? {}

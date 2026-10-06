@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { VideoAsset } from '../services/db'
-import { fallbackVideoNumbers, getUploadStatus, videoDisplayName } from '../lib/videoAssets'
+import { fallbackVideoNumbers, fetchStorageInfo, getAssetAvailability, videoDisplayName, type StorageInfo } from '../lib/videoAssets'
+import { uploadManager, type ActiveUpload } from '../services/uploadManager'
 import { Film, Search, Play, Trash2, Clock, UploadCloud, RefreshCw } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
@@ -12,12 +13,23 @@ export function VideoLibrary() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [storageInfo, setStorageInfo] = useState<Map<string, StorageInfo>>(new Map())
+  const [storageInfoError, setStorageInfoError] = useState<string | null>(null)
+  const [activeUploads, setActiveUploads] = useState<Record<string, ActiveUpload>>({})
   const [searchQuery, setSearchQuery] = useState('')
   const navigate = useNavigate()
 
   useEffect(() => {
     fetchVideos()
   }, [])
+
+  // Live state of uploads this tab is running (uploadManager outlives route changes).
+  useEffect(() => {
+    const unsubs = videos
+      .filter(v => uploadManager.getUpload(v.id))
+      .map(v => uploadManager.subscribe(v.id, up => setActiveUploads(prev => ({ ...prev, [up.videoId]: up }))))
+    return () => unsubs.forEach(u => u())
+  }, [videos])
 
   const fetchVideos = async () => {
     setLoading(true)
@@ -30,6 +42,12 @@ export function VideoLibrary() {
     } else {
       setLoadError(null)
       setVideos((data || []) as VideoAsset[])
+    }
+    try {
+      setStorageInfo(await fetchStorageInfo())
+      setStorageInfoError(null)
+    } catch (e) {
+      setStorageInfoError(e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e))
     }
     setLoading(false)
   }
@@ -106,6 +124,11 @@ export function VideoLibrary() {
           {loadError ? `Failed to load videos: ${loadError}` : actionError}
         </div>
       )}
+      {storageInfoError && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+          Could not verify stored files: {storageInfoError}
+        </div>
+      )}
 
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden min-h-[500px]">
         {loading ? (
@@ -140,11 +163,20 @@ export function VideoLibrary() {
             <tbody className="divide-y divide-slate-100">
               {filtered.map((video) => {
                 const name = videoDisplayName(video, fallbackNumbers)
-                const uploadStatus = getUploadStatus(video)
-                const statusLabel = uploadStatus === 'uploading' ? 'Uploading'
-                  : uploadStatus === 'failed' ? 'Upload failed'
+                const info = storageInfo.get(video.id)
+                const upload = activeUploads[video.id]
+                const availability = getAssetAvailability(video, info, upload?.status === 'uploading')
+                const twin = info?.identicalToVideoId ? videos.find(v => v.id === info.identicalToVideoId) : undefined
+                const statusLabel = availability.kind === 'uploading' ? `Uploading ${upload?.progress ?? 0}%`
+                  : availability.kind === 'upload_failed' ? 'Upload failed'
+                  : availability.kind === 'upload_incomplete' ? 'Upload incomplete'
+                  : availability.kind === 'file_missing' ? 'File missing'
                   : video.processing_status === 'pending' ? 'Ready'
                   : video.processing_status
+                const statusTitle = availability.kind === 'upload_failed' ? availability.detail
+                  : availability.kind === 'upload_incomplete' ? 'The upload stopped before finishing; no stored file exists for this video.'
+                  : availability.kind === 'file_missing' ? 'The stored file no longer exists in Storage.'
+                  : undefined
                 return (
                   <tr key={video.id} className="hover:bg-slate-50/80 transition-colors group">
                     <td className="px-5 py-4">
@@ -157,6 +189,11 @@ export function VideoLibrary() {
                           <p className="text-[12px] text-slate-500 mt-0.5 truncate max-w-[280px]" title={video.filename}>
                             {video.filename} · <span className="font-mono">{video.id.split('-')[0]}</span>
                           </p>
+                          {info?.identicalToVideoId && (
+                            <p className="text-[11px] text-amber-700 mt-0.5" title="Same file size and checksum: the same source file was uploaded more than once.">
+                              Identical file to {twin ? videoDisplayName(twin, fallbackNumbers) : 'another video'}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -164,10 +201,10 @@ export function VideoLibrary() {
                       {formatSize(video.file_size ?? 0)}
                     </td>
                     <td className="px-5 py-4">
-                      <span className={cn(
+                      <span title={statusTitle} className={cn(
                         "inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase tracking-wider",
-                        uploadStatus === 'failed' || video.processing_status === 'failed' ? "bg-rose-50 text-rose-700 border border-rose-200" :
-                        uploadStatus === 'uploading' ? "bg-blue-50 text-blue-700 border border-blue-200" :
+                        availability.kind === 'upload_failed' || availability.kind === 'upload_incomplete' || availability.kind === 'file_missing' || video.processing_status === 'failed' ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                        availability.kind === 'uploading' ? "bg-blue-50 text-blue-700 border border-blue-200" :
                         video.processing_status === 'completed' ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
                         video.processing_status === 'processing' ? "bg-amber-50 text-amber-700 border border-amber-200" :
                         "bg-slate-100 text-slate-700 border border-slate-200"
