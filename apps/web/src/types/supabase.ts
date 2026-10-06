@@ -6,6 +6,20 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+export type VideoProcessingStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'paused'
+
+export type AnalysisLogCategory =
+  | 'SYSTEM'
+  | 'UPLOAD'
+  | 'PROCESSING'
+  | 'MODEL'
+  | 'DETECTION'
+  | 'TRACKING'
+  | 'INCIDENT'
+  | 'EVIDENCE'
+  | 'PERSISTENCE'
+  | 'ERROR'
+
 export type Database = {
   public: {
     Tables: {
@@ -78,28 +92,55 @@ export type Database = {
       }
       analysis_runs: {
         Row: {
-          camera_id: string
+          camera_id: string | null
+          video_id: string | null
+          created_by: string | null
           ended_at: string | null
           id: string
           metrics: Json | null
           started_at: string
           status: string
+          fps: number | null
+          latency: number | null
+          queue_depth: number | null
+          frames_processed: number | null
+          detections_generated: number | null
+          incidents_created: number | null
+          incidents_suppressed: number | null
         }
         Insert: {
-          camera_id: string
+          camera_id?: string | null
+          video_id?: string | null
+          created_by?: string | null
           ended_at?: string | null
           id?: string
           metrics?: Json | null
           started_at?: string
           status?: string
+          fps?: number
+          latency?: number
+          queue_depth?: number
+          frames_processed?: number
+          detections_generated?: number
+          incidents_created?: number
+          incidents_suppressed?: number
         }
         Update: {
-          camera_id?: string
+          camera_id?: string | null
+          video_id?: string | null
+          created_by?: string | null
           ended_at?: string | null
           id?: string
           metrics?: Json | null
           started_at?: string
           status?: string
+          fps?: number
+          latency?: number
+          queue_depth?: number
+          frames_processed?: number
+          detections_generated?: number
+          incidents_created?: number
+          incidents_suppressed?: number
         }
       }
       cameras: {
@@ -296,8 +337,9 @@ export type Database = {
           duration: number | null
           uploaded_by: string | null
           uploaded_at: string | null
-          processing_status: 'created' | 'pending' | 'uploading' | 'uploaded' | 'processing' | 'completed' | 'failed' | 'paused'
+          processing_status: VideoProcessingStatus
           metadata: Json | null
+          display_number: number | null
         }
         Insert: {
           id?: string
@@ -307,8 +349,9 @@ export type Database = {
           duration?: number | null
           uploaded_by?: string | null
           uploaded_at?: string | null
-          processing_status?: 'created' | 'pending' | 'uploading' | 'uploaded' | 'processing' | 'completed' | 'failed' | 'paused'
+          processing_status?: VideoProcessingStatus
           metadata?: Json | null
+          display_number?: number | null
         }
         Update: {
           id?: string
@@ -318,8 +361,9 @@ export type Database = {
           duration?: number | null
           uploaded_by?: string | null
           uploaded_at?: string | null
-          processing_status?: 'created' | 'pending' | 'uploading' | 'uploaded' | 'processing' | 'completed' | 'failed' | 'paused'
+          processing_status?: VideoProcessingStatus
           metadata?: Json | null
+          display_number?: number | null
         }
       }
       analysis_logs: {
@@ -329,9 +373,10 @@ export type Database = {
           camera_id: string | null
           analysis_run_id: string | null
           timestamp: string
-          category: 'SYSTEM' | 'UPLOAD' | 'PROCESSING' | 'MODEL' | 'DETECTION' | 'TRACKING' | 'INCIDENT' | 'EVIDENCE' | 'PERSISTENCE' | 'ERROR'
+          category: AnalysisLogCategory
           message: string
           metadata: Json | null
+          created_at: string
         }
         Insert: {
           id?: string
@@ -339,9 +384,10 @@ export type Database = {
           camera_id?: string | null
           analysis_run_id?: string | null
           timestamp?: string
-          category: 'SYSTEM' | 'UPLOAD' | 'PROCESSING' | 'MODEL' | 'DETECTION' | 'TRACKING' | 'INCIDENT' | 'EVIDENCE' | 'PERSISTENCE' | 'ERROR'
+          category: AnalysisLogCategory
           message: string
           metadata?: Json | null
+          created_at?: string
         }
         Update: {
           id?: string
@@ -349,9 +395,10 @@ export type Database = {
           camera_id?: string | null
           analysis_run_id?: string | null
           timestamp?: string
-          category?: 'SYSTEM' | 'UPLOAD' | 'PROCESSING' | 'MODEL' | 'DETECTION' | 'TRACKING' | 'INCIDENT' | 'EVIDENCE' | 'PERSISTENCE' | 'ERROR'
+          category?: AnalysisLogCategory
           message?: string
           metadata?: Json | null
+          created_at?: string
         }
       }
     }

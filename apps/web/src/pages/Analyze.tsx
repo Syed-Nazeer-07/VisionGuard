@@ -1,908 +1,421 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { 
-  Upload, Cpu, CheckCircle2, Loader2, Activity, ShieldAlert, 
-  AlertTriangle, Film, Play, Camera as CameraIcon, Radio, Pause
+import {
+  Upload, Cpu, CheckCircle2, Loader2, Activity, ShieldAlert,
+  AlertTriangle, Film, Play, Camera as CameraIcon, Radio, Pause, Square, RotateCcw
 } from 'lucide-react';
+import Hls from 'hls.js';
 import { drawBoundingBoxes } from '../pipeline/rendering/overlay';
-import type { WorkerOutputMessage } from '../pipeline/types';
-import { db } from '../services/db';
+import type { ResultMessage, WorkerOutputMessage } from '../pipeline/types';
+import type { ViolationCandidate, ViolationMetadata } from '../pipeline/violations/types';
+import { db, type VideoAsset } from '../services/db';
 import { requestOcr } from '../pipeline/plate/service';
 import { evidenceQueue } from '../pipeline/evidence/queue';
 import { supabase } from '../lib/supabase';
 import { uploadManager } from '../services/uploadManager';
 import { analysisLogger } from '../services/analysisLogger';
 import { AnalysisLogPanel } from '../components/analysis/AnalysisLogPanel';
-import Hls from 'hls.js';
+import { getStoredVideoUrl, getUploadStatus, videoDisplayName } from '../lib/videoAssets';
+import type { Json } from '../types/supabase';
 
+// ---------------------------------------------------------------------------------------------
+// State model
+//   Source:  IDLE → SOURCE_LOADING → SOURCE_READY | SOURCE_ERROR
+//   Run:     NONE → STARTING → ANALYZING ⇄ PAUSED → STOPPED | COMPLETED
+// The displayed state is the source state until the source is ready, then the run state.
+// One analysis_runs row per Start Inference click; pause/resume continue the same run.
+// ---------------------------------------------------------------------------------------------
+type SourceState = 'IDLE' | 'SOURCE_LOADING' | 'SOURCE_READY' | 'SOURCE_ERROR';
+type RunState = 'NONE' | 'STARTING' | 'ANALYZING' | 'PAUSED' | 'STOPPED' | 'COMPLETED';
 type ModelStatus = 'loading' | 'ready' | 'error';
-type AnalysisState = 'READY' | 'STARTING' | 'ANALYZING' | 'PAUSED' | 'STOPPING' | 'COMPLETED' | 'FAILED';
-type SourceMode = 'video' | 'camera';
+type TerminalStatus = 'completed' | 'stopped' | 'failed';
+
+interface SourceContext {
+  kind: 'video' | 'camera';
+  id: string;
+  name: string;
+  location: string | null;
+}
+
+interface CameraRow {
+  id: string;
+  name: string;
+  location: string | null;
+  stream_url: string | null;
+  source_url?: string | null;
+  source_type?: string | null;
+}
+
+interface TrajectoryPoint {
+  time: number;
+  bbox: [number, number, number, number]; // top-left x, y, width, height in source pixels
+  speed?: number;
+}
 
 interface TrackedRecord {
-  video_id: string | null;
-  camera_id: string | null;
-  analysis_run_id: string | null;
-  track_id: number;
+  track_id: number; // persisted id (worker id + session offset)
   object_type: string;
   confidence: number;
   first_seen_timestamp: number;
   last_seen_timestamp: number;
   frame_count: number;
-  metadata: {
-    trajectory: Array<{
-      time: number;
-      bbox: [number, number, number, number];
-      speed?: number;
-    }>;
-  };
+  trajectory: TrajectoryPoint[];
+}
+
+interface IncidentRow {
+  incident_type: string;
+  violation_type: string;
+  severity: string;
+  status: string;
+  confidence: number;
+  track_id: number | null;
+  camera_id: string | null;
+  video_id: string | null;
+  analysis_run_id: string;
+  location: string;
+  description: string;
+  created_at: string;
+  metadata: Record<string, Json | undefined>;
+}
+
+interface QueuedIncident {
+  row: IncidentRow;
+  evidence: Array<{ type: 'snapshot' | 'plate_crop'; base64: string }>;
+}
+
+interface SessionMetrics {
+  framesProcessed: number;
+  detectionsGenerated: number;
+  incidentsCreated: number;
+  incidentsSuppressed: number;
+  incidentsSaved: number;
+  fps: number;
+  latency: number;
+}
+
+interface AnalysisSession {
+  source: SourceContext;
+  runId: string;
+  trackIdOffset: number;
+  tracked: Map<number, TrackedRecord>; // keyed by worker track id
+  incidentQueue: QueuedIncident[];
+  dedupe: Map<string, number>;
+  metrics: SessionMetrics;
+  fpsWindowStart: number;
+  fpsWindowFrames: number;
+  lastMetricsPersist: number;
+  lastTrackFlush: number;
+  metricsErrorLogged: boolean;
+  closed: boolean;
+}
+
+interface LiveMetrics {
+  fps: number;
+  latency: number;
+  frames: number;
+  detections: number;
+  created: number;
+  suppressed: number;
+  saved: number;
+  tracked: number;
+  queue: number;
+}
+
+interface SavedSummary {
+  incidents: number;
+  tracks: number;
+  runs: number;
+}
+
+const EMPTY_METRICS: LiveMetrics = { fps: 0, latency: 0, frames: 0, detections: 0, created: 0, suppressed: 0, saved: 0, tracked: 0, queue: 0 };
+const MODEL_PATH = '/models/yolo11n.onnx';
+const MODEL_NAME = 'YOLO11n';
+
+function describeError(e: unknown): string {
+  if (e && typeof e === 'object') {
+    const err = e as { message?: unknown; code?: unknown; details?: unknown };
+    const parts = [typeof err.message === 'string' ? err.message : String(e)];
+    if (typeof err.code === 'string') parts.push(`[${err.code}]`);
+    if (typeof err.details === 'string' && err.details) parts.push(`— ${err.details}`);
+    return parts.join(' ');
+  }
+  return String(e);
+}
+
+function mediaErrorText(err: MediaError | null): string {
+  switch (err?.code) {
+    case 1: return 'Playback aborted';
+    case 2: return 'Network error while loading the media';
+    case 3: return 'The media could not be decoded';
+    case 4: return 'Media format or source URL is not supported / not reachable';
+    default: return err?.message || 'Unknown media error';
+  }
+}
+
+function resolveCameraPlayback(cam: CameraRow): { url: string; hls: boolean } | { error: string } {
+  const url = cam.stream_url || cam.source_url;
+  if (!url) return { error: `Camera "${cam.name}" has no stream URL configured.` };
+  if (/^rtsps?:\/\//i.test(url)) {
+    return { error: `Camera "${cam.name}" is an RTSP source. Browsers cannot play RTSP directly — configure an HLS stream_url through the stream proxy.` };
+  }
+  if (/(youtube\.com|youtu\.be)\//i.test(url)) {
+    return { error: `Camera "${cam.name}" is a YouTube source. It must be relayed to HLS by the stream proxy before it can be analyzed.` };
+  }
+  return { url, hls: cam.source_type === 'hls' || /\.m3u8(\?|$)/i.test(url) };
 }
 
 export default function Analyze() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const videoParam = searchParams.get('video');
+  const cameraParam = searchParams.get('camera');
+  // The URL is the single source of truth for the selected asset.
+  const selectionKey = videoParam ? `video:${videoParam}` : cameraParam ? `camera:${cameraParam}` : '';
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const workerRef = useRef<Worker | null>(null);
   const hlsRef = useRef<Hls | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
 
   const [modelStatus, setModelStatus] = useState<ModelStatus>('loading');
-  const [analysisState, setAnalysisState] = useState<AnalysisState>('READY');
-  const [sourceMode, setSourceMode] = useState<SourceMode>('video');
+  const [modelError, setModelError] = useState<string | null>(null);
   const [provider, setProvider] = useState<string>('');
-  const [fps, setFps] = useState<number>(0);
-  const [inferenceTime, setInferenceTime] = useState<number>(0);
+  const [sourceState, setSourceStateValue] = useState<SourceState>('IDLE');
+  const [runState, setRunStateValue] = useState<RunState>('NONE');
+  const [sourceInfo, setSourceInfo] = useState<SourceContext | null>(null);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [sourceName, setSourceName] = useState<string>('');
-  const [totalProcessedFrames, setTotalProcessedFrames] = useState(0);
-  const [metrics, setMetrics] = useState({ generated: 0, created: 0, suppressed: 0, saved: 0 });
-  const [trackedCount, setTrackedCount] = useState(0);
-  const [queueDepth, setQueueDepth] = useState(0);
-
-  const [cameras, setCameras] = useState<any[]>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>('');
-  const [videoId, setVideoId] = useState<string | null>(null);
+  const [cameras, setCameras] = useState<CameraRow[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const [playBlocked, setPlayBlocked] = useState<boolean>(false);
-  const [isUploadingOnly, setIsUploadingOnly] = useState<boolean>(false);
-  const uploadSubRef = useRef<(() => void) | null>(null);
+  const [live, setLive] = useState<LiveMetrics>(EMPTY_METRICS);
+  const [saved, setSaved] = useState<SavedSummary | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [isCreatingUpload, setIsCreatingUpload] = useState(false);
 
-  // Refs mirror mutable state so worker/frame callbacks never read stale values
-  const modelReadyRef = useRef(false);
-  const isProcessingRef = useRef(false);
+  // Refs read by worker/frame callbacks (never stale)
+  const sourceStateRef = useRef<SourceState>('IDLE');
+  const runStateRef = useRef<RunState>('NONE');
+  const activeSourceRef = useRef<SourceContext | null>(null);
+  const sessionRef = useRef<AnalysisSession | null>(null);
+  const inflightSessionRef = useRef<AnalysisSession | null>(null);
+  const loadSeqRef = useRef(0);
+  const startingRef = useRef(false);
   const loopActiveRef = useRef(false);
-  const settingsRef = useRef<Record<string, any>>({});
-  const cameraIdRef = useRef<string | null>(null);
-  const videoIdRef = useRef<string | null>(null);
-  const analysisRunIdRef = useRef<string | null>(null);
-  const inferenceTimeRef = useRef(0);
-  const frameCountRef = useRef(0);
-  const lastFpsTimeRef = useRef(performance.now());
-  const lastTrackFlushTimeRef = useRef(performance.now());
+  const modelReadyRef = useRef(false);
+  const providerRef = useRef<{ provider: string; fallbackReason: string | null }>({ provider: '', fallbackReason: null });
   const isWorkerBusyRef = useRef(false);
   const busySinceRef = useRef(0);
-  const dedupeCache = useRef(new Map<string, number>());
-  const incidentQueueRef = useRef<any[]>([]);
-  const pipelineMetricsRef = useRef({
-    framesProcessed: 0,
-    detectionsGenerated: 0,
-    incidentsCreated: 0,
-    incidentsSuppressed: 0,
-    incidentsSaved: 0
+  const settingsRef = useRef<Record<string, unknown>>({});
+  const uploadUnsubRef = useRef<(() => void) | null>(null);
+
+  const setSourceState = (s: SourceState, err: string | null = null) => {
+    sourceStateRef.current = s;
+    setSourceStateValue(s);
+    setSourceError(err);
+  };
+  const setRunState = (s: RunState) => {
+    runStateRef.current = s;
+    setRunStateValue(s);
+  };
+  const isCurrent = (session: AnalysisSession) => activeSourceRef.current === session.source;
+  const logFor = (session: AnalysisSession) => ({
+    video_id: session.source.kind === 'video' ? session.source.id : null,
+    camera_id: session.source.kind === 'camera' ? session.source.id : null,
+    analysis_run_id: session.runId
   });
-  const trackedObjectsRef = useRef<Map<number, TrackedRecord>>(new Map());
-  const loadedCameraIdRef = useRef<string | null>(null);
-  const fpsRef = useRef<number>(0);
-  const camerasRef = useRef<any[]>([]);
+  const logForSource = (source: SourceContext) => ({
+    video_id: source.kind === 'video' ? source.id : null,
+    camera_id: source.kind === 'camera' ? source.id : null
+  });
 
-  // Synchronize videoId with ref and state
-  const setResolvedVideoId = useCallback((id: string | null) => {
-    setVideoId(id);
-    videoIdRef.current = id;
-    if (id) {
-      localStorage.setItem('visionguard_active_video_id', id);
+  // -------------------------------------------------------------------------------------------
+  // Persistence (every function takes the session explicitly so stale work never leaks into a
+  // newly selected source)
+  // -------------------------------------------------------------------------------------------
+  const persistRunMetrics = async (session: AnalysisSession, patch: { status?: string; ended_at?: string } = {}) => {
+    const m = session.metrics;
+    await db.analysisRuns.update(session.runId, {
+      fps: m.fps,
+      latency: Math.round(m.latency),
+      queue_depth: session.incidentQueue.length,
+      frames_processed: m.framesProcessed,
+      detections_generated: m.detectionsGenerated,
+      incidents_created: m.incidentsCreated,
+      incidents_suppressed: m.incidentsSuppressed,
+      metrics: { incidents_saved: m.incidentsSaved, tracked_objects: session.tracked.size },
+      ...patch
+    });
+  };
+
+  const flushIncidents = async (session: AnalysisSession) => {
+    if (session.incidentQueue.length === 0) return;
+    const batch = session.incidentQueue.splice(0);
+    const { data, error: insErr } = await supabase.from('incidents').insert(batch.map(b => b.row)).select();
+    if (insErr) {
+      const msg = describeError(insErr);
+      console.error('Incident insert failed:', insErr);
+      if (isCurrent(session)) setSaveError(`Incidents not saved: ${msg}`);
+      analysisLogger.log({ ...logFor(session), category: 'ERROR', message: `Incident persistence failed (${batch.length} incident(s)): ${msg}` });
+      return;
     }
-  }, []);
+    if (isCurrent(session)) setSaveError(null);
+    const created = (data || []) as Array<{ id: string }>;
+    session.metrics.incidentsSaved += created.length;
+    analysisLogger.log({ ...logFor(session), category: 'PERSISTENCE', message: `Persisted ${created.length} incident record(s)` });
 
-  // Persistent Analysis Run Lifecycle Management
-  const startAnalysisSession = useCallback(async (camId: string | null, vidId?: string | null) => {
-    if (!camId && !vidId) return null;
-    if (analysisRunIdRef.current) return analysisRunIdRef.current;
-
-    try {
-      const run = await db.analysisRuns.create({
-        camera_id: (camId || null) as any,
-        started_at: new Date().toISOString(),
-        status: 'running',
-        metrics: {
-          fps: 0,
-          latency: 0,
-          queue_depth: 0,
-          frames_processed: 0,
-          detections_generated: 0,
-          incidents_created: 0,
-          incidents_suppressed: 0,
-          video_id: vidId || null
-        } as any
+    created.forEach((inc, index) => {
+      const src = batch[index];
+      if (!src) return;
+      for (const ev of src.evidence) {
+        evidenceQueue.add({
+          incident_id: inc.id,
+          camera_id: src.row.camera_id,
+          video_id: src.row.video_id,
+          analysis_run_id: session.runId,
+          base64Data: ev.base64,
+          type: ev.type,
+          capture_timestamp: src.row.created_at
+        });
+        analysisLogger.log({ ...logFor(session), category: 'EVIDENCE', message: `Evidence queued for incident #${inc.id.slice(0, 8)} (${ev.type})` });
+      }
+      // Legacy violations table still feeds the Review Queue.
+      supabase.from('violations').insert({
+        camera_id: src.row.camera_id,
+        video_id: src.row.video_id,
+        analysis_run_id: session.runId,
+        type: src.row.violation_type,
+        severity: src.row.severity,
+        status: 'pending_review',
+        timestamp: src.row.created_at,
+        metadata: { ...src.row.metadata, track_id: src.row.track_id, confidence: src.row.confidence, incident_id: inc.id }
+      }).then(({ error: vErr }: { error: unknown }) => {
+        if (vErr) console.warn('Violation (review queue) insert failed:', vErr);
       });
-      analysisRunIdRef.current = run.id;
-      setActiveRunId(run.id);
+    });
+  };
 
-      analysisLogger.log({
-        video_id: vidId || null,
-        camera_id: camId || null,
-        analysis_run_id: run.id,
-        category: 'SYSTEM',
-        message: `Analysis run session initialized (Run #${run.id.slice(0, 8)})`
-      });
-
-      return run.id;
-    } catch (e) {
-      console.warn('Analysis run creation exception:', e);
-      return null;
-    }
-  }, []);
-
-  const finalizeAnalysisRun = useCallback(async (terminalStatus: 'completed' | 'stopped' | 'failed') => {
-    const runId = analysisRunIdRef.current;
-    if (!runId) return;
-    analysisRunIdRef.current = null;
-    setActiveRunId(null);
-
-    const nowIso = new Date().toISOString();
-    try {
-      await db.analysisRuns.update(runId, {
-        ended_at: nowIso,
-        status: terminalStatus,
-        metrics: {
-          ...pipelineMetricsRef.current,
-          fps: fpsRef.current,
-          latency: inferenceTimeRef.current,
-          queue_depth: incidentQueueRef.current.length
-        } as any
-      });
-
-      analysisLogger.log({
-        video_id: videoIdRef.current || null,
-        camera_id: cameraIdRef.current || null,
-        analysis_run_id: runId,
-        category: 'SYSTEM',
-        message: `Analysis run concluded (${terminalStatus})`
-      });
-    } catch (e) {
-      console.warn('Analysis run finalization warning:', e);
-    }
-  }, []);
-
-  // Flush tracked objects to database (both live cameras and uploaded videos)
-  const flushTrackedObjects = useCallback(async () => {
-    const currentVid = videoIdRef.current;
-    const currentCam = cameraIdRef.current;
-    if ((!currentVid && !currentCam) || trackedObjectsRef.current.size === 0) return;
-
-    const rows = Array.from(trackedObjectsRef.current.values()).map(r => ({
-      video_id: currentVid || null,
-      camera_id: currentCam || null,
-      analysis_run_id: r.analysis_run_id || analysisRunIdRef.current || null,
+  const flushTracks = async (session: AnalysisSession, final: boolean) => {
+    if (session.tracked.size === 0) return;
+    const isVideo = session.source.kind === 'video';
+    const rows = Array.from(session.tracked.values()).map(r => ({
+      video_id: isVideo ? session.source.id : null,
+      camera_id: isVideo ? null : session.source.id,
+      analysis_run_id: session.runId,
       track_id: r.track_id,
       object_type: r.object_type,
       confidence: r.confidence,
       first_seen_timestamp: r.first_seen_timestamp,
       last_seen_timestamp: r.last_seen_timestamp,
       frame_count: r.frame_count,
-      metadata: r.metadata || {}
+      metadata: { trajectory: r.trajectory }
     }));
+    const { error: upsertErr } = await supabase
+      .from('tracked_objects')
+      .upsert(rows, { onConflict: isVideo ? 'video_id,track_id' : 'camera_id,track_id' });
+    if (upsertErr) {
+      console.error('Tracked objects upsert failed:', upsertErr);
+      analysisLogger.log({ ...logFor(session), category: 'ERROR', message: `Tracking persistence failed: ${describeError(upsertErr)}` });
+    } else if (final) {
+      analysisLogger.log({ ...logFor(session), category: 'PERSISTENCE', message: `Tracking persisted (${rows.length} tracks with trajectories)` });
+    }
+  };
 
+  const closeSession = async (session: AnalysisSession, status: TerminalStatus, reason?: string) => {
+    if (session.closed) return;
+    session.closed = true;
+    if (sessionRef.current === session) {
+      sessionRef.current = null;
+      loopActiveRef.current = false;
+    }
+    if (isCurrent(session)) setActiveRunId(null);
+
+    await flushIncidents(session);
+    await flushTracks(session, true);
     try {
-      const conflictCol = currentVid ? 'video_id,track_id' : 'camera_id,track_id';
-      const { error: upsertErr } = await (supabase as any)
-        .from('tracked_objects')
-        .upsert(rows, { onConflict: conflictCol });
-
-      if (upsertErr) {
-        console.warn('Tracked objects upsert error:', upsertErr);
-      } else {
-        analysisLogger.log({
-          video_id: currentVid || null,
-          camera_id: currentCam || null,
-          analysis_run_id: analysisRunIdRef.current || null,
-          category: 'PERSISTENCE',
-          message: `Tracked objects checkpoint saved (${rows.length} tracks)`
-        });
-      }
-    } catch (err) {
-      console.warn('Tracked objects flush error:', err);
+      await persistRunMetrics(session, { status, ended_at: new Date().toISOString() });
+    } catch (e) {
+      analysisLogger.log({ ...logFor(session), category: 'ERROR', message: `Could not finalize analysis run: ${describeError(e)}` });
     }
-  }, []);
 
-  // Flush queued incidents to database (both live cameras and uploaded videos)
-  const flushIncidents = useCallback(async () => {
-    if (incidentQueueRef.current.length === 0) return;
-    const toFlush = [...incidentQueueRef.current];
-    incidentQueueRef.current = [];
-    setQueueDepth(0);
-
-    const rows = toFlush.map(t => t.incident);
-    const { data, error: insErr } = await (supabase as any).from('incidents').insert(rows).select();
-    if (insErr) {
-      console.error('Incident insert failed:', insErr);
-      setSaveError(insErr.message || 'Failed to save incidents');
-      analysisLogger.log({
-        video_id: rows[0]?.video_id || videoIdRef.current || null,
-        camera_id: rows[0]?.camera_id || cameraIdRef.current || null,
-        analysis_run_id: analysisRunIdRef.current || null,
-        category: 'ERROR',
-        message: `Incident persistence failed: ${insErr.message}`
-      });
-      return;
+    if (session.source.kind === 'video') {
+      const processing_status = status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'paused';
+      const patch: { processing_status: string; duration?: number } = { processing_status };
+      const video = videoRef.current;
+      if (status === 'completed' && video && isCurrent(session) && Number.isFinite(video.duration)) patch.duration = video.duration;
+      const { error: vaErr } = await supabase.from('video_assets').update(patch).eq('id', session.source.id);
+      if (vaErr) analysisLogger.log({ ...logFor(session), category: 'ERROR', message: `video_assets status update failed: ${describeError(vaErr)}` });
     }
-    setSaveError(null);
-    const created: any[] = data || [];
-    pipelineMetricsRef.current.incidentsSaved += created.length;
 
+    const m = session.metrics;
     analysisLogger.log({
-      video_id: rows[0]?.video_id || videoIdRef.current || null,
-      camera_id: rows[0]?.camera_id || cameraIdRef.current || null,
-      analysis_run_id: analysisRunIdRef.current || null,
-      category: 'PERSISTENCE',
-      message: `Persisted ${created.length} incident record(s) to database`
+      ...logFor(session),
+      category: status === 'failed' ? 'ERROR' : 'PROCESSING',
+      message: `Analysis ${status}${reason ? ` (${reason})` : ''}: ${m.framesProcessed} frames, ${m.detectionsGenerated} detections, ${m.incidentsCreated} incidents (${m.incidentsSaved} saved), ${session.tracked.size} tracks`
     });
+  };
 
-    created.forEach((inc: any, index: number) => {
-      const src = toFlush[index];
-      if (src?.evidence) {
-        src.evidence.forEach((ev: any) => {
-          evidenceQueue.add({
-            incident_id: inc.id,
-            camera_id: inc.camera_id ?? null,
-            video_id: inc.video_id ?? null,
-            analysis_run_id: inc.analysis_run_id ?? null,
-            base64Data: ev.base64,
-            type: ev.type,
-            capture_timestamp: src.timestamp
-          });
-          analysisLogger.log({
-            video_id: inc.video_id ?? null,
-            camera_id: inc.camera_id ?? null,
-            analysis_run_id: inc.analysis_run_id ?? null,
-            category: 'EVIDENCE',
-            message: `Evidence snapshot queued for incident #${inc.id.slice(0, 8)} (${ev.type})`
-          });
-        });
-      }
-      
-      // Also register into violations table for review queue
-      if (inc.camera_id || inc.video_id) {
-        (supabase as any).from('violations').insert({
-          camera_id: inc.camera_id || null,
-          video_id: inc.video_id || null,
-          analysis_run_id: inc.analysis_run_id || null,
-          type: src.type,
-          severity: src.severity,
-          status: 'pending_review',
-          timestamp: src.timestamp,
-          metadata: src.metadata
-        }).then(({ error }: any) => {
-          if (error) console.warn('Violation insert warning:', error);
-        });
-      }
-    });
-  }, []);
-
-  // Clean tear-down of current media source
-  const resetSourceState = useCallback(async () => {
-    isProcessingRef.current = false;
-    loopActiveRef.current = false;
-    await finalizeAnalysisRun('stopped');
-    await flushIncidents();
-    await flushTrackedObjects();
-    workerRef.current?.postMessage({ type: 'reset_tracker' });
-    dedupeCache.current.clear();
-    trackedObjectsRef.current.clear();
-    setTrackedCount(0);
-    const canvas = canvasRef.current;
-    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
-  }, [finalizeAnalysisRun, flushIncidents, flushTrackedObjects]);
-
-  // Load persistent video asset
-  const loadVideoAsset = useCallback(async (vidId: string) => {
-    await resetSourceState();
-    setAnalysisState('STARTING');
-    setSourceMode('video');
-    setSelectedCameraId('');
-    cameraIdRef.current = null;
-    setError(null);
-    setSaveError(null);
-    setIsUploadingOnly(false);
-
+  const pauseSession = async (session: AnalysisSession) => {
+    setRunState('PAUSED');
+    analysisLogger.log({ ...logFor(session), category: 'PROCESSING', message: `Analysis paused at ${videoRef.current?.currentTime.toFixed(1) ?? '?'}s` });
+    await flushIncidents(session);
+    await flushTracks(session, true);
     try {
-      const activeUpload = uploadManager.getUpload(vidId);
-
-      // 1. Fetch video_assets record
-      let assetData: any = null;
-      const { data, error: fetchErr } = await (supabase as any)
-        .from('video_assets')
-        .select('*')
-        .eq('id', vidId)
-        .maybeSingle();
-
-      if (data) {
-        assetData = data;
-      } else if (activeUpload) {
-        assetData = {
-          id: activeUpload.videoId,
-          filename: activeUpload.fileName,
-          storage_path: activeUpload.storagePath,
-          file_size: activeUpload.fileSize,
-          processing_status: activeUpload.status
-        };
-      } else {
-        throw new Error(fetchErr?.message || 'Video asset not found');
-      }
-
-      setResolvedVideoId(assetData.id);
-
-      // 2. Resolve Playable URL with graceful fallback
-      let playUrl = '';
-      if (assetData.storage_path) {
-        const { data: urlData } = supabase.storage.from('videos').getPublicUrl(assetData.storage_path);
-        playUrl = urlData?.publicUrl || '';
-      }
-
-      // Fallback 1: Local preview blob if still valid in memory
-      if (!playUrl && activeUpload?.localPreviewUrl) {
-        playUrl = activeUpload.localPreviewUrl;
-      }
-
-      // Fallback 2: Default asset sample
-      if (!playUrl && (assetData.filename?.includes('car-detection') || assetData.storage_path === 'car-detection.mp4')) {
-        playUrl = '/car-detection.mp4';
-      }
-
-      // If active upload is still uploading, subscribe and monitor progress
-      if (activeUpload && activeUpload.status === 'uploading') {
-        setUploadProgress(activeUpload.progress);
-        if (uploadSubRef.current) uploadSubRef.current();
-        uploadSubRef.current = uploadManager.subscribe(vidId, (up) => {
-          setUploadProgress(up.progress);
-          if (up.status === 'uploaded') {
-            setTimeout(() => setUploadProgress(0), 1000);
-            setIsUploadingOnly(false);
-            if (!playUrl && up.storagePath) {
-              const { data: uData } = supabase.storage.from('videos').getPublicUrl(up.storagePath);
-              if (uData?.publicUrl) {
-                loadMediaUrl(uData.publicUrl, up.fileName);
-              }
-            }
-          }
-        });
-      }
-
-      if (playUrl) {
-        setIsUploadingOnly(false);
-        loadMediaUrl(playUrl, assetData.filename);
-      } else if (activeUpload?.status === 'uploading' || !assetData.storage_path) {
-        // Upload is in progress — show non-blocking progress UI instead of marking as failed
-        setIsUploadingOnly(true);
-        setSourceName(assetData.filename);
-      } else {
-        throw new Error('Could not resolve video stream URL');
-      }
-
-      // 3. Rehydrate persistent analysis data (incidents, tracked objects, analysis runs)
-      try {
-        const [tracksRes, incsRes, runsRes] = await Promise.all([
-          (supabase as any).from('tracked_objects').select('*').eq('video_id', vidId),
-          (supabase as any).from('incidents').select('*').eq('video_id', vidId).order('created_at', { ascending: true }),
-          (supabase as any).from('analysis_runs').select('*').order('started_at', { ascending: false }).limit(10)
-        ]);
-
-        const savedTracks = tracksRes.data || [];
-        const savedIncs = incsRes.data || [];
-        const savedRuns = (runsRes.data || []).filter((r: any) => r.metrics?.video_id === vidId);
-
-        setTrackedCount(savedTracks.length);
-        setMetrics({
-          generated: savedTracks.length,
-          created: savedIncs.length,
-          suppressed: 0,
-          saved: savedIncs.length
-        });
-
-        if (savedTracks.length > 0) {
-          savedTracks.forEach((t: any) => {
-            trackedObjectsRef.current.set(t.track_id, {
-              video_id: vidId,
-              camera_id: null,
-              analysis_run_id: t.analysis_run_id || null,
-              track_id: t.track_id,
-              object_type: t.object_type,
-              confidence: Number(t.confidence),
-              first_seen_timestamp: Number(t.first_seen_timestamp || 0),
-              last_seen_timestamp: Number(t.last_seen_timestamp || 0),
-              frame_count: t.frame_count || 0,
-              metadata: t.metadata || { trajectory: [] }
-            });
-          });
-        }
-
-        if (savedRuns.length > 0) {
-          analysisRunIdRef.current = savedRuns[0].id;
-          setActiveRunId(savedRuns[0].id);
-          if (savedRuns[0].metrics?.frames_processed) {
-            setTotalProcessedFrames(savedRuns[0].metrics.frames_processed);
-          }
-        }
-      } catch (hydrateErr) {
-        console.warn('Persistent video analysis hydration warning:', hydrateErr);
-      }
-
-      // 4. Load historical analysis logs
-      analysisLogger.fetchHistoricalLogs(vidId, null).catch(() => {});
-
-      // 5. Update state machine
-      if (assetData.processing_status === 'completed') {
-        setAnalysisState('COMPLETED');
-      } else if (assetData.processing_status === 'failed') {
-        setAnalysisState('FAILED');
-      } else {
-        setAnalysisState('READY');
-      }
-
-    } catch (err: any) {
-      console.error('Failed to load video asset:', err);
-      setError(`Failed to load video: ${err.message}`);
-      setAnalysisState('FAILED');
+      await persistRunMetrics(session, { status: 'paused' });
+    } catch (e) {
+      analysisLogger.log({ ...logFor(session), category: 'ERROR', message: `Could not update run status: ${describeError(e)}` });
     }
-  }, [resetSourceState, setResolvedVideoId]);
+  };
 
-  // Load live camera source
-  const loadCameraSource = useCallback(async (camId: string) => {
-    if (loadedCameraIdRef.current === camId && cameraIdRef.current === camId) return;
-    await resetSourceState();
-
-    loadedCameraIdRef.current = camId;
-    cameraIdRef.current = camId;
-    setResolvedVideoId(null);
-    setSourceMode('camera');
-    setSelectedCameraId(camId);
-    setAnalysisState('STARTING');
-    setError(null);
-    setSaveError(null);
-
-    // Update query params to reflect camera selection only if changed
-    const currentParam = new URLSearchParams(window.location.search).get('camera');
-    if (currentParam !== camId) {
-      setSearchParams({ camera: camId }, { replace: true });
-    }
-
-    const cam = camerasRef.current.find(c => c.id === camId);
-    const video = videoRef.current;
-    if (!cam || !video) return;
-
-    const url = cam.source_url || cam.stream_url;
-    if (!url) {
-      setError(`Camera "${cam.name}" does not have a stream URL configured.`);
-      setAnalysisState('FAILED');
-      return;
-    }
-
-    setSourceName(cam.name);
-    hlsRef.current?.destroy();
-    hlsRef.current = null;
-
-    if (cam.source_type === 'hls' || url.endsWith('.m3u8')) {
-      if (Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: false, lowLatencyMode: true });
-        hlsRef.current = hls;
-        hls.loadSource(url);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          video.play().catch(() => setPlayBlocked(true));
-        });
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (data.fatal) {
-            setError(`Camera stream error: ${data.details}`);
-            setAnalysisState('FAILED');
-          }
-        });
-      } else {
-        video.src = url;
-        video.play().catch(() => setPlayBlocked(true));
-      }
-    } else {
-      video.src = url;
-      video.play().catch(() => setPlayBlocked(true));
-    }
-  }, [resetSourceState, setResolvedVideoId, setSearchParams]);
-
-  // Media playback loader
-  const loadMediaUrl = (url: string, name: string) => {
-    const video = videoRef.current;
-    if (!video) return;
-    setError(null);
-    hlsRef.current?.destroy();
-    hlsRef.current = null;
-    setSourceName(name);
-
-    video.src = url;
-    video.load();
-    video.play().then(() => {
-      setPlayBlocked(false);
-    }).catch((err) => {
-      console.warn('Autoplay blocked by browser policy:', err);
-      setPlayBlocked(true);
+  const resumeSession = (session: AnalysisSession) => {
+    setRunState('ANALYZING');
+    analysisLogger.log({ ...logFor(session), category: 'PROCESSING', message: `Analysis resumed at ${videoRef.current?.currentTime.toFixed(1) ?? '?'}s` });
+    persistRunMetrics(session, { status: 'running' }).catch(e => {
+      analysisLogger.log({ ...logFor(session), category: 'ERROR', message: `Could not update run status: ${describeError(e)}` });
     });
+    startLoop();
   };
 
-  // Initial mount configuration
-  useEffect(() => {
-    db.settings.list().then(s => { settingsRef.current = s || {}; }).catch(() => {});
-    db.cameras.list().then(c => {
-      camerasRef.current = c || [];
-      setCameras(c || []);
-      const urlParams = new URLSearchParams(window.location.search);
-      const camId = urlParams.get('camera');
-      const vidId = urlParams.get('video');
-      
-      if (camId) {
-        loadCameraSource(camId);
-      } else if (vidId) {
-        loadVideoAsset(vidId);
-      } else if (c && c.length > 0) {
-        // Default to first camera if present
-        loadCameraSource(c[0].id);
-      }
-    }).catch(() => {});
-
-    const channel = supabase.channel('analyze-settings')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, () => {
-        db.settings.list().then(s => { settingsRef.current = s || {}; }).catch(() => {});
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cameras' }, () => {
-        db.cameras.list().then(c => {
-          camerasRef.current = c || [];
-          setCameras(c || []);
-        }).catch(() => {});
-      })
-      .subscribe();
-
-    const onBeforeUnload = () => {
-      finalizeAnalysisRun('stopped');
-      flushTrackedObjects();
-      flushIncidents();
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-
-    return () => { 
-      window.removeEventListener('beforeunload', onBeforeUnload);
-      supabase.removeChannel(channel); 
-      finalizeAnalysisRun('stopped');
-      flushTrackedObjects();
-      flushIncidents();
-    };
-  }, [finalizeAnalysisRun, flushIncidents, flushTrackedObjects, loadCameraSource, loadVideoAsset]);
-
-  // Synchronize route search param updates
-  useEffect(() => {
-    const vidParam = searchParams.get('video');
-    const camParam = searchParams.get('camera');
-    if (vidParam && vidParam !== videoIdRef.current) {
-      loadVideoAsset(vidParam);
-    } else if (camParam && camParam !== cameraIdRef.current && cameras.length > 0) {
-      loadCameraSource(camParam);
-    }
-  }, [searchParams, cameras, loadVideoAsset, loadCameraSource]);
-
-  // FPS, Performance & Live Metrics Timer
-  const updateFps = () => {
-    frameCountRef.current += 1;
-    pipelineMetricsRef.current.framesProcessed += 1;
-
-    const now = performance.now();
-    const elapsed = now - lastFpsTimeRef.current;
-    if (elapsed >= 1000) {
-      const currentFps = Math.round((frameCountRef.current * 1000) / elapsed);
-      fpsRef.current = currentFps;
-      setFps(currentFps);
-      setTotalProcessedFrames(pipelineMetricsRef.current.framesProcessed);
-      setMetrics({
-        generated: pipelineMetricsRef.current.detectionsGenerated,
-        created: pipelineMetricsRef.current.incidentsCreated,
-        suppressed: pipelineMetricsRef.current.incidentsSuppressed,
-        saved: pipelineMetricsRef.current.incidentsSaved
-      });
-      setTrackedCount(trackedObjectsRef.current.size);
-      setQueueDepth(incidentQueueRef.current.length);
-
-      // Periodically update active analysis run with live metrics
-      if (analysisRunIdRef.current) {
-        db.analysisRuns.update(analysisRunIdRef.current, {
-          metrics: {
-            fps: currentFps,
-            latency: inferenceTimeRef.current,
-            queue_depth: incidentQueueRef.current.length,
-            frames_processed: pipelineMetricsRef.current.framesProcessed,
-            detections_generated: pipelineMetricsRef.current.detectionsGenerated,
-            incidents_created: pipelineMetricsRef.current.incidentsCreated,
-            incidents_suppressed: pipelineMetricsRef.current.incidentsSuppressed,
-            incidents_saved: pipelineMetricsRef.current.incidentsSaved
-          } as any
-        }).catch(() => {});
-      }
-
-      flushIncidents();
-      frameCountRef.current = 0;
-      lastFpsTimeRef.current = now;
-    }
-
-    // Periodic flush of tracked objects every 3 seconds
-    if (now - lastTrackFlushTimeRef.current >= 3000) {
-      flushTrackedObjects();
-      lastTrackFlushTimeRef.current = now;
-    }
-  };
-
-  // Rule violation processor (Unified for live camera and uploaded video)
-  const handleViolations = (violations: any[]) => {
-    const now = Date.now();
-    const camId = cameraIdRef.current;
-    const currentVid = videoIdRef.current;
-
-    // DATA INTEGRITY:
-    // Never create a live incident without a camera_id.
-    // Never create an uploaded-video incident without its video_id.
-    // Do not silently substitute one source identifier for the other.
-    if (!camId && !currentVid) return;
-
-    violations.forEach(async (v: any) => {
-      pipelineMetricsRef.current.detectionsGenerated++;
-      const meta = (v.metadata || {}) as any;
-      const conf = meta.confidence ?? 1.0;
-      if (conf < 0.6) return;
-
-      const dedupeKey = `${camId ? `cam_${camId}` : `vid_${currentVid}`}_${v.type}_${meta.track_id}`;
-      const lastSeen = dedupeCache.current.get(dedupeKey);
-      if (lastSeen && now - lastSeen < 10000) {
-        pipelineMetricsRef.current.incidentsSuppressed++;
-        return;
-      }
-      dedupeCache.current.set(dedupeKey, now);
-      pipelineMetricsRef.current.incidentsCreated++;
-
-      analysisLogger.log({
-        video_id: currentVid || null,
-        camera_id: camId || null,
-        analysis_run_id: analysisRunIdRef.current || null,
-        category: 'INCIDENT',
-        message: `Incident created: ${String(v.type).replace(/_/g, ' ')} (Track #${meta.track_id ?? '?'}, conf ${(conf * 100).toFixed(0)}%)`
-      });
-
-      try {
-        if (meta.plate_crop_path && meta.ocr_status === 'pending') {
-          try {
-            const ocrRes = await requestOcr(meta.plate_crop_path);
-            meta.plate_text = ocrRes.text;
-            meta.plate_confidence = ocrRes.confidence;
-            meta.ocr_status = 'completed';
-          } catch {
-            meta.ocr_status = 'failed';
-          }
-        }
-
-        const snapshotBase64: string | null = v.snapshot_url || null;
-        const plateCropBase64: string | null = meta.plate_crop_path || null;
-        v.snapshot_url = undefined;
-        meta.plate_crop_path = undefined;
-
-        const cam = cameras.find(c => c.id === camId);
-        const ts = v.timestamp || new Date().toISOString();
-        const locationStr = camId 
-          ? (cam?.location || cam?.name || 'Live Camera Stream') 
-          : (sourceName ? `Uploaded Video: ${sourceName}` : 'Uploaded Video Asset');
-
-        incidentQueueRef.current.push({
-          type: v.type,
-          severity: v.severity || 'medium',
-          timestamp: ts,
-          metadata: {
-            ...meta,
-            track_id: meta.track_id,
-            confidence: conf
-          },
-          incident: {
-            incident_type: v.type,
-            violation_type: v.type,
-            severity: v.severity || 'medium',
-            status: 'Active',
-            confidence: conf,
-            track_id: meta.track_id ?? null,
-            timestamp: ts,
-            camera_id: camId || null,
-            video_id: camId ? null : currentVid,
-            analysis_run_id: analysisRunIdRef.current || null,
-            location: locationStr,
-            description: `${String(v.type).replace(/_/g, ' ')} detected (track #${meta.track_id ?? '?'}, confidence ${(conf * 100).toFixed(0)}%) at ${locationStr}`,
-            created_at: ts
-          },
-          evidence: [
-            snapshotBase64 && snapshotBase64.startsWith('data:image') ? { type: 'snapshot', base64: snapshotBase64 } : null,
-            plateCropBase64 && plateCropBase64.startsWith('data:image') ? { type: 'plate_crop', base64: plateCropBase64 } : null
-          ].filter(Boolean)
-        });
-        setQueueDepth(incidentQueueRef.current.length);
-      } catch (err) {
-        console.warn('Failed to queue incident:', err);
-      }
-    });
-  };
-
-  const violationHandlerRef = useRef(handleViolations);
-  violationHandlerRef.current = handleViolations;
-  const fpsHandlerRef = useRef(updateFps);
-  fpsHandlerRef.current = updateFps;
-
-  // Web Worker Initialization
-  useEffect(() => {
-    let worker: Worker;
-    try {
-      worker = new Worker(new URL('../pipeline/worker/index.ts', import.meta.url), { type: 'module' });
-    } catch (e: any) {
-      setModelStatus('error');
-      setError(`Failed to initialize detection worker: ${e?.message || e}`);
-      setAnalysisState('FAILED');
-      return;
-    }
-    workerRef.current = worker;
-
-    worker.onmessage = (e: MessageEvent<WorkerOutputMessage>) => {
-      const msg: any = e.data;
-      if (msg.type === 'ready') {
-        modelReadyRef.current = true;
-        setModelStatus('ready');
-        setProvider(msg.provider || '');
-        analysisLogger.log({
-          video_id: videoIdRef.current,
-          camera_id: cameraIdRef.current,
-          category: 'MODEL',
-          message: `AI YOLOv8 model loaded and ready (${(msg.provider || 'wasm').toUpperCase()})`
-        });
-      } else if (msg.type === 'result') {
-        isWorkerBusyRef.current = false;
-        const canvas = canvasRef.current;
-        const video = videoRef.current;
-        if (canvas && video) {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
-              canvas.width = video.clientWidth;
-              canvas.height = video.clientHeight;
-            }
-            drawBoundingBoxes(ctx, msg.tracks, canvas.width, canvas.height, video.videoWidth, video.videoHeight);
-          }
-        }
-        inferenceTimeRef.current = msg.inferenceTime;
-        setInferenceTime(msg.inferenceTime);
-
-        if (msg.tracks && msg.tracks.length > 0) {
-          analysisLogger.logDetection(
-            videoIdRef.current,
-            cameraIdRef.current,
-            analysisRunIdRef.current,
-            `Detection: ${msg.tracks.map((t: any) => `${t.className} (#${t.trackId})`).slice(0, 3).join(', ')}${msg.tracks.length > 3 ? ` +${msg.tracks.length - 3} more` : ''}`
-          );
-        }
-        
-        // Track objects with per-frame trajectory coordinates
-        const nowTime = (videoRef.current && !isNaN(videoRef.current.currentTime) && videoRef.current.currentTime > 0)
-          ? videoRef.current.currentTime 
-          : (performance.now() / 1000);
-
-        msg.tracks.forEach((t: any) => {
-          let rec = trackedObjectsRef.current.get(t.trackId);
-          if (!rec) {
-            rec = {
-              video_id: videoIdRef.current,
-              camera_id: cameraIdRef.current,
-              analysis_run_id: analysisRunIdRef.current,
-              track_id: t.trackId,
-              object_type: t.className,
-              confidence: t.prob,
-              first_seen_timestamp: nowTime,
-              last_seen_timestamp: nowTime,
-              frame_count: 0,
-              metadata: {
-                trajectory: []
-              }
-            };
-            trackedObjectsRef.current.set(t.trackId, rec);
-          }
-          rec.last_seen_timestamp = nowTime;
-          rec.frame_count++;
-          rec.confidence = Math.max(rec.confidence, t.prob);
-          if (analysisRunIdRef.current && !rec.analysis_run_id) {
-            rec.analysis_run_id = analysisRunIdRef.current;
-          }
-          if (cameraIdRef.current && !rec.camera_id) {
-            rec.camera_id = cameraIdRef.current;
-          }
-          
-          if (!rec.metadata) rec.metadata = { trajectory: [] };
-          const traj = rec.metadata.trajectory;
-          const lastPoint = traj[traj.length - 1];
-          if (!lastPoint || Math.abs(nowTime - lastPoint.time) >= 0.25) {
-            if (traj.length < 400) {
-              traj.push({
-                time: Math.round(nowTime * 100) / 100,
-                bbox: t.bbox,
-                speed: t.speed ? Math.round(t.speed) : undefined
-              });
-            }
-          }
-        });
-
-        fpsHandlerRef.current();
-        if (msg.violations && msg.violations.length > 0) {
-          violationHandlerRef.current(msg.violations);
-        }
-      } else if (msg.type === 'error') {
-        isWorkerBusyRef.current = false;
-        if (!modelReadyRef.current) setModelStatus('error');
-        setError(msg.error);
-        setAnalysisState('FAILED');
-        finalizeAnalysisRun('failed');
-      }
-    };
-
-    worker.onerror = (ev) => {
-      if (!modelReadyRef.current) setModelStatus('error');
-      setError(`Detection worker error: ${ev.message || (ev.error?.message) || 'unknown'}`);
-      setAnalysisState('FAILED');
-      finalizeAnalysisRun('failed');
-    };
-
-    worker.postMessage({ type: 'init', modelPath: '/models/yolo11n.onnx' });
-
-    return () => {
-      worker.terminate();
-      workerRef.current = null;
-      hlsRef.current?.destroy();
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-    };
-  }, [finalizeAnalysisRun]);
-
+  // -------------------------------------------------------------------------------------------
+  // Frame loop
+  // -------------------------------------------------------------------------------------------
   const scheduleNext = (video: HTMLVideoElement) => {
-    if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-      (video as any).requestVideoFrameCallback(() => processFrame());
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      video.requestVideoFrameCallback(() => processFrame());
     } else {
       requestAnimationFrame(() => processFrame());
     }
   };
 
-  const processFrame = async () => {
+  const processFrame = () => {
     const video = videoRef.current;
-    if (!video || video.paused || video.ended || !isProcessingRef.current) {
+    const session = sessionRef.current;
+    if (!video || !session || session.closed || runStateRef.current !== 'ANALYZING' || video.paused || video.ended) {
       loopActiveRef.current = false;
       return;
     }
 
     if (isWorkerBusyRef.current && performance.now() - busySinceRef.current > 5000) {
-      isWorkerBusyRef.current = false;
+      isWorkerBusyRef.current = false; // watchdog: a lost frame must not stall the loop
     }
 
-    if (!isWorkerBusyRef.current && modelReadyRef.current && video.readyState >= 2) {
-      try {
-        const bitmap = await createImageBitmap(video);
-        isWorkerBusyRef.current = true;
-        busySinceRef.current = performance.now();
+    const worker = workerRef.current;
+    if (worker && !isWorkerBusyRef.current && modelReadyRef.current && video.readyState >= 2) {
+      isWorkerBusyRef.current = true;
+      busySinceRef.current = performance.now();
+      const mediaTime = video.currentTime;
+      createImageBitmap(video).then(bitmap => {
+        if (session.closed || sessionRef.current !== session) {
+          bitmap.close();
+          isWorkerBusyRef.current = false;
+          return;
+        }
+        inflightSessionRef.current = session;
         const s = settingsRef.current;
-        workerRef.current?.postMessage({
+        worker.postMessage({
           type: 'inference',
           bitmap,
-          mediaTime: video.currentTime,
+          mediaTime,
           calibration: {
             referenceWidth: 2,
             referenceHeight: 2,
@@ -924,9 +437,15 @@ export default function Analyze() {
             plate_detection: s.feature_plate_detection !== false
           }
         }, [bitmap]);
-      } catch (err) {
-        console.warn('Frame bitmap extraction warning:', err);
-      }
+      }).catch(err => {
+        isWorkerBusyRef.current = false;
+        // Typically a CORS-tainted source: no frame can ever be read, so fail the run truthfully.
+        const msg = `Cannot read video frames from this source: ${describeError(err)}`;
+        setError(msg);
+        void closeSession(session, 'failed', msg);
+        setRunState('STOPPED');
+        videoRef.current?.pause();
+      });
     }
 
     scheduleNext(video);
@@ -938,160 +457,642 @@ export default function Analyze() {
     processFrame();
   };
 
-  const openFilePicker = () => fileInputRef.current?.click();
+  // -------------------------------------------------------------------------------------------
+  // Worker results
+  // -------------------------------------------------------------------------------------------
+  const handleViolations = (session: AnalysisSession, violations: ViolationCandidate[], mediaTime: number) => {
+    const now = Date.now();
+    const source = session.source;
+    const locationStr = source.kind === 'camera'
+      ? (source.location || source.name)
+      : `Uploaded Video: ${source.name}`;
 
-  // Canonical video upload flow using persistent UploadManagerService
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = '';
+    for (const v of violations) {
+      const meta = v.metadata as ViolationMetadata & { confidence?: number };
+      const conf = typeof meta.confidence === 'number' ? meta.confidence : 1.0;
+      if (conf < 0.6) continue;
 
+      const persistedTrackId = typeof meta.track_id === 'number' ? session.trackIdOffset + meta.track_id : null;
+      const dedupeKey = `${v.type}_${meta.track_id}`;
+      const lastSeen = session.dedupe.get(dedupeKey);
+      if (lastSeen && now - lastSeen < 10000) {
+        session.metrics.incidentsSuppressed++;
+        continue;
+      }
+      session.dedupe.set(dedupeKey, now);
+      session.metrics.incidentsCreated++;
+
+      const label = String(v.type).replace(/_/g, ' ');
+      analysisLogger.log({
+        ...logFor(session),
+        category: 'INCIDENT',
+        message: `Incident detected: ${label} (track #${persistedTrackId ?? '?'}, ${(conf * 100).toFixed(0)}% conf, t=${mediaTime.toFixed(1)}s)`
+      });
+
+      const snapshot = v.snapshot_url && v.snapshot_url.startsWith('data:image') ? v.snapshot_url : null;
+      const plateCrop = meta.plate_crop_path && meta.plate_crop_path.startsWith('data:image') ? meta.plate_crop_path : null;
+      const createdAt = v.timestamp || new Date().toISOString();
+
+      const queueIncident = (ocr: { plate_text?: string; plate_confidence?: number; ocr_status: string }) => {
+        if (session.closed) return;
+        session.incidentQueue.push({
+          row: {
+            incident_type: v.type,
+            violation_type: v.type,
+            severity: v.severity || 'medium',
+            status: 'Active',
+            confidence: conf,
+            track_id: persistedTrackId,
+            camera_id: source.kind === 'camera' ? source.id : null,
+            video_id: source.kind === 'video' ? source.id : null,
+            analysis_run_id: session.runId,
+            location: locationStr,
+            description: `${label} detected (track #${persistedTrackId ?? '?'}, confidence ${(conf * 100).toFixed(0)}%) at ${locationStr}`,
+            created_at: createdAt,
+            metadata: {
+              media_time: Math.round(mediaTime * 100) / 100,
+              speed: meta.speed,
+              speed_limit: meta.speed_limit,
+              evidence_score: meta.evidence_metadata?.score,
+              ...ocr
+            }
+          },
+          evidence: [
+            ...(snapshot ? [{ type: 'snapshot' as const, base64: snapshot }] : []),
+            ...(plateCrop ? [{ type: 'plate_crop' as const, base64: plateCrop }] : [])
+          ]
+        });
+      };
+
+      if (plateCrop && import.meta.env.VITE_OCR_ENDPOINT) {
+        requestOcr(plateCrop)
+          .then(res => queueIncident({ plate_text: res.text, plate_confidence: res.confidence, ocr_status: 'completed' }))
+          .catch(() => queueIncident({ ocr_status: 'failed' }));
+      } else {
+        queueIncident({ ocr_status: plateCrop ? 'not_configured' : 'no_plate' });
+      }
+    }
+  };
+
+  const tick = (session: AnalysisSession) => {
+    const now = performance.now();
+    session.fpsWindowFrames++;
+    const elapsed = now - session.fpsWindowStart;
+    if (elapsed >= 1000) {
+      session.metrics.fps = Math.round((session.fpsWindowFrames * 1000) / elapsed);
+      session.fpsWindowFrames = 0;
+      session.fpsWindowStart = now;
+      const m = session.metrics;
+      if (isCurrent(session)) {
+        setLive({
+          fps: m.fps,
+          latency: m.latency,
+          frames: m.framesProcessed,
+          detections: m.detectionsGenerated,
+          created: m.incidentsCreated,
+          suppressed: m.incidentsSuppressed,
+          saved: m.incidentsSaved,
+          tracked: session.tracked.size,
+          queue: session.incidentQueue.length
+        });
+      }
+      void flushIncidents(session);
+    }
+    if (now - session.lastTrackFlush >= 3000) {
+      session.lastTrackFlush = now;
+      void flushTracks(session, false);
+    }
+    if (now - session.lastMetricsPersist >= 5000) {
+      session.lastMetricsPersist = now;
+      persistRunMetrics(session).catch(e => {
+        if (session.metricsErrorLogged) return;
+        session.metricsErrorLogged = true;
+        analysisLogger.log({ ...logFor(session), category: 'ERROR', message: `Run metrics not persisted: ${describeError(e)}` });
+      });
+    }
+  };
+
+  const handleResult = (msg: ResultMessage) => {
+    isWorkerBusyRef.current = false;
+    const frameSession = inflightSessionRef.current;
+    inflightSessionRef.current = null;
+    const session = sessionRef.current;
+    if (!session || session.closed || frameSession !== session) return; // result for a previous source/run
+
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    if (canvas && video) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
+          canvas.width = video.clientWidth;
+          canvas.height = video.clientHeight;
+        }
+        drawBoundingBoxes(ctx, msg.tracks, canvas.width, canvas.height, video.videoWidth, video.videoHeight);
+      }
+    }
+
+    session.metrics.latency = msg.inferenceTime;
+    session.metrics.framesProcessed++;
+    session.metrics.detectionsGenerated += msg.tracks.length;
+
+    const t = msg.mediaTime;
+    for (const tr of msg.tracks) {
+      let rec = session.tracked.get(tr.trackId);
+      if (!rec) {
+        rec = {
+          track_id: session.trackIdOffset + tr.trackId,
+          object_type: tr.className,
+          confidence: tr.prob,
+          first_seen_timestamp: t,
+          last_seen_timestamp: t,
+          frame_count: 0,
+          trajectory: []
+        };
+        session.tracked.set(tr.trackId, rec);
+      }
+      rec.last_seen_timestamp = t;
+      rec.frame_count++;
+      rec.confidence = Math.max(rec.confidence, tr.prob);
+      const last = rec.trajectory[rec.trajectory.length - 1];
+      if ((!last || Math.abs(t - last.time) >= 0.25) && rec.trajectory.length < 400) {
+        rec.trajectory.push({
+          time: Math.round(t * 100) / 100,
+          bbox: [Math.round(tr.x - tr.w / 2), Math.round(tr.y - tr.h / 2), Math.round(tr.w), Math.round(tr.h)],
+          speed: typeof tr.speed === 'number' ? Math.round(tr.speed) : undefined
+        });
+      }
+    }
+
+    if (msg.tracks.length > 0) {
+      analysisLogger.logDetection(
+        logFor(session).video_id,
+        logFor(session).camera_id,
+        session.runId,
+        `Detected ${msg.tracks.length} object(s): ${msg.tracks.slice(0, 3).map(x => `${x.className} #${session.trackIdOffset + x.trackId}`).join(', ')}${msg.tracks.length > 3 ? ` +${msg.tracks.length - 3} more` : ''}`
+      );
+    }
+
+    if (msg.violations && msg.violations.length > 0) handleViolations(session, msg.violations, t);
+    tick(session);
+  };
+
+  const workerMessageRef = useRef<(msg: WorkerOutputMessage) => void>(() => {});
+  workerMessageRef.current = (msg: WorkerOutputMessage) => {
+    if (msg.type === 'ready') {
+      modelReadyRef.current = true;
+      providerRef.current = { provider: msg.provider, fallbackReason: msg.fallbackReason };
+      setModelStatus('ready');
+      setModelError(null);
+      setProvider(msg.provider);
+      const source = activeSourceRef.current;
+      if (source) {
+        analysisLogger.log({
+          ...logForSource(source),
+          category: 'MODEL',
+          message: `${MODEL_NAME} model ready (${msg.provider.toUpperCase()})${msg.fallbackReason ? ` — ${msg.fallbackReason}` : ''}`
+        });
+      }
+    } else if (msg.type === 'result') {
+      handleResult(msg);
+    } else if (msg.type === 'error') {
+      isWorkerBusyRef.current = false;
+      inflightSessionRef.current = null;
+      if (msg.phase === 'init') {
+        modelReadyRef.current = false;
+        setModelStatus('error');
+        setModelError(msg.error);
+        const source = activeSourceRef.current;
+        if (source) analysisLogger.log({ ...logForSource(source), category: 'ERROR', message: `Model failed to load: ${msg.error}` });
+      }
+      const session = sessionRef.current;
+      if (session) {
+        setError(`Inference failed: ${msg.error}`);
+        void closeSession(session, 'failed', msg.error);
+        setRunState('STOPPED');
+        videoRef.current?.pause();
+      }
+    }
+  };
+
+  // Detection worker: one per mounted page, model loaded once.
+  useEffect(() => {
+    modelReadyRef.current = false;
+    setModelStatus('loading');
+    let worker: Worker;
+    try {
+      worker = new Worker(new URL('../pipeline/worker/index.ts', import.meta.url), { type: 'module' });
+    } catch (e) {
+      setModelStatus('error');
+      setModelError(`Failed to start detection worker: ${describeError(e)}`);
+      return;
+    }
+    workerRef.current = worker;
+    worker.onmessage = (e: MessageEvent<WorkerOutputMessage>) => workerMessageRef.current(e.data);
+    worker.onerror = (ev) => {
+      const msg = ev.message || 'unknown worker error';
+      workerMessageRef.current({ type: 'error', phase: modelReadyRef.current ? 'inference' : 'init', error: `Detection worker error: ${msg}` });
+    };
+    worker.postMessage({ type: 'init', modelPath: MODEL_PATH });
+
+    return () => {
+      worker.terminate();
+      if (workerRef.current === worker) workerRef.current = null;
+      modelReadyRef.current = false;
+      isWorkerBusyRef.current = false;
+    };
+  }, []);
+
+  // Cameras + settings (dropdown and calibration)
+  useEffect(() => {
+    db.settings.list().then(s => { settingsRef.current = s || {}; }).catch(e => console.warn('Settings load failed:', e));
+    db.cameras.list().then((c: CameraRow[] | null) => setCameras(c || [])).catch(e => console.warn('Camera list load failed:', e));
+
+    const channel = supabase.channel('analyze-settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_settings' }, () => {
+        db.settings.list().then(s => { settingsRef.current = s || {}; }).catch(() => {});
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cameras' }, () => {
+        db.cameras.list().then((c: CameraRow[] | null) => setCameras(c || [])).catch(() => {});
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  // Best effort on tab close; normal navigation is handled by the selection effect cleanup.
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      const session = sessionRef.current;
+      if (session) void closeSession(session, 'stopped', 'page closed');
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, []);
+
+  // -------------------------------------------------------------------------------------------
+  // Media source lifecycle
+  // -------------------------------------------------------------------------------------------
+  const detachMedia = () => {
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    const video = videoRef.current;
+    if (video) {
+      video.pause();
+      if (video.getAttribute('src')) {
+        video.removeAttribute('src');
+        video.load(); // aborts the previous resource; its pending events are dropped
+      }
+    }
+    const canvas = canvasRef.current;
+    canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const attachMedia = (url: string, useHls: boolean) => {
+    const video = videoRef.current;
+    if (!video) return;
+    detachMedia();
+    setSourceState('SOURCE_LOADING');
+    if (useHls && Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: false, lowLatencyMode: true });
+      hlsRef.current = hls;
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal && hlsRef.current === hls) handleSourceFailure(`HLS stream error: ${data.details}`);
+      });
+      hls.loadSource(url);
+      hls.attachMedia(video);
+    } else {
+      video.src = url; // assigned exactly once per selected source
+    }
+  };
+
+  const handleSourceFailure = (message: string) => {
+    setSourceState('SOURCE_ERROR', message);
+    const source = activeSourceRef.current;
+    if (source) analysisLogger.log({ ...logForSource(source), category: 'ERROR', message: `Source unavailable: ${message}` });
+    const session = sessionRef.current;
+    if (session) {
+      void closeSession(session, 'failed', message);
+      setRunState('STOPPED');
+    }
+  };
+
+  const teardownSource = () => {
+    const session = sessionRef.current;
+    sessionRef.current = null;
+    loopActiveRef.current = false;
+    inflightSessionRef.current = null;
+    if (session && !session.closed) void closeSession(session, 'stopped', 'source changed');
+    uploadUnsubRef.current?.();
+    uploadUnsubRef.current = null;
+    activeSourceRef.current = null;
+    detachMedia();
+  };
+
+  const loadSavedSummary = async (source: SourceContext, seq: number) => {
+    const col = source.kind === 'video' ? 'video_id' : 'camera_id';
+    const count = async (table: string) => {
+      const { count: c, error: cErr } = await supabase.from(table).select('id', { count: 'exact', head: true }).eq(col, source.id);
+      if (cErr) throw cErr;
+      return (c as number | null) ?? 0;
+    };
+    try {
+      const [incidents, tracks, runs] = await Promise.all([count('incidents'), count('tracked_objects'), count('analysis_runs')]);
+      if (seq === loadSeqRef.current) setSaved({ incidents, tracks, runs });
+    } catch (e) {
+      console.warn('Saved analysis summary unavailable:', e);
+    }
+  };
+
+  const loadVideo = async (videoId: string, seq: number) => {
+    const { data, error: fetchErr } = await supabase.from('video_assets').select('*').eq('id', videoId).maybeSingle();
+    if (seq !== loadSeqRef.current) return;
+    if (fetchErr) return setSourceState('SOURCE_ERROR', `Could not load video asset: ${describeError(fetchErr)}`);
+    if (!data) return setSourceState('SOURCE_ERROR', `Video asset ${videoId} was not found.`);
+
+    const asset = data as VideoAsset;
+    const source: SourceContext = { kind: 'video', id: asset.id, name: videoDisplayName(asset), location: null };
+    activeSourceRef.current = source;
+    setSourceInfo(source);
+    void loadSavedSummary(source, seq);
+
+    const upload = uploadManager.getUpload(asset.id);
+    if (upload && upload.status !== 'uploaded') {
+      uploadUnsubRef.current = uploadManager.subscribe(asset.id, up => {
+        if (activeSourceRef.current !== source) return;
+        setUploadProgress(up.status === 'uploading' ? up.progress : null);
+        if (up.status === 'failed') setError(`Upload to storage failed: ${up.error ?? 'unknown error'}. Analysis results cannot be replayed until the video is uploaded again.`);
+      });
+    }
+
+    const storedUrl = getStoredVideoUrl(asset);
+    if (storedUrl) {
+      attachMedia(storedUrl, false); // canonical persistent copy
+    } else if (upload && upload.status !== 'failed') {
+      attachMedia(upload.localPreviewUrl, false); // immediate local playback while the upload runs
+    } else {
+      const status = getUploadStatus(asset);
+      const uploadError = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata) ? asset.metadata.upload_error : null;
+      setSourceState('SOURCE_ERROR', status === 'failed'
+        ? `The upload of this video failed${uploadError ? `: ${String(uploadError)}` : ''}. Upload the file again.`
+        : 'No stored copy of this video exists — its upload did not complete. Upload the file again.');
+    }
+  };
+
+  const loadCamera = async (cameraId: string, seq: number) => {
+    let cam: CameraRow;
+    try {
+      cam = await db.cameras.get(cameraId);
+    } catch (e) {
+      if (seq === loadSeqRef.current) setSourceState('SOURCE_ERROR', `Could not load camera: ${describeError(e)}`);
+      return;
+    }
+    if (seq !== loadSeqRef.current) return;
+    const source: SourceContext = { kind: 'camera', id: cam.id, name: cam.name, location: cam.location };
+    activeSourceRef.current = source;
+    setSourceInfo(source);
+    void loadSavedSummary(source, seq);
+
+    const playback = resolveCameraPlayback(cam);
+    if ('error' in playback) {
+      setSourceState('SOURCE_ERROR', playback.error);
+      return;
+    }
+    attachMedia(playback.url, playback.hls);
+  };
+
+  // Selected asset follows the URL. Changing ?video= / ?camera= tears down the previous source
+  // (closing its run) before the new one loads; sequence ids discard stale async results.
+  useEffect(() => {
+    setError(null);
+    setSaveError(null);
+    setSaved(null);
+    setUploadProgress(null);
+    setActiveRunId(null);
+    setLive(EMPTY_METRICS);
+    setRunState('NONE');
+    setSourceInfo(null);
+    if (!selectionKey) {
+      setSourceState('IDLE');
+      return;
+    }
+    const seq = ++loadSeqRef.current;
+    setSourceState('SOURCE_LOADING');
+    const [kind, id] = [selectionKey.slice(0, selectionKey.indexOf(':')), selectionKey.slice(selectionKey.indexOf(':') + 1)];
+    void (kind === 'video' ? loadVideo(id, seq) : loadCamera(id, seq));
+
+    return () => {
+      loadSeqRef.current++;
+      teardownSource();
+    };
+  }, [selectionKey]);
+
+  // -------------------------------------------------------------------------------------------
+  // User actions
+  // -------------------------------------------------------------------------------------------
+  const startInference = async () => {
+    const video = videoRef.current;
+    const source = activeSourceRef.current;
+    if (!video || !source || startingRef.current || sessionRef.current) return;
+    if (sourceStateRef.current !== 'SOURCE_READY' || !modelReadyRef.current) return;
+
+    startingRef.current = true;
+    setRunState('STARTING');
+    setError(null);
+    setSaveError(null);
+
+    try {
+      // 1. Playback from the explicit click (no passive autoplay).
+      try {
+        if (video.ended) video.currentTime = 0;
+        await video.play();
+      } catch (e) {
+        setError(`Playback could not start: ${describeError(e)}`);
+        setRunState('NONE');
+        return;
+      }
+
+      if (activeSourceRef.current !== source) {
+        setRunState('NONE');
+        return;
+      }
+
+      // 2. Exactly one analysis run for this session.
+      let runId: string;
+      let trackIdOffset: number;
+      try {
+        const col = source.kind === 'video' ? 'video_id' : 'camera_id';
+        const { data: maxRow, error: maxErr } = await supabase
+          .from('tracked_objects').select('track_id').eq(col, source.id)
+          .order('track_id', { ascending: false }).limit(1);
+        if (maxErr) throw maxErr;
+        trackIdOffset = Number((maxRow as Array<{ track_id: number }> | null)?.[0]?.track_id ?? 0);
+
+        const run = await db.analysisRuns.create({
+          camera_id: source.kind === 'camera' ? source.id : null,
+          video_id: source.kind === 'video' ? source.id : null,
+          status: 'running',
+          started_at: new Date().toISOString()
+        });
+        runId = run.id;
+      } catch (e) {
+        video.pause();
+        const msg = `Could not create analysis run: ${describeError(e)}`;
+        setError(msg);
+        analysisLogger.log({ ...logForSource(source), category: 'ERROR', message: msg });
+        setRunState('NONE');
+        return;
+      }
+
+      if (activeSourceRef.current !== source) {
+        // Source changed while the run was being created: close it immediately.
+        await db.analysisRuns.update(runId, { status: 'stopped', ended_at: new Date().toISOString() }).catch(() => {});
+        return;
+      }
+
+      const now = performance.now();
+      const session: AnalysisSession = {
+        source,
+        runId,
+        trackIdOffset,
+        tracked: new Map(),
+        incidentQueue: [],
+        dedupe: new Map(),
+        metrics: { framesProcessed: 0, detectionsGenerated: 0, incidentsCreated: 0, incidentsSuppressed: 0, incidentsSaved: 0, fps: 0, latency: 0 },
+        fpsWindowStart: now,
+        fpsWindowFrames: 0,
+        lastMetricsPersist: now,
+        lastTrackFlush: now,
+        metricsErrorLogged: false,
+        closed: false
+      };
+      sessionRef.current = session;
+      workerRef.current?.postMessage({ type: 'reset_tracker' });
+      setActiveRunId(runId);
+      setLive(EMPTY_METRICS);
+
+      const { provider: p, fallbackReason } = providerRef.current;
+      analysisLogger.log({ ...logFor(session), category: 'PROCESSING', message: `Analysis run #${runId.slice(0, 8)} started on ${source.name}` });
+      analysisLogger.log({ ...logFor(session), category: 'MODEL', message: `Inference backend: ${p.toUpperCase()}${fallbackReason ? ` (${fallbackReason})` : ''}` });
+      analysisLogger.log({ ...logFor(session), category: 'TRACKING', message: `Tracker initialized (track ids from #${trackIdOffset + 1})` });
+
+      if (source.kind === 'video') {
+        const { error: vaErr } = await supabase.from('video_assets').update({ processing_status: 'processing' }).eq('id', source.id);
+        if (vaErr) analysisLogger.log({ ...logFor(session), category: 'ERROR', message: `video_assets status update failed: ${describeError(vaErr)}` });
+      }
+
+      if (session.closed) return;
+      if (video.paused) {
+        // The user paused during startup: keep the run open in PAUSED.
+        void pauseSession(session);
+        return;
+      }
+      setRunState('ANALYZING');
+      startLoop();
+    } finally {
+      startingRef.current = false;
+    }
+  };
+
+  const pauseInference = () => videoRef.current?.pause(); // onPause transitions the session
+  const resumeInference = () => {
+    videoRef.current?.play().catch(e => setError(`Playback could not resume: ${describeError(e)}`)); // onPlay resumes
+  };
+  const stopInference = async () => {
+    const session = sessionRef.current;
+    if (!session) return;
+    setRunState('STOPPED');
+    videoRef.current?.pause();
+    await closeSession(session, 'stopped', 'stopped by user');
+  };
+
+  // Media element events
+  const onLoadedMetadata = () => {
+    const video = videoRef.current;
+    const source = activeSourceRef.current;
+    if (!video || !source || sourceStateRef.current !== 'SOURCE_LOADING') return;
+    setSourceState('SOURCE_READY');
+    const dims = video.videoWidth ? `${video.videoWidth}×${video.videoHeight}` : 'unknown size';
+    const dur = Number.isFinite(video.duration) ? `, ${video.duration.toFixed(1)}s` : ' (live)';
+    analysisLogger.log({ ...logForSource(source), category: 'SYSTEM', message: `Media ready: ${dims}${dur}` });
+  };
+
+  const onMediaError = () => {
+    const video = videoRef.current;
+    if (!video || !activeSourceRef.current) return;
+    if (!video.getAttribute('src') && !hlsRef.current) return; // detached element
+    handleSourceFailure(mediaErrorText(video.error));
+  };
+
+  const onPlay = () => {
+    const session = sessionRef.current;
+    if (session && runStateRef.current === 'PAUSED') resumeSession(session);
+  };
+
+  const onPause = () => {
+    const video = videoRef.current;
+    const session = sessionRef.current;
+    if (!video || video.ended || !session) return; // 'ended' is handled separately
+    if (runStateRef.current === 'ANALYZING') void pauseSession(session);
+  };
+
+  const onEnded = () => {
+    const session = sessionRef.current;
+    if (!session) return;
+    setRunState('COMPLETED');
+    void closeSession(session, 'completed', 'end of video');
+  };
+
+  // Upload: create the asset, then select it via the URL (the selection effect plays it locally)
+  const handleFile = async (file: File) => {
     if (!file.type.startsWith('video/') && !/\.(mp4|webm|mov|m4v)$/i.test(file.name)) {
       setError('Please select a valid video file (MP4, WebM, or MOV).');
       return;
     }
-
+    setIsCreatingUpload(true);
+    setError(null);
     try {
-      await resetSourceState();
-      setAnalysisState('STARTING');
-      setSourceMode('video');
-      setSelectedCameraId('');
-      cameraIdRef.current = null;
-      setError(null);
-      setSaveError(null);
-      setIsUploadingOnly(false);
-
-      // Start upload via persistent UploadManagerService
-      const { videoId: newVideoId, localPreviewUrl } = await uploadManager.startUpload(file);
-
-      setResolvedVideoId(newVideoId);
-      setSearchParams({ video: newVideoId }, { replace: true });
-
-      // Immediate local playback URL
-      if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
-      objectUrlRef.current = localPreviewUrl;
-      loadMediaUrl(localPreviewUrl, file.name);
-
-      // Subscribe to upload manager progress updates
-      if (uploadSubRef.current) uploadSubRef.current();
-      uploadSubRef.current = uploadManager.subscribe(newVideoId, (upload) => {
-        setUploadProgress(upload.progress);
-        if (upload.status === 'uploaded') {
-          setTimeout(() => setUploadProgress(0), 1000);
-          analysisLogger.log({
-            video_id: newVideoId,
-            category: 'SYSTEM',
-            message: `Video asset ready for analysis pipeline`
-          });
-        } else if (upload.status === 'failed') {
-          setError(upload.error || 'Upload failed');
-          setAnalysisState('FAILED');
-        }
-      });
-
-    } catch (err: any) {
-      console.error('Upload flow failed:', err);
-      setError(err?.message || 'Upload flow failed');
-      setAnalysisState('FAILED');
-      setUploadProgress(0);
-      isProcessingRef.current = false;
+      const { videoId } = await uploadManager.startUpload(file);
+      setSearchParams({ video: videoId });
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setIsCreatingUpload(false);
     }
   };
 
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) void handleFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
-    if (file) {
-      await handleFileUpload({ target: { files: [file], value: '' } } as any);
-    }
+    if (file) void handleFile(file);
   };
 
-  // Playback handlers
-  const handlePlay = async () => {
-    setPlayBlocked(false);
-    setError(prev => (prev && prev.startsWith('Autoplay') ? null : prev));
-    isProcessingRef.current = true;
-    setAnalysisState('ANALYZING');
-    startLoop();
+  const openFilePicker = () => fileInputRef.current?.click();
+  const selectCamera = (id: string) => setSearchParams({ camera: id });
 
-    // Start persistent session run for live camera or video
-    const camId = cameraIdRef.current;
-    const vidId = videoIdRef.current;
-    await startAnalysisSession(camId, vidId);
-
-    if (vidId) {
-      (supabase as any).from('video_assets').update({
-        processing_status: 'processing'
-      }).eq('id', vidId).then(() => {}).catch(() => {});
-    }
-
-    analysisLogger.log({
-      video_id: vidId || null,
-      camera_id: camId || null,
-      analysis_run_id: analysisRunIdRef.current,
-      category: 'PROCESSING',
-      message: `Detection and tracking pipeline started for ${sourceName || 'selected media'}`
-    });
-  };
-
-  const handlePause = async () => {
-    isProcessingRef.current = false;
-    setAnalysisState('PAUSED');
-    await flushIncidents();
-    await flushTrackedObjects();
-    await finalizeAnalysisRun('stopped');
-
-    analysisLogger.log({
-      video_id: videoIdRef.current || null,
-      camera_id: cameraIdRef.current || null,
-      analysis_run_id: analysisRunIdRef.current,
-      category: 'PROCESSING',
-      message: `Analysis paused`
-    });
-  };
-
-  const handleEnded = async () => {
-    isProcessingRef.current = false;
-    setAnalysisState('COMPLETED');
-    await flushIncidents();
-    await flushTrackedObjects();
-    await finalizeAnalysisRun('completed');
-    const vidId = videoIdRef.current;
-    if (vidId) {
-      await (supabase as any).from('video_assets').update({
-        processing_status: 'completed',
-        duration: videoRef.current?.duration || null
-      }).eq('id', vidId);
-    }
-
-    analysisLogger.log({
-      video_id: vidId || null,
-      camera_id: cameraIdRef.current || null,
-      analysis_run_id: analysisRunIdRef.current,
-      category: 'PROCESSING',
-      message: `Analysis run finished (${pipelineMetricsRef.current.detectionsGenerated} detections, ${pipelineMetricsRef.current.incidentsCreated} incidents)`
-    });
-  };
-
-  const handleVideoError = () => {
-    setError('Video source playback error or stream unavailable.');
-    setAnalysisState('FAILED');
-    isProcessingRef.current = false;
-    finalizeAnalysisRun('failed');
-  };
-
-  const hasMedia = !!sourceName;
+  // -------------------------------------------------------------------------------------------
+  // Render
+  // -------------------------------------------------------------------------------------------
+  const displayState: string = sourceState !== 'SOURCE_READY' ? sourceState : runState === 'NONE' ? 'SOURCE_READY' : runState;
+  const sourceMode = sourceInfo?.kind ?? (cameraParam ? 'camera' : 'video');
+  const showVideo = sourceState === 'SOURCE_READY' || (sourceState === 'SOURCE_LOADING' && !!sourceInfo);
+  const canStart = sourceState === 'SOURCE_READY' && modelStatus === 'ready' && (runState === 'NONE' || runState === 'STOPPED' || runState === 'COMPLETED');
 
   return (
     <div className="flex-1 p-6 md:p-8 overflow-y-auto">
-      {/* Header with Source Switching & Actions */}
       <header className="mb-6 flex flex-col md:flex-row md:justify-between md:items-end gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
               sourceMode === 'camera' ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-indigo-100 text-indigo-800 border border-indigo-200'
             }`}>
-              {sourceMode === 'camera' ? <Radio className="w-3 h-3 animate-pulse text-emerald-600" /> : <Film className="w-3 h-3 text-indigo-600" />}
+              {sourceMode === 'camera' ? <Radio className="w-3 h-3 text-emerald-600" /> : <Film className="w-3 h-3 text-indigo-600" />}
               {sourceMode === 'camera' ? 'Live Camera Source' : 'Uploaded Video Asset'}
             </span>
             {activeRunId && (
@@ -1102,46 +1103,39 @@ export default function Analyze() {
           </div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">AI Traffic Analysis</h1>
           <p className="text-slate-500 text-sm">
-            {sourceMode === 'camera' 
+            {sourceMode === 'camera'
               ? 'Analyzing live roadway camera stream with persistent run metrics and vehicle tracking.'
               : 'Analyzing uploaded video asset with persistent incident and trajectory logging.'}
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Source Selection Dropdown for Live Cameras */}
           {cameras.length > 0 && (
-            <div className="relative">
-              <select
-                id="analyze-camera-select"
-                aria-label="Select live camera for analysis"
-                className="bg-white border border-slate-300 text-slate-800 rounded-xl px-3 py-2.5 text-xs font-bold shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
-                value={selectedCameraId}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    loadCameraSource(e.target.value);
-                  }
-                }}
-              >
-                <option value="">-- Switch to Camera --</option>
-                {cameras.map(cam => (
-                  <option key={cam.id} value={cam.id} disabled={!cam.source_url && !cam.stream_url}>
-                    📹 {cam.name} {(!cam.source_url && !cam.stream_url) ? '(No URL)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              id="analyze-camera-select"
+              aria-label="Select live camera for analysis"
+              className="bg-white border border-slate-300 text-slate-800 rounded-xl px-3 py-2.5 text-xs font-bold shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+              value={sourceInfo?.kind === 'camera' ? sourceInfo.id : ''}
+              onChange={(e) => { if (e.target.value) selectCamera(e.target.value); }}
+            >
+              <option value="">-- Switch to Camera --</option>
+              {cameras.map(cam => (
+                <option key={cam.id} value={cam.id} disabled={!cam.source_url && !cam.stream_url}>
+                  📹 {cam.name} {(!cam.source_url && !cam.stream_url) ? '(No URL)' : ''}
+                </option>
+              ))}
+            </select>
           )}
 
           <button
             id="analyze-upload-video-btn"
             type="button"
             onClick={openFilePicker}
-            disabled={uploadProgress > 0}
+            disabled={isCreatingUpload}
             className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 active:scale-[0.98] text-white px-5 py-2.5 rounded-xl font-semibold shadow-md shadow-indigo-500/20 transition-all cursor-pointer text-xs"
           >
-            {uploadProgress > 0 ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-            {uploadProgress > 0 ? `Uploading (${uploadProgress}%)` : 'Upload MP4'}
+            {isCreatingUpload ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {isCreatingUpload ? 'Creating asset…' : 'Upload MP4'}
           </button>
         </div>
 
@@ -1151,71 +1145,66 @@ export default function Analyze() {
           type="file"
           accept="video/mp4,video/*"
           className="hidden"
-          onChange={handleFileUpload}
+          onChange={handleFileInput}
         />
       </header>
 
-      {/* Upload State & Pipeline Progress Bar */}
-      {uploadProgress > 0 && (
+      {uploadProgress !== null && (
         <div className="mb-6 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
           <div className="flex justify-between items-center text-xs font-semibold text-indigo-900 mb-2">
-            <span>Uploading to Persistent Storage...</span>
-            <span>{uploadProgress}%</span>
+            <span className="flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading to persistent storage — playing local preview meanwhile</span>
           </div>
           <div className="w-full bg-indigo-200/60 rounded-full h-2 overflow-hidden">
-            <div 
-              className="bg-indigo-600 h-full rounded-full transition-all duration-300"
-              style={{ width: `${uploadProgress}%` }}
-            />
+            <div className="bg-indigo-600 h-full rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
           </div>
         </div>
       )}
 
-      {/* Explicit Analysis & Pipeline Status Bar */}
       <div className="mb-6 grid grid-cols-2 lg:grid-cols-4 gap-3" id="analyze-status-bar">
         <StatusPill
           id="status-analysis-state"
           active={true}
           tone={
-            analysisState === 'FAILED' ? 'red' :
-            analysisState === 'ANALYZING' ? 'green' :
-            analysisState === 'STARTING' ? 'indigo' :
-            analysisState === 'COMPLETED' ? 'green' : 'amber'
+            displayState === 'SOURCE_ERROR' ? 'red' :
+            displayState === 'ANALYZING' || displayState === 'COMPLETED' ? 'green' :
+            displayState === 'SOURCE_LOADING' || displayState === 'STARTING' ? 'indigo' : 'amber'
           }
           icon={
-            analysisState === 'ANALYZING' ? <Activity className="w-4 h-4 animate-pulse" /> :
-            analysisState === 'STARTING' ? <Loader2 className="w-4 h-4 animate-spin" /> :
-            analysisState === 'FAILED' ? <AlertTriangle className="w-4 h-4" /> :
-            analysisState === 'PAUSED' ? <Pause className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />
+            displayState === 'ANALYZING' ? <Activity className="w-4 h-4 animate-pulse" /> :
+            displayState === 'SOURCE_LOADING' || displayState === 'STARTING' ? <Loader2 className="w-4 h-4 animate-spin" /> :
+            displayState === 'SOURCE_ERROR' ? <AlertTriangle className="w-4 h-4" /> :
+            displayState === 'PAUSED' ? <Pause className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />
           }
-          label={`State: ${analysisState}`}
+          label={`State: ${displayState}`}
         />
-
         <StatusPill
           id="status-model-ready"
-          active={modelStatus === 'ready'}
+          active={modelStatus !== 'loading'}
           tone={modelStatus === 'error' ? 'red' : 'green'}
-          icon={modelStatus === 'ready' ? <CheckCircle2 className="w-4 h-4" /> : <Cpu className="w-4 h-4" />}
-          label={modelStatus === 'ready' ? `YOLO Ready${provider ? ` · ${provider.toUpperCase()}` : ''}` : 'Model Loading…'}
+          icon={modelStatus === 'ready' ? <CheckCircle2 className="w-4 h-4" /> : modelStatus === 'error' ? <AlertTriangle className="w-4 h-4" /> : <Cpu className="w-4 h-4" />}
+          label={modelStatus === 'ready' ? `${MODEL_NAME} Ready · ${provider.toUpperCase()}` : modelStatus === 'error' ? 'Model failed to load' : 'Model Loading…'}
         />
-
         <StatusPill
           id="status-source-source"
-          active={hasMedia}
+          active={!!sourceInfo}
           tone="indigo"
           icon={sourceMode === 'camera' ? <CameraIcon className="w-4 h-4" /> : <Film className="w-4 h-4" />}
-          label={sourceName ? `${sourceMode === 'camera' ? 'Cam: ' : 'Vid: '}${sourceName}` : 'No Source Selected'}
+          label={sourceInfo ? `${sourceInfo.kind === 'camera' ? 'Cam' : 'Vid'}: ${sourceInfo.name}` : 'No Source Selected'}
         />
-
         <StatusPill
           id="status-incidents-created"
-          active={metrics.created > 0}
+          active={live.created > 0}
           tone="rose"
           icon={<ShieldAlert className="w-4 h-4" />}
-          label={`Incidents: ${metrics.created} created (${metrics.saved} saved)`}
+          label={`Incidents: ${live.created} created (${live.saved} saved)`}
         />
       </div>
 
+      {modelError && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm" id="analyze-model-error">
+          AI model unavailable: {modelError}
+        </div>
+      )}
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm flex items-center justify-between" id="analyze-error">
           <span>{error}</span>
@@ -1224,134 +1213,162 @@ export default function Analyze() {
       )}
       {saveError && (
         <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm" id="analyze-save-error">
-          Live detections running, but database insert warning: {saveError}
+          Detections are running, but persistence failed: {saveError}
         </div>
       )}
 
-      {/* Main Video Viewport & Real-Time Analysis Logs Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch min-h-[460px]">
-        {/* Main Video Viewport & Inference Canvas */}
-        <div
-          className="lg:col-span-8 relative bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center min-h-[440px] max-h-[68vh] border border-slate-800 shadow-xl"
-          onDragOver={e => e.preventDefault()}
-          onDrop={handleDrop}
-        >
-          <video
-            id="analyze-video"
-            ref={videoRef}
-            controls
-            playsInline
-            crossOrigin="anonymous"
-            muted
-            autoPlay
-            onPlay={handlePlay}
-            onPause={handlePause}
-            onEnded={handleEnded}
-            onError={handleVideoError}
-            className={`max-h-[68vh] w-auto z-10 ${hasMedia && !isUploadingOnly ? '' : 'hidden'}`}
-          />
-          <canvas
-            ref={canvasRef}
-            className="absolute pointer-events-none z-20"
-            style={{
-              width: videoRef.current?.clientWidth,
-              height: videoRef.current?.clientHeight,
-              left: videoRef.current?.offsetLeft,
-              top: videoRef.current?.offsetTop
-            }}
-          />
+        <div className="lg:col-span-8 flex flex-col gap-3">
+          <div
+            className="relative bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center min-h-[440px] max-h-[68vh] border border-slate-800 shadow-xl"
+            onDragOver={e => e.preventDefault()}
+            onDrop={handleDrop}
+          >
+            <video
+              id="analyze-video"
+              ref={videoRef}
+              controls
+              playsInline
+              crossOrigin="anonymous"
+              muted
+              preload="auto"
+              onLoadedMetadata={onLoadedMetadata}
+              onPlay={onPlay}
+              onPause={onPause}
+              onEnded={onEnded}
+              onError={onMediaError}
+              className={`max-h-[68vh] w-auto z-10 ${showVideo ? '' : 'hidden'}`}
+            />
+            <canvas
+              ref={canvasRef}
+              className="absolute pointer-events-none z-20"
+              style={{
+                width: videoRef.current?.clientWidth,
+                height: videoRef.current?.clientHeight,
+                left: videoRef.current?.offsetLeft,
+                top: videoRef.current?.offsetTop
+              }}
+            />
 
-          {/* Upload In Progress State Overlay */}
-          {isUploadingOnly && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/90 backdrop-blur-sm p-6">
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl">
-                <div className="w-12 h-12 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center mx-auto mb-4">
-                  <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+            {sourceState === 'SOURCE_LOADING' && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/70">
+                <div className="flex items-center gap-3 text-slate-200 text-sm">
+                  <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+                  Loading {sourceInfo?.name ?? 'source'}…
                 </div>
-                <h3 className="text-white font-semibold text-base mb-1">Video upload in progress</h3>
-                <p className="text-slate-400 text-xs mb-4">
-                  Playback will be available when upload completes. You can navigate freely — the upload continues in the background.
-                </p>
-                <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-2">
-                  <div 
-                    className="bg-indigo-500 h-full transition-all duration-300" 
-                    style={{ width: `${uploadProgress || 20}%` }}
-                  />
-                </div>
-                <span className="text-[11px] font-mono text-slate-400">{uploadProgress || 20}% completed</span>
               </div>
-            </div>
-          )}
+            )}
 
-          {playBlocked && hasMedia && !isUploadingOnly && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-md">
-              <div className="bg-slate-900/80 p-8 rounded-3xl border border-white/10 shadow-2xl flex flex-col items-center max-w-sm text-center">
-                <div className="bg-indigo-500/20 p-4 rounded-full mb-5">
-                  <Play className="w-10 h-10 text-indigo-400 pl-1" />
+            {sourceState === 'SOURCE_ERROR' && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-slate-950/90 p-6">
+                <div className="bg-slate-900 border border-rose-900/60 p-6 rounded-2xl max-w-md w-full text-center shadow-2xl">
+                  <AlertTriangle className="w-8 h-8 text-rose-400 mx-auto mb-3" />
+                  <h3 className="text-white font-semibold text-base mb-1">Source unavailable</h3>
+                  <p className="text-slate-300 text-xs">{sourceError}</p>
                 </div>
-                <h2 className="text-2xl font-bold text-white mb-2">Resume Live Analysis</h2>
-                <p className="text-slate-300 mb-6 text-sm">
-                  Stream ready. Click below to begin live AI inference.
-                </p>
-                <button
-                  onClick={() => {
-                    videoRef.current?.play().then(() => setPlayBlocked(false));
-                  }}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition-all cursor-pointer"
-                >
-                  Start Inference
-                </button>
               </div>
-            </div>
-          )}
+            )}
 
-          {!hasMedia && !isUploadingOnly && (
-            <div className="absolute inset-4 flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-slate-700 p-8 text-center text-slate-300">
-              <div className="p-4 rounded-full bg-indigo-500/15">
-                <Film className="w-10 h-10 text-indigo-400" />
-              </div>
-              <div>
-                <div className="text-lg font-semibold text-white">Select a Camera Stream or Upload an MP4</div>
-                <div className="text-sm text-slate-400 mt-1">Real-time object detection and violation tracking will run automatically.</div>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={openFilePicker}
-                  className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium cursor-pointer shadow-md"
-                >
-                  <Upload className="w-4 h-4" /> Upload MP4
-                </button>
-                {cameras.length > 0 && (
+            {sourceState === 'IDLE' && (
+              <div className="absolute inset-4 flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-slate-700 p-8 text-center text-slate-300">
+                <div className="p-4 rounded-full bg-indigo-500/15">
+                  <Film className="w-10 h-10 text-indigo-400" />
+                </div>
+                <div>
+                  <div className="text-lg font-semibold text-white">Select a Camera Stream or Upload an MP4</div>
+                  <div className="text-sm text-slate-400 mt-1">Then press Start Inference to run detection, tracking and violation analysis.</div>
+                </div>
+                <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={() => loadCameraSource(cameras[0].id)}
-                    className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg font-medium cursor-pointer border border-slate-700"
+                    onClick={openFilePicker}
+                    className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium cursor-pointer shadow-md"
                   >
-                    <CameraIcon className="w-4 h-4 text-emerald-400" /> Use Camera ({cameras[0].name})
+                    <Upload className="w-4 h-4" /> Upload MP4
                   </button>
-                )}
+                  {cameras.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => selectCamera(cameras[0].id)}
+                      className="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg font-medium cursor-pointer border border-slate-700"
+                    >
+                      <CameraIcon className="w-4 h-4 text-emerald-400" /> Use Camera ({cameras[0].name})
+                    </button>
+                  )}
+                </div>
               </div>
+            )}
+          </div>
+
+          {/* Inference controls: every transition is driven by an explicit click */}
+          {sourceInfo && (
+            <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm" id="analyze-controls">
+              {(runState === 'NONE' || runState === 'STOPPED' || runState === 'COMPLETED') && (
+                <button
+                  id="analyze-start-btn"
+                  type="button"
+                  onClick={() => { void startInference(); }}
+                  disabled={!canStart}
+                  className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-lg font-semibold text-sm cursor-pointer shadow-sm"
+                >
+                  {runState === 'NONE' ? <Play className="w-4 h-4" /> : <RotateCcw className="w-4 h-4" />}
+                  {runState === 'NONE' ? 'Start Inference' : 'Start New Run'}
+                </button>
+              )}
+              {runState === 'STARTING' && (
+                <span className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-700">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Starting analysis run…
+                </span>
+              )}
+              {runState === 'ANALYZING' && (
+                <button type="button" onClick={pauseInference} className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-5 py-2.5 rounded-lg font-semibold text-sm cursor-pointer shadow-sm">
+                  <Pause className="w-4 h-4" /> Pause
+                </button>
+              )}
+              {runState === 'PAUSED' && (
+                <button type="button" onClick={resumeInference} className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-semibold text-sm cursor-pointer shadow-sm">
+                  <Play className="w-4 h-4" /> Resume
+                </button>
+              )}
+              {(runState === 'ANALYZING' || runState === 'PAUSED') && (
+                <button type="button" onClick={() => { void stopInference(); }} className="inline-flex items-center gap-2 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 px-5 py-2.5 rounded-lg font-semibold text-sm cursor-pointer">
+                  <Square className="w-4 h-4" /> Stop
+                </button>
+              )}
+              <span className="text-xs text-slate-500 ml-auto">
+                {sourceState === 'SOURCE_LOADING' ? 'Waiting for media…'
+                  : sourceState === 'SOURCE_ERROR' ? 'Source unavailable'
+                  : modelStatus === 'loading' ? 'Waiting for AI model…'
+                  : modelStatus === 'error' ? 'AI model unavailable'
+                  : runState === 'COMPLETED' ? 'Run completed and saved'
+                  : runState === 'STOPPED' ? 'Run stopped and saved'
+                  : runState === 'NONE' ? 'Ready — playback alone does not run analysis'
+                  : null}
+              </span>
             </div>
           )}
         </div>
 
-        {/* Live Real-Time Analysis Logs Panel */}
         <div className="lg:col-span-4 flex flex-col h-full min-h-[440px] max-h-[68vh]">
-          <AnalysisLogPanel 
-            videoId={videoId} 
-            cameraId={selectedCameraId}
+          <AnalysisLogPanel
+            videoId={sourceInfo?.kind === 'video' ? sourceInfo.id : null}
+            cameraId={sourceInfo?.kind === 'camera' ? sourceInfo.id : null}
             className="h-full flex-1"
           />
         </div>
       </div>
 
-      {hasMedia && (
+      {sourceInfo && (
         <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-          <div>Active Source: <span className="font-semibold text-slate-800">{sourceName}</span></div>
-          {videoId && (
-            <Link 
-              to={`/app/video-review?video=${videoId}`}
+          <div>
+            Active Source: <span className="font-semibold text-slate-800">{sourceInfo.name}</span>
+            {saved && (
+              <span className="ml-2">· Saved: {saved.runs} run(s), {saved.tracks} tracked object(s), {saved.incidents} incident(s)</span>
+            )}
+          </div>
+          {sourceInfo.kind === 'video' && (
+            <Link
+              to={`/app/video-review?video=${sourceInfo.id}`}
               className="text-indigo-600 hover:text-indigo-800 font-semibold hover:underline flex items-center gap-1"
             >
               Open persistent analysis in Video Review →
@@ -1360,38 +1377,21 @@ export default function Analyze() {
         </div>
       )}
 
-      {/* Real Live Metrics Cards */}
       <div className="mt-6 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <MetricCard 
-          label="FPS / Latency" 
-          value={<>{fps} <span className="text-sm text-slate-400 font-normal">| {Math.round(inferenceTime)}ms</span></>} 
-          color="text-emerald-600" 
+        <MetricCard
+          label="FPS / Latency"
+          value={<>{live.fps} <span className="text-sm text-slate-400 font-normal">| {Math.round(live.latency)}ms</span></>}
+          color="text-emerald-600"
         />
-        <MetricCard 
-          label="Detections" 
-          value={metrics.generated.toLocaleString()} 
-          color="text-purple-600" 
+        <MetricCard label="Detections" value={live.detections.toLocaleString()} color="text-purple-600" />
+        <MetricCard
+          label="Incidents"
+          value={<>{live.created} <span className="text-sm text-slate-400 font-normal">({live.saved} saved, {live.suppressed} suppressed)</span></>}
+          color="text-rose-600"
         />
-        <MetricCard 
-          label="Incidents" 
-          value={<>{metrics.created} <span className="text-sm text-slate-400 font-normal">({metrics.saved} saved)</span></>} 
-          color="text-rose-600" 
-        />
-        <MetricCard 
-          label="Tracked Vehicles" 
-          value={trackedCount.toLocaleString()} 
-          color="text-cyan-600" 
-        />
-        <MetricCard 
-          label="Frames Processed" 
-          value={totalProcessedFrames.toLocaleString()} 
-          color="text-blue-600" 
-        />
-        <MetricCard 
-          label="Queue Depth" 
-          value={queueDepth.toLocaleString()} 
-          color="text-slate-700" 
-        />
+        <MetricCard label="Tracked Objects" value={live.tracked.toLocaleString()} color="text-cyan-600" />
+        <MetricCard label="Frames Processed" value={live.frames.toLocaleString()} color="text-blue-600" />
+        <MetricCard label="Queue Depth" value={live.queue.toLocaleString()} color="text-slate-700" />
       </div>
     </div>
   );

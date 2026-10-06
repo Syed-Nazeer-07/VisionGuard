@@ -60,6 +60,7 @@ import type { ViolationCandidate } from '../violations/types';
 
 export interface ResultMessage {
   type: 'result';
+  mediaTime: number; // media time of the frame these results belong to
   boxes: BoundingBox[];
   tracks: TrackedObject[];
   inferenceTime: number;
@@ -69,12 +70,14 @@ export interface ResultMessage {
 
 export interface ErrorMessage {
   type: 'error';
+  phase: 'init' | 'inference';
   error: string;
 }
 
 export interface ReadyMessage {
   type: 'ready';
   provider: string;
+  fallbackReason: string | null; // why WebGPU was not used, when provider is 'wasm'
 }
 
 export type WorkerOutputMessage = ResultMessage | ErrorMessage | ReadyMessage;

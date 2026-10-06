@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
 import { Terminal, ArrowDown, Activity } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import { type AnalysisLogEntry, type LogCategory, analysisLogger } from '../../services/analysisLogger'
+import { type AnalysisLogEntry, type LogCategory, analysisLogger, mergeLogs } from '../../services/analysisLogger'
 
 interface AnalysisLogPanelProps {
   videoId?: string | null
@@ -26,33 +26,34 @@ export function AnalysisLogPanel({ videoId, cameraId, className }: AnalysisLogPa
   const [logs, setLogs] = useState<AnalysisLogEntry[]>([])
   const [activeCategory, setActiveCategory] = useState<string>('ALL')
   const [autoScroll, setAutoScroll] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [persistError, setPersistError] = useState<string | null>(null)
   const logContainerRef = useRef<HTMLDivElement>(null)
 
-  // 1. Load historical logs and subscribe to live logs
+  useEffect(() => analysisLogger.onPersistenceChange(setPersistError), [])
+
+  // 1. Load persisted history for exactly this source and subscribe to its live events.
+  //    Live entries arriving while history loads are merged (by id), never overwritten.
   useEffect(() => {
-    let isMounted = true
+    let cancelled = false
+    setLogs(analysisLogger.getSessionLogs(videoId, cameraId))
+    setLoadError(null)
 
-    // Fetch historical logs from database/cache
-    analysisLogger.fetchHistoricalLogs(videoId, cameraId).then(historical => {
-      if (isMounted) {
-        setLogs(historical)
-      }
+    const unsubscribe = analysisLogger.subscribe(videoId, cameraId, (entry) => {
+      if (!cancelled) setLogs(prev => mergeLogs(prev, [entry]))
     })
 
-    // Listen for live events as they happen in real-time
-    const unsubscribe = analysisLogger.subscribe(videoId, cameraId, (newEntry) => {
-      if (!isMounted) return
-      setLogs(prev => {
-        // Prevent duplicate logs if already present by ID or exact content
-        if (newEntry.id && prev.some(l => l.id === newEntry.id)) {
-          return prev
-        }
-        return [...prev, newEntry]
+    analysisLogger.fetchLogs(videoId, cameraId)
+      .then(history => { if (!cancelled) setLogs(prev => mergeLogs(prev, history)) })
+      .catch((e: unknown) => {
+        if (cancelled) return
+        const message = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : String(e)
+        console.error('Failed to load analysis logs:', e)
+        setLoadError(message)
       })
-    })
 
     return () => {
-      isMounted = false
+      cancelled = true
       unsubscribe()
     }
   }, [videoId, cameraId])
@@ -98,10 +99,12 @@ export function AnalysisLogPanel({ videoId, cameraId, className }: AnalysisLogPa
           <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">
             Analysis Logs
           </span>
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            LIVE
-          </span>
+          {(videoId || cameraId) && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              LIVE
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -140,6 +143,13 @@ export function AnalysisLogPanel({ videoId, cameraId, className }: AnalysisLogPa
         </div>
       </div>
 
+      {(loadError || persistError) && (
+        <div className="px-3 py-2 bg-rose-950/80 border-b border-rose-800 text-rose-200 text-[11px] font-sans space-y-0.5 shrink-0">
+          {loadError && <div>Could not load persisted logs: {loadError}</div>}
+          {persistError && <div>Logs are not being saved to the database: {persistError}</div>}
+        </div>
+      )}
+
       {/* Log Entries Container */}
       <div 
         ref={logContainerRef}
@@ -149,15 +159,15 @@ export function AnalysisLogPanel({ videoId, cameraId, className }: AnalysisLogPa
         {filteredLogs.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
             <Activity className="w-8 h-8 mb-2 opacity-30 text-slate-400 animate-pulse" />
-            <p className="text-[12px] font-sans">Awaiting pipeline events...</p>
+            <p className="text-[12px] font-sans">{videoId || cameraId ? 'No events recorded for this source yet.' : 'Select a video or camera to see its events.'}</p>
             <span className="text-[11px] text-slate-600 font-sans mt-1">Logs will record uploads, model inference, tracks and incident checkpoints.</span>
           </div>
         ) : (
-          filteredLogs.map((entry, idx) => {
+          filteredLogs.map((entry) => {
             const colors = CATEGORY_COLORS[entry.category] || CATEGORY_COLORS.SYSTEM
             return (
               <div 
-                key={entry.id || `${entry.timestamp}-${idx}`}
+                key={entry.id}
                 className="flex items-start gap-2 py-1 px-1.5 rounded hover:bg-slate-900/60 transition-colors group leading-relaxed"
               >
                 {/* Timestamp */}
@@ -194,7 +204,7 @@ export function AnalysisLogPanel({ videoId, cameraId, className }: AnalysisLogPa
       {/* Log Footer Info */}
       <div className="px-3 py-1.5 bg-slate-900/80 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400 font-sans shrink-0">
         <span>{filteredLogs.length} events logged</span>
-        <span className="text-slate-500">Persistent Session Audit</span>
+        <span className="text-slate-500">{persistError ? 'Not persisted' : 'Persisted to analysis_logs'}</span>
       </div>
     </div>
   )

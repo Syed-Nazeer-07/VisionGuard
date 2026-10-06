@@ -1,13 +1,17 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
+import type { VideoAsset } from '../services/db'
+import { fallbackVideoNumbers, getUploadStatus, videoDisplayName } from '../lib/videoAssets'
 import { Film, Search, Play, Trash2, Clock, UploadCloud, RefreshCw } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '../lib/utils'
 
 export function VideoLibrary() {
-  const [videos, setVideos] = useState<any[]>([])
+  const [videos, setVideos] = useState<VideoAsset[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const navigate = useNavigate()
 
@@ -17,31 +21,40 @@ export function VideoLibrary() {
 
   const fetchVideos = async () => {
     setLoading(true)
-    const { data, error } = await (supabase as any)
+    const { data, error } = await supabase
       .from('video_assets')
       .select('*')
       .order('uploaded_at', { ascending: false })
-    
-    if (data && !error) setVideos(data)
+    if (error) {
+      setLoadError(error.message || 'Failed to load videos')
+    } else {
+      setLoadError(null)
+      setVideos((data || []) as VideoAsset[])
+    }
     setLoading(false)
   }
 
-  const handleDelete = async (id: string, storagePath: string) => {
+  const handleDelete = async (video: VideoAsset, name: string) => {
     try {
-      if (typeof window !== 'undefined' && window.confirm && !window.confirm('Are you sure you want to delete this video?')) {
+      if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Delete ${name} and its analysis data?`)) {
         return
       }
     } catch {
       // In iframe sandbox where window.confirm may be restricted, continue deletion
     }
 
-    try {
-      await supabase.storage.from('videos').remove([storagePath])
-      await (supabase as any).from('video_assets').delete().eq('id', id)
-      setVideos(prev => prev.filter(v => v.id !== id))
-    } catch (err) {
-      console.error('Failed to delete video', err)
+    setActionError(null)
+    // Delete the row first: RLS decides whether this user may delete it. Storage is cleaned up after.
+    const { data, error } = await supabase.from('video_assets').delete().eq('id', video.id).select('id')
+    if (error || !data || data.length === 0) {
+      setActionError(`Could not delete ${name}: ${error?.message || 'not permitted (only the uploader or a Supervisor/Admin can delete)'}`)
+      return
     }
+    if (video.storage_path) {
+      const { error: storageErr } = await supabase.storage.from('videos').remove([video.storage_path])
+      if (storageErr) console.warn('Video file removal failed:', storageErr)
+    }
+    setVideos(prev => prev.filter(v => v.id !== video.id))
   }
 
   const formatSize = (bytes: number) => {
@@ -52,7 +65,14 @@ export function VideoLibrary() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  const filtered = videos.filter(v => v.filename.toLowerCase().includes(searchQuery.toLowerCase()))
+  // Fallback numbering is only used until the display_number column exists.
+  const fallbackNumbers = useMemo(() => fallbackVideoNumbers(videos), [videos])
+  const query = searchQuery.trim().toLowerCase()
+  const filtered = videos.filter(v =>
+    !query ||
+    videoDisplayName(v, fallbackNumbers).toLowerCase().includes(query) ||
+    v.filename.toLowerCase().includes(query) ||
+    v.id.startsWith(query))
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
@@ -81,6 +101,12 @@ export function VideoLibrary() {
         </div>
       </div>
 
+      {(loadError || actionError) && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {loadError ? `Failed to load videos: ${loadError}` : actionError}
+        </div>
+      )}
+
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden min-h-[500px]">
         {loading ? (
           <div className="flex items-center justify-center h-[500px]">
@@ -104,7 +130,7 @@ export function VideoLibrary() {
           <table className="w-full text-left border-collapse whitespace-nowrap">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
-                <th className="px-5 py-3.5 text-[12px] font-bold text-slate-500 uppercase tracking-wider">File Name</th>
+                <th className="px-5 py-3.5 text-[12px] font-bold text-slate-500 uppercase tracking-wider">Video</th>
                 <th className="px-5 py-3.5 text-[12px] font-bold text-slate-500 uppercase tracking-wider">Size</th>
                 <th className="px-5 py-3.5 text-[12px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
                 <th className="px-5 py-3.5 text-[12px] font-bold text-slate-500 uppercase tracking-wider">Uploaded</th>
@@ -112,63 +138,73 @@ export function VideoLibrary() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((video) => (
-                <tr key={video.id} className="hover:bg-slate-50/80 transition-colors group">
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                        <Film className="w-5 h-5 text-indigo-500" />
+              {filtered.map((video) => {
+                const name = videoDisplayName(video, fallbackNumbers)
+                const uploadStatus = getUploadStatus(video)
+                const statusLabel = uploadStatus === 'uploading' ? 'Uploading'
+                  : uploadStatus === 'failed' ? 'Upload failed'
+                  : video.processing_status === 'pending' ? 'Ready'
+                  : video.processing_status
+                return (
+                  <tr key={video.id} className="hover:bg-slate-50/80 transition-colors group">
+                    <td className="px-5 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                          <Film className="w-5 h-5 text-indigo-500" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-900 text-[14px] truncate">{name}</p>
+                          <p className="text-[12px] text-slate-500 mt-0.5 truncate max-w-[280px]" title={video.filename}>
+                            {video.filename} · <span className="font-mono">{video.id.split('-')[0]}</span>
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900 text-[14px] truncate">{video.filename}</p>
-                        <p className="text-[12px] text-slate-500 font-mono mt-0.5">{video.id.split('-')[0]}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4 text-[13px] text-slate-600 font-medium">
-                    {formatSize(video.file_size)}
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className={cn(
-                      "inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase tracking-wider",
-                      video.processing_status === 'completed' ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                      video.processing_status === 'processing' ? "bg-amber-50 text-amber-700 border border-amber-200" :
-                      video.processing_status === 'failed' ? "bg-rose-50 text-rose-700 border border-rose-200" :
-                      video.processing_status === 'uploaded' ? "bg-blue-50 text-blue-700 border border-blue-200" :
-                      "bg-slate-100 text-slate-700 border border-slate-200"
-                    )}>
-                      {video.processing_status === 'pending' ? 'Ready' : (video.processing_status || 'Ready')}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-[13px] text-slate-500 flex items-center gap-1.5 h-full">
-                    <Clock className="w-3.5 h-3.5" />
-                    {formatDistanceToNow(new Date(video.uploaded_at))} ago
-                  </td>
-                  <td className="px-5 py-4 text-right space-x-2">
-                    <button 
-                      onClick={() => navigate(`/app/video-review?video=${video.id}`)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-[13px] font-bold hover:bg-indigo-100 transition-colors shadow-sm cursor-pointer"
-                      title="Replay persistent detections in Video Review"
-                    >
-                      <Film className="w-3.5 h-3.5 text-indigo-600" /> Replay Review
-                    </button>
-                    <button 
-                      onClick={() => navigate(`/app/analyze?video=${video.id}`)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-[13px] font-bold hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
-                      title="Run Live Analysis on this video"
-                    >
-                      <Play className="w-3.5 h-3.5 text-emerald-600" /> Analyze
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(video.id, video.storage_path)}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                      title="Delete Video"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-5 py-4 text-[13px] text-slate-600 font-medium">
+                      {formatSize(video.file_size ?? 0)}
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className={cn(
+                        "inline-flex px-2 py-1 rounded text-[11px] font-bold uppercase tracking-wider",
+                        uploadStatus === 'failed' || video.processing_status === 'failed' ? "bg-rose-50 text-rose-700 border border-rose-200" :
+                        uploadStatus === 'uploading' ? "bg-blue-50 text-blue-700 border border-blue-200" :
+                        video.processing_status === 'completed' ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                        video.processing_status === 'processing' ? "bg-amber-50 text-amber-700 border border-amber-200" :
+                        "bg-slate-100 text-slate-700 border border-slate-200"
+                      )}>
+                        {statusLabel}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4 text-[13px] text-slate-500 flex items-center gap-1.5 h-full">
+                      <Clock className="w-3.5 h-3.5" />
+                      {video.uploaded_at ? `${formatDistanceToNow(new Date(video.uploaded_at))} ago` : '—'}
+                    </td>
+                    <td className="px-5 py-4 text-right space-x-2">
+                      <button
+                        onClick={() => navigate(`/app/video-review?video=${encodeURIComponent(video.id)}`)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg text-[13px] font-bold hover:bg-indigo-100 transition-colors shadow-sm cursor-pointer"
+                        title={`Replay persisted detections for ${name}`}
+                      >
+                        <Film className="w-3.5 h-3.5 text-indigo-600" /> Replay Review
+                      </button>
+                      <button
+                        onClick={() => navigate(`/app/analyze?video=${encodeURIComponent(video.id)}`)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 text-slate-700 rounded-lg text-[13px] font-bold hover:bg-slate-50 transition-colors shadow-sm cursor-pointer"
+                        title={`Analyze ${name}`}
+                      >
+                        <Play className="w-3.5 h-3.5 text-emerald-600" /> Analyze
+                      </button>
+                      <button
+                        onClick={() => handleDelete(video, name)}
+                        className="inline-flex items-center justify-center w-8 h-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                        title={`Delete ${name}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}

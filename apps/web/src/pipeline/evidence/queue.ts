@@ -125,7 +125,7 @@ class EvidenceQueueSystem {
         const year = date.getUTCFullYear();
         const month = String(date.getUTCMonth() + 1).padStart(2, '0');
         
-        const pathPrefix = `evidence/${year}/${month}/${job.camera_id ?? 'upload'}/${job.incident_id}`;
+        const pathPrefix = `evidence/${year}/${month}/${job.camera_id ?? `video-${job.video_id ?? 'unknown'}`}/${job.incident_id}`;
         const fileName = `${job.type}_${Date.now()}`;
         const filePath = `${pathPrefix}/${fileName}.${ext}`;
         const thumbPath = `${pathPrefix}/${fileName}_thumb.jpg`;
@@ -153,29 +153,41 @@ class EvidenceQueueSystem {
         const evidenceId = record.data.id;
 
         // Upload with Retry Strategy
-        let uploaded = false;
-        let lastError = null;
+        // supabase-js reports Storage failures via `error`, not by throwing.
+        let attempts = 0;
+        let lastError: string | null = null;
         for (let attempt = 1; attempt <= 3; attempt++) {
+          attempts = attempt;
           try {
-            await supabase.storage.from('evidence').upload(filePath, imgBlob, { upsert: true });
+            const { error: imgErr } = await supabase.storage.from('evidence').upload(filePath, imgBlob, { upsert: true, contentType: imgBlob.type });
+            if (imgErr) throw imgErr;
             if (thumbBlob) {
-              await supabase.storage.from('evidence').upload(thumbPath, thumbBlob, { upsert: true });
+              const { error: thumbErr } = await supabase.storage.from('evidence').upload(thumbPath, thumbBlob, { upsert: true, contentType: 'image/jpeg' });
+              if (thumbErr) throw thumbErr;
             }
-            uploaded = true;
+            lastError = null;
             break;
           } catch (e) {
-            lastError = e;
-            await new Promise(r => setTimeout(r, attempt * 1000));
+            lastError = e instanceof Error ? e.message : String(e);
+            if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 1000));
           }
         }
 
-        if (uploaded) {
-          // Update status to uploaded
+        if (lastError) {
           await (supabase as any).from('evidence').update({
-            status: 'uploaded',
-            upload_attempts: 3, // Or track actual
+            status: 'failed',
+            upload_attempts: attempts,
+            last_error: lastError,
             updated_at: new Date().toISOString()
           }).eq('id', evidenceId);
+          throw new Error(`Storage upload failed after ${attempts} attempt(s): ${lastError}`);
+        } else {
+          const { error: statusErr } = await (supabase as any).from('evidence').update({
+            status: 'uploaded',
+            upload_attempts: attempts,
+            updated_at: new Date().toISOString()
+          }).eq('id', evidenceId);
+          if (statusErr) console.warn('Evidence status update failed:', statusErr);
           
           this.metrics.uploaded++;
           db.auditLogs.create({ action: 'EVIDENCE_UPLOADED', metadata: { evidenceId, incidentId: job.incident_id } }).catch(()=>{});
@@ -185,10 +197,8 @@ class EvidenceQueueSystem {
             camera_id: job.camera_id || null,
             analysis_run_id: job.analysis_run_id || null,
             category: 'EVIDENCE',
-            message: `Evidence snapshot uploaded (${job.type})`
+            message: `Evidence uploaded for incident #${job.incident_id.slice(0, 8)} (${job.type})`
           });
-        } else {
-          throw new Error('Max retries exceeded: ' + String(lastError));
         }
 
       } catch (err: any) {

@@ -3,6 +3,17 @@
 
 DO $$
 BEGIN
+    -- Remove duplicate (video_id, track_id) rows so the unique constraint below can be applied.
+    -- Keeps the most recent row per pair; rows without a video_id are untouched.
+    DELETE FROM public.tracked_objects t
+    WHERE t.video_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM public.tracked_objects d
+        WHERE d.video_id = t.video_id
+          AND d.track_id = t.track_id
+          AND (COALESCE(d.created_at, 'epoch'::timestamptz), d.id) > (COALESCE(t.created_at, 'epoch'::timestamptz), t.id)
+      );
+
     -- 1. Add camera_id and analysis_run_id to tracked_objects
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='tracked_objects' AND column_name='camera_id') THEN
         ALTER TABLE public.tracked_objects ADD COLUMN camera_id UUID REFERENCES public.cameras(id) ON DELETE CASCADE;

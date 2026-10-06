@@ -12,3 +12,6 @@ build/
 .env.production
 *.pt
 *.onnx
+
+# ONNX Runtime artifacts are served from node_modules by vite.config.ts; never commit copies
+apps/web/public/ort-wasm-*

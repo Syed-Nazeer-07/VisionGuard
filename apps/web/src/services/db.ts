@@ -9,6 +9,8 @@ export type TrafficStat = Database['public']['Tables']['traffic_stats']['Row']
 export type Alert = Database['public']['Tables']['alerts']['Row']
 export type ActivityLog = Database['public']['Tables']['activity_logs']['Row']
 export type SceneProfile = Database['public']['Tables']['scene_profiles']['Row']
+export type VideoAsset = Database['public']['Tables']['video_assets']['Row']
+export type AnalysisLogRow = Database['public']['Tables']['analysis_logs']['Row']
 
 export const db = {
   cameras: {
@@ -234,9 +236,20 @@ export const db = {
       return data
     },
     async update(id: string, updates: Database['public']['Tables']['analysis_runs']['Update']) {
-      const { data, error } = await (supabase as any).from('analysis_runs').update(updates).eq('id', id).select().single()
+      const { data, error } = await (supabase as any).from('analysis_runs').update(updates).eq('id', id).select('id')
       if (error) throw error
-      return data
+      // RLS silently filters UPDATEs the caller may not perform; surface that instead of reporting success.
+      if (!data || data.length === 0) throw new Error(`analysis_runs ${id} was not updated (row missing or not permitted by RLS)`)
+      return data[0]
+    },
+    async listForSource(source: { videoId?: string | null; cameraId?: string | null }, limit = 20): Promise<AnalysisRun[]> {
+      let query = (supabase as any).from('analysis_runs').select('*')
+      if (source.videoId) query = query.eq('video_id', source.videoId)
+      else if (source.cameraId) query = query.eq('camera_id', source.cameraId)
+      else return []
+      const { data, error } = await query.order('started_at', { ascending: false }).limit(limit)
+      if (error) throw error
+      return data || []
     }
   },
   auditLogs: {
@@ -281,15 +294,20 @@ export const db = {
     }
   },
   analysisLogs: {
-    async list(filters: { videoId?: string; cameraId?: string }) {
+    async list(filters: { videoId?: string | null; cameraId?: string | null }, limit = 500): Promise<AnalysisLogRow[]> {
       let query = (supabase as any).from('analysis_logs').select('*')
       if (filters.videoId) query = query.eq('video_id', filters.videoId)
-      if (filters.cameraId) query = query.eq('camera_id', filters.cameraId)
-      const { data, error } = await query.order('timestamp', { ascending: true })
+      else if (filters.cameraId) query = query.eq('camera_id', filters.cameraId)
+      else return []
+      // Newest N, returned chronologically.
+      const { data, error } = await query
+        .order('timestamp', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(limit)
       if (error) throw error
-      return data
+      return ((data || []) as AnalysisLogRow[]).reverse()
     },
-    async create(log: any) {
+    async create(log: Database['public']['Tables']['analysis_logs']['Insert']): Promise<AnalysisLogRow> {
       const { data, error } = await (supabase as any).from('analysis_logs').insert(log).select().single()
       if (error) throw error
       return data

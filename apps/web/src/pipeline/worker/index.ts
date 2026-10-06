@@ -14,7 +14,49 @@ import { generatePlateCrop } from '../plate/crop';
 import { evaluateEvidence } from '../evidence/scoring';
 import { addEvidenceCandidate, getBestEvidence, removeEvidence } from '../evidence/collector';
 import type { WorkerMessage, Point } from '../types';
-env.wasm.wasmPaths = '/';
+// Dev: the visionguard-onnxruntime-wasm Vite plugin serves the runtime artifacts at the site root,
+// straight from the installed onnxruntime-web package. Production: Vite emits the matching
+// ort-wasm-simd-threaded.jsep.wasm as a hashed asset and ORT resolves it via import.meta.url.
+if (import.meta.env.DEV) {
+  env.wasm.wasmPaths = '/';
+}
+
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error && typeof error === 'object' && 'message' in error) return String((error as { message: unknown }).message);
+  return String(error);
+}
+
+// Prefer WebGPU when the browser exposes an adapter; otherwise (or on failure) use the WASM backend.
+async function createSession(modelPath: string): Promise<{ session: InferenceSession; provider: 'webgpu' | 'wasm'; fallbackReason: string | null }> {
+  let fallbackReason: string | null = null;
+  const gpu = (self.navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown | null> } }).gpu;
+
+  if (!gpu) {
+    fallbackReason = 'WebGPU is not available in this browser';
+  } else {
+    try {
+      const adapter = await gpu.requestAdapter();
+      if (!adapter) {
+        fallbackReason = 'No WebGPU adapter available';
+      } else {
+        const webgpuSession = await InferenceSession.create(modelPath, { executionProviders: ['webgpu'] });
+        return { session: webgpuSession, provider: 'webgpu', fallbackReason: null };
+      }
+    } catch (err) {
+      fallbackReason = `WebGPU initialization failed: ${errorMessage(err)}`;
+      console.warn('[ONNX] WebGPU failed, falling back to WASM:', err);
+    }
+  }
+
+  try {
+    const wasmSession = await InferenceSession.create(modelPath, { executionProviders: ['wasm'] });
+    return { session: wasmSession, provider: 'wasm', fallbackReason };
+  } catch (err) {
+    throw new Error(`ONNX Runtime could not initialize any backend (${fallbackReason ?? 'WebGPU skipped'}; WASM: ${errorMessage(err)})`);
+  }
+}
 let session: InferenceSession | null = null;
 let provider: string = '';
 const tracker = new ByteTracker();
@@ -80,24 +122,17 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
   if (msg.type === 'init') {
     try {
-      try {
-        session = await InferenceSession.create(msg.modelPath, { executionProviders: ['webgpu'] });
-        provider = 'webgpu';
-        console.log('ONNX Runtime initialized with WebGPU');
-      } catch (err) {
-        console.warn('WebGPU failed, falling back to WASM', err);
-        session = await InferenceSession.create(msg.modelPath, { executionProviders: ['wasm'] });
-        provider = 'wasm';
-        console.log('ONNX Runtime initialized with WASM');
-      }
-      self.postMessage({ type: 'ready', provider });
+      const result = await createSession(msg.modelPath);
+      session = result.session;
+      provider = result.provider;
+      self.postMessage({ type: 'ready', provider, fallbackReason: result.fallbackReason });
     } catch (error) {
       console.error('Failed to load ONNX model:', error);
-      self.postMessage({ type: 'error', error: error instanceof Error ? error.message : (error && typeof error === 'object' && 'message' in error ? String((error as any).message) : String(error)) });
+      self.postMessage({ type: 'error', phase: 'init', error: errorMessage(error) });
     }
   } else if (msg.type === 'inference') {
     if (!session) {
-      self.postMessage({ type: 'error', error: 'Model not initialized' });
+      self.postMessage({ type: 'error', phase: 'inference', error: 'Model not initialized' });
       return;
     }
 
@@ -285,6 +320,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       self.postMessage({
         type: 'result',
+        mediaTime,
         boxes,
         tracks,
         inferenceTime,
@@ -294,7 +330,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       
     } catch (error) {
       console.error('Inference error:', error);
-      self.postMessage({ type: 'error', error: String(error) });
+      self.postMessage({ type: 'error', phase: 'inference', error: errorMessage(error) });
     }
   } else if (msg.type === 'reset_tracker') {
     tracker.reset();
