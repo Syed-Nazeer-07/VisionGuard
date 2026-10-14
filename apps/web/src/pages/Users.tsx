@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { 
   Search, Plus, Users as UsersIcon, Shield,
-  CheckCircle2, Edit2, Ban, ShieldCheck, Mail, Activity, Eye, 
-  Loader2, X, AlertTriangle, Check, RotateCcw, ShieldAlert,
-  UserCheck, UserX, Clock, Building
+  Edit2, Ban, ShieldCheck, Activity, Eye, 
+  Loader2, X, AlertTriangle, Check, RotateCcw
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { supabase } from '../lib/supabase'
@@ -11,7 +10,7 @@ import { useAuthStore } from '../store/auth'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { format as formatDate, formatDistanceToNow } from 'date-fns'
+import { format as formatDate } from 'date-fns'
 
 const userSchema = z.object({
   name: z.string().min(2, 'Name is required (at least 2 characters)'),
@@ -22,7 +21,7 @@ const userSchema = z.object({
 type UserForm = z.infer<typeof userSchema>
 
 export function Users() {
-  const { role: currentUserRole, user: currentUser } = useAuthStore()
+  const { user: currentUser } = useAuthStore()
   const [users, setUsers] = useState<any[]>([])
   const [auditLogs, setAuditLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(true)

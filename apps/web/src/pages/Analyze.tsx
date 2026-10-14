@@ -3,13 +3,12 @@ import { useSearchParams, Link } from 'react-router-dom';
 import {
   Upload, CheckCircle2, Loader2,
   AlertTriangle, Film, Play, Pause, Square, RotateCcw, X,
-  Maximize2, Minimize2, Clock, Eye, Gauge
+  Maximize2, Minimize2, Clock, Eye
 } from 'lucide-react';
 import Hls from 'hls.js';
 import { cn } from '../lib/utils';
 import { drawBoundingBoxes } from '../pipeline/rendering/overlay';
 import { computeVideoTransform } from '../pipeline/rendering/transform';
-import { computeHomography } from '../pipeline/tracker/homography';
 import {
   isOverlayAgeFresh,
   computeResultAge,
@@ -50,6 +49,7 @@ import {
   PROCESSING_SPEEDS
 } from '../services/backendAnalysis';
 import type { TrackedObject } from '../pipeline/types';
+import { TrackStateStore } from '../pipeline/tracker/trackStore';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { liveAnalysisSession } from '../services/liveAnalysisSession';
 import { analysisLogger } from '../services/analysisLogger';
@@ -248,7 +248,7 @@ export default function Analyze() {
   const [playbackTime, setPlaybackTime] = useState<{ current: number; duration: number }>({ current: 0, duration: 0 });
   const [playbackState, setPlaybackState] = useState<VideoPlaybackState>('idle');
   const [playbackError, setPlaybackError] = useState<string | null>(null);
-  const playbackTimeoutRef = useRef<NodeJS.Timeout | number | null>(null);
+  const playbackTimeoutRef = useRef<any>(null);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   // File chosen but its video_assets row not created yet (shown immediately on selection)
   const [pendingFile, setPendingFile] = useState<{ name: string; size: number; error: string | null } | null>(null);
@@ -276,109 +276,12 @@ export default function Analyze() {
   const lastProgressTimeRef = useRef<number>(Date.now());
   const consecutiveErrorsRef = useRef<number>(0);
 
-  // Speed estimation ground-plane calibration state
+  // Speed estimation ground-plane calibration state (loaded from surveyed video assets if available)
   const [calibration, setCalibration] = useState<CalibrationData | null>(null);
-  const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
-  const [calibrationPoints, setCalibrationPoints] = useState<Array<{ x: number; y: number }>>([]);
-  const [refWidth, setRefWidth] = useState<number>(3.5);
-  const [refHeight, setRefHeight] = useState<number>(15.0);
-  const [calSpeedLimit, setCalSpeedLimit] = useState<number>(60);
-  const [calTolerance, setCalTolerance] = useState<number>(10);
-
-  const saveCalibration = async (newCal: CalibrationData) => {
-    // Validate homography before saving: ensure points are non-collinear and non-degenerate
-    if (!newCal.calibrationArea || newCal.calibrationArea.length !== 4) {
-      setError('Speed calibration requires exactly 4 road-plane ground points.');
-      return;
-    }
-    const dst = [
-      { x: 0, y: 0 },
-      { x: newCal.referenceWidth, y: 0 },
-      { x: newCal.referenceWidth, y: newCal.referenceHeight },
-      { x: 0, y: newCal.referenceHeight }
-    ];
-    const H = computeHomography(newCal.calibrationArea, dst);
-    if (!H || H.length !== 9) {
-      setError('Invalid road calibration: selected points are collinear or degenerate. Please place 4 distinct corners outlining the road plane.');
-      return;
-    }
-
-    setCalibration(newCal);
-    setIsCalibrating(false);
-
-    // Notify worker immediately if running in browser mode
-    workerRef.current?.postMessage({
-      type: 'update_calibration',
-      calibration: newCal
-    });
-
-    if (sourceInfo && !sourceInfo.isLocalOnly && sourceInfo.id) {
-      try {
-        const { data: assetData } = await supabase
-          .from('video_assets')
-          .select('metadata')
-          .eq('id', sourceInfo.id)
-          .maybeSingle();
-
-        const existingMeta = (assetData?.metadata && typeof assetData.metadata === 'object' && !Array.isArray(assetData.metadata))
-          ? assetData.metadata
-          : {};
-
-        await supabase
-          .from('video_assets')
-          .update({
-            metadata: {
-              ...existingMeta,
-              calibration: newCal
-            }
-          })
-          .eq('id', sourceInfo.id);
-
-        analysisLogger.log({
-          category: 'SYSTEM',
-          message: `Saved ground-plane speed calibration (${newCal.referenceWidth}m width × ${newCal.referenceHeight}m length) for video "${sourceInfo.name}".`
-        });
-      } catch (err) {
-        console.warn('Failed to persist calibration to video_assets:', err);
-      }
-    }
-  };
-
-  const clearCalibration = async () => {
-    setCalibration(null);
-    setCalibrationPoints([]);
-    setIsCalibrating(false);
-
-    if (sourceInfo && !sourceInfo.isLocalOnly && sourceInfo.id) {
-      try {
-        const { data: assetData } = await supabase
-          .from('video_assets')
-          .select('metadata')
-          .eq('id', sourceInfo.id)
-          .maybeSingle();
-
-        if (assetData?.metadata && typeof assetData.metadata === 'object' && !Array.isArray(assetData.metadata)) {
-          const updatedMeta = { ...assetData.metadata };
-          delete updatedMeta.calibration;
-          await supabase
-            .from('video_assets')
-            .update({ metadata: updatedMeta })
-            .eq('id', sourceInfo.id);
-        }
-
-        analysisLogger.log({
-          category: 'SYSTEM',
-          message: `Cleared speed calibration for video "${sourceInfo.name}".`
-        });
-      } catch (err) {
-        console.warn('Failed to clear calibration from video_assets:', err);
-      }
-    }
-  };
 
   // Helper to change engine explicitly (persisted to storage)
   const selectAnalysisEngine = (engine: 'backend' | 'browser') => {
-    if (isSubmittingJobRef.current || backendJob?.status === 'running' || backendJob?.status === 'queued' || runStateRef.current === 'ANALYZING' || runStateRef.current === 'STARTING') {
+    if (isSubmittingJobRef.current || backendJob?.status === 'running' || backendJob?.status === 'queued') {
       return;
     }
     analysisEngineRef.current = engine;
@@ -393,11 +296,8 @@ export default function Analyze() {
       if (!workerRef.current) {
         spawnWorker();
       }
-      if (runStateRef.current === 'ANALYZING' && videoRef.current && !videoRef.current.paused) {
-        startLoop();
-      }
     } else {
-      stopLoop();
+      loopActiveRef.current = false;
       workerRef.current?.postMessage({ type: 'reset_tracker' });
       void checkBackendHealth();
       if (backendFramesRef.current && videoRef.current && !videoRef.current.paused) {
@@ -441,7 +341,7 @@ export default function Analyze() {
 
   const [isSubmittingJob, setIsSubmittingJob] = useState<boolean>(false);
   const isSubmittingJobRef = useRef<boolean>(false);
-  const backendPollIntervalRef = useRef<NodeJS.Timeout | number | null>(null);
+  const backendPollIntervalRef = useRef<any>(null);
 
   // Surface evidence persistence errors in the UI banner
   useEffect(() => {
@@ -665,11 +565,15 @@ export default function Analyze() {
   // -------------------------------------------------------------------------------------------
   // Frame loop and source-frame synchronization
   // -------------------------------------------------------------------------------------------
+  const trackStoreRef = useRef<TrackStateStore>(new TrackStateStore());
+  const lastOverlayMediaTimeRef = useRef<number>(0);
+
   const clearOverlayCanvas = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
     if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
     latestOverlayStatsRef.current = { rendered: 0, stale: 0 };
+    trackStoreRef.current.clear();
   };
 
   // During playback, compare against the frame actually reported as presented by
@@ -697,57 +601,70 @@ export default function Analyze() {
     if (canvas.style.left !== `${video.offsetLeft}px`) canvas.style.left = `${video.offsetLeft}px`;
     if (canvas.style.top !== `${video.offsetTop}px`) canvas.style.top = `${video.offsetTop}px`;
 
-    // 1. If in Backend mode and we have precomputed backendFrames:
-    const activeEngine = analysisEngineRef.current;
-    if (activeEngine === 'backend' && backendFramesRef.current) {
-      const mediaTime = getDisplayedMediaTime(video);
-      const matchedFrame = findFrameAtMediaTime(backendFramesRef.current, mediaTime, 0.15);
-      if (!matchedFrame || !video.videoWidth || !video.videoHeight) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        latestOverlayStatsRef.current = { rendered: 0, stale: 0 };
-        return;
-      }
-      try {
-        const isCover = document.fullscreenElement === containerRef.current;
-        const mappedTracks: TrackedObject[] = matchedFrame.tracks.map(t => ({
-          trackId: t.track_id,
-          x: t.x,
-          y: t.y,
-          w: t.w,
-          h: t.h,
-          dx: t.dx,
-          dy: t.dy,
-          dw: 0,
-          dh: 0,
-          prob: t.prob,
-          classId: t.class_id,
-          className: t.class_name,
-          state: (t.state as 'Confirmed' | 'Tentative' | 'Lost' | 'Removed') || 'Confirmed',
-          frameCount: 1,
-          timeSinceUpdate: 0,
-          hitCount: 2,
-          speed: (t.class_name === 'person' || t.class_name === 'pedestrian') ? undefined : (t.speed ?? undefined),
-          velocity: (t.class_name === 'person' || t.class_name === 'pedestrian') ? undefined : (t.velocity ?? undefined),
-          isOverspeed: (t.class_name === 'person' || t.class_name === 'pedestrian') ? false : (t.is_overspeed ?? false),
-          observationType: t.observation_type,
-          predictionConfidence: t.prediction_confidence ?? undefined
-        }));
-        const srcW = matchedFrame.source_width || video.videoWidth;
-        const srcH = matchedFrame.source_height || video.videoHeight;
-        const stats = drawBoundingBoxes(
-          ctx, mappedTracks, canvas.width, canvas.height,
-          srcW, srcH, isCover, 0
-        );
-        latestOverlayStatsRef.current = stats;
-      } catch (e) {
-        console.error('Failed to render backend overlay:', e);
-      }
+    if (!video.videoWidth || !video.videoHeight) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      latestOverlayStatsRef.current = { rendered: 0, stale: 0 };
       return;
     }
 
-    // 2. Otherwise (Browser WebGPU mode):
-    const latest = latestResultRef.current;
-    if (!latest || !video.videoWidth || !video.videoHeight) {
+    const currentMediaTime = getDisplayedMediaTime(video);
+    const currentGeneration = coordRef.current.generation;
+    lastOverlayMediaTimeRef.current = currentMediaTime;
+
+    const activeEngine = analysisEngineRef.current;
+    const isPaused = video.paused;
+    const tracksToRender: TrackedObject[] = [];
+
+    // 1. If in Backend mode and we have precomputed backendFrames:
+    if (activeEngine === 'backend') {
+      if (backendFramesRef.current && backendFramesRef.current.length > 0) {
+        // Match frame within a 0.40s window and smoothly project with bounded velocity
+        const matchedFrame = findFrameAtMediaTime(backendFramesRef.current, currentMediaTime, 0.40);
+        if (matchedFrame && matchedFrame.tracks) {
+          const dt = isPaused ? 0 : Math.max(-0.2, Math.min(0.40, currentMediaTime - matchedFrame.media_time));
+          for (const t of matchedFrame.tracks) {
+            const maxDelta = 100;
+            const deltaX = (t.dx && dt !== 0) ? Math.max(-maxDelta, Math.min(maxDelta, t.dx * dt)) : 0;
+            const deltaY = (t.dy && dt !== 0) ? Math.max(-maxDelta, Math.min(maxDelta, t.dy * dt)) : 0;
+            const mapped: TrackedObject = {
+              trackId: t.track_id,
+              x: t.x + deltaX,
+              y: t.y + deltaY,
+              w: t.w,
+              h: t.h,
+              dx: t.dx,
+              dy: t.dy,
+              dw: 0,
+              dh: 0,
+              prob: t.prob,
+              classId: t.class_id,
+              className: t.class_name,
+              state: (t.state as 'Confirmed' | 'Tentative' | 'Lost' | 'Removed') || 'Confirmed',
+              frameCount: 1,
+              timeSinceUpdate: 0,
+              hitCount: 2,
+              speed: (t.class_name === 'person' || t.class_name === 'pedestrian') ? undefined : (t.speed ?? undefined),
+              velocity: (t.class_name === 'person' || t.class_name === 'pedestrian') ? undefined : (t.velocity ?? undefined),
+              isOverspeed: (t.class_name === 'person' || t.class_name === 'pedestrian') ? false : (t.is_overspeed ?? false),
+              observationType: dt !== 0 ? 'predicted' : t.observation_type,
+              predictionConfidence: t.prediction_confidence ?? undefined
+            };
+            tracksToRender.push(mapped);
+          }
+        }
+      }
+    } else {
+      // 2. Otherwise (Browser WebGPU / WASM mode):
+      // Decouple inference scheduling from presentation rate via TrackStateStore
+      trackStoreRef.current.setGeneration(currentGeneration);
+      const activeTracks = trackStoreRef.current.getTracksToRender(currentMediaTime, isPaused);
+      for (const t of activeTracks) {
+        tracksToRender.push(t);
+      }
+    }
+
+    // 4. Render to canvas
+    if (tracksToRender.length === 0) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       latestOverlayStatsRef.current = { rendered: 0, stale: 0 };
       if (isOverlayDelayedRef.current) {
@@ -759,22 +676,17 @@ export default function Analyze() {
 
     try {
       const isCover = document.fullscreenElement === containerRef.current;
-      const timeDelta = computeResultAge(getDisplayedMediaTime(video), latest.mediaTime);
-      const srcW = latest.sourceWidth || video.videoWidth;
-      const srcH = latest.sourceHeight || video.videoHeight;
+      const srcW = video.videoWidth;
+      const srcH = video.videoHeight;
       const stats = drawBoundingBoxes(
-        ctx, latest.tracks, canvas.width, canvas.height,
-        srcW, srcH, isCover, timeDelta
+        ctx, tracksToRender, canvas.width, canvas.height,
+        srcW, srcH, isCover, 0
       );
       latestOverlayStatsRef.current = stats;
 
-      const delayed = runStateRef.current === 'ANALYZING' && !video.paused && (
-        (latest.tracks.length > 0 && stats.stale > 0 && stats.rendered === 0) ||
-        !isOverlayAgeFresh(timeDelta)
-      );
-      if (delayed !== isOverlayDelayedRef.current) {
-        isOverlayDelayedRef.current = delayed;
-        setIsOverlayDelayed(delayed);
+      if (isOverlayDelayedRef.current) {
+        isOverlayDelayedRef.current = false;
+        setIsOverlayDelayed(false);
       }
     } catch (e) {
       console.error('Failed to render overlay:', e);
@@ -937,7 +849,7 @@ export default function Analyze() {
         }
 
         const settings = settingsRef.current;
-        const confTh = DETECTION_PROFILES[detectionProfile]?.confidenceThreshold ?? 0.20;
+        const confTh = DETECTION_PROFILES[detectionProfile]?.confidenceThreshold ?? 0.35;
         const iouTh = DETECTION_PROFILES[detectionProfile]?.iouThreshold ?? 0.45;
         worker.postMessage({
           type: 'inference',
@@ -1128,6 +1040,7 @@ export default function Analyze() {
     if (session && !session.closed) rollTrackIds(session);
     workerRef.current?.postMessage({ type: 'reset_tracker' });
     pendingTrackerResetRef.current = false;
+    trackStoreRef.current.clear();
   };
 
   const flushPendingTrackerReset = () => {
@@ -1140,6 +1053,10 @@ export default function Analyze() {
 
     latestResultRef.current = msg;
     lastAcceptedAtRef.current = performance.now();
+
+    // Update persistent track store for video overlay presentation
+    trackStoreRef.current.setGeneration(coordRef.current.generation);
+    trackStoreRef.current.updateFromInference(msg.tracks, msg.mediaTime, coordRef.current.generation);
 
     session.metrics.latency = msg.inferenceTime;
     session.metrics.framesProcessed++;
@@ -1176,6 +1093,7 @@ export default function Analyze() {
         });
       }
     }
+
 
     const now = Date.now();
     if (now - session.logState.lastLogTime >= 5000) {
@@ -1639,13 +1557,8 @@ export default function Analyze() {
     const meta = (asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata) ? asset.metadata : {}) as Record<string, any>;
     if (meta.calibration && typeof meta.calibration === 'object' && Array.isArray(meta.calibration.calibrationArea) && meta.calibration.calibrationArea.length === 4) {
       setCalibration(meta.calibration as CalibrationData);
-      setCalibrationPoints(meta.calibration.calibrationArea);
-      setRefWidth(meta.calibration.referenceWidth || 3.5);
-      setRefHeight(meta.calibration.referenceHeight || 15.0);
-      setCalSpeedLimit(meta.calibration.speedLimit || 60);
     } else {
       setCalibration(null);
-      setCalibrationPoints([]);
     }
     const preferredProfile = targetProfileRef.current || (meta.detection_profile === 'balanced' || meta.detection_profile === 'high_recall' ? meta.detection_profile : null);
     if (preferredProfile) {
@@ -2076,13 +1989,13 @@ export default function Analyze() {
 
   const onSeeking = () => {
     browserFrameIndexRef.current = 0;
+    trackStoreRef.current.clear();
+    clearOverlayCanvas();
     if (analysisEngine === 'backend') {
-      drawOverlay();
       return;
     }
     coordRef.current.invalidate();
     latestResultRef.current = null;
-    clearOverlayCanvas();
     postTrackerResetWhenSafe();
   };
 
@@ -2242,7 +2155,7 @@ export default function Analyze() {
                   iou_threshold: st.iou_threshold,
                   processing_speed: st.processing_speed || jobSpeed,
                   frame_stride: st.frame_stride,
-                  summary: st.summary
+                  summary: st.summary as any
                 }
               });
 
@@ -2260,7 +2173,7 @@ export default function Analyze() {
                   iou_threshold: st.iou_threshold,
                   processing_speed: st.processing_speed || jobSpeed,
                   frame_stride: st.frame_stride,
-                  summary: st.summary
+                  summary: st.summary as any
                 }
               }).catch(() => {});
 
@@ -2583,8 +2496,6 @@ export default function Analyze() {
       return;
     }
     setCalibration(null);
-    setCalibrationPoints([]);
-    setIsCalibrating(false);
     const selectedAt = new Date().toISOString();
     if (!file.type.startsWith('video/') && !/\.(mp4|webm|mov|m4v)$/i.test(file.name)) {
       const msg = `"${file.name}" is not a supported video file (type: ${file.type || 'unknown'}). Select an MP4, WebM or MOV file.`;
@@ -2797,8 +2708,6 @@ export default function Analyze() {
     setPendingFile(null);
     setCurrentUpload(null);
     setCalibration(null);
-    setIsCalibrating(false);
-    setCalibrationPoints([]);
     clearOverlayCanvas();
   };
 
@@ -2924,47 +2833,6 @@ export default function Analyze() {
                 title={backendAvailable ? "Local DirectML/CPU Backend" : "Local Backend (Offline)"}
               >
                 Local Backend
-              </button>
-            </div>
-
-            {/* Speed Calibration Button */}
-            <div className="flex items-center">
-              <button
-                id="analyze-calibrate-btn"
-                type="button"
-                onClick={() => {
-                  const video = videoRef.current;
-                  if (video && !video.paused) {
-                    video.pause();
-                  }
-                  if (calibration && calibration.calibrationArea?.length === 4) {
-                    setCalibrationPoints(calibration.calibrationArea);
-                    setRefWidth(calibration.referenceWidth || 3.5);
-                    setRefHeight(calibration.referenceHeight || 15.0);
-                    setCalSpeedLimit(calibration.speedLimit || 60);
-                  } else {
-                    setCalibrationPoints([]);
-                  }
-                  setIsCalibrating(true);
-                }}
-                disabled={!sourceInfo || isSubmittingJob || backendJob?.status === 'running' || backendJob?.status === 'queued'}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                  calibration && calibration.calibrationArea?.length === 4
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                }`}
-                title={
-                  calibration && calibration.calibrationArea?.length === 4
-                    ? `Speed Calibrated (${calibration.referenceWidth}m × ${calibration.referenceHeight}m). Click to edit.`
-                    : 'Calibrate vehicle speed estimation using 4 road ground-plane points'
-                }
-              >
-                <Gauge className={`w-3.5 h-3.5 ${calibration && calibration.calibrationArea?.length === 4 ? 'text-emerald-600' : 'text-indigo-600'}`} />
-                <span>
-                  {calibration && calibration.calibrationArea?.length === 4
-                    ? `Calibrated (${calibration.referenceWidth}m × ${calibration.referenceHeight}m)`
-                    : 'Calibrate Speed'}
-                </span>
               </button>
             </div>
           </div>
@@ -3145,223 +3013,6 @@ export default function Analyze() {
                 </>
               )}
 
-              {/* Interactive Speed Calibration Overlay */}
-              {isCalibrating && sourceInfo && (
-                <div
-                  className="absolute inset-0 z-50 bg-slate-950/70 backdrop-blur-xs flex flex-col justify-between p-3 select-none cursor-crosshair"
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest('#calibration-controls-card') || (e.target as HTMLElement).closest('#calibration-header-card')) {
-                      return;
-                    }
-                    const video = videoRef.current;
-                    if (!video || !video.videoWidth || !video.videoHeight) return;
-                    const rect = video.getBoundingClientRect();
-                    const clickX = e.clientX;
-                    const clickY = e.clientY;
-                    const isCover = isFullscreen;
-                    const transform = computeVideoTransform(
-                      { videoWidth: video.videoWidth, videoHeight: video.videoHeight },
-                      { containerWidth: rect.width, containerHeight: rect.height },
-                      isCover ? 'cover' : 'contain'
-                    );
-                    const imgX = clickX - rect.left - transform.offsetX;
-                    const imgY = clickY - rect.top - transform.offsetY;
-                    if (imgX < 0 || imgX > transform.renderWidth || imgY < 0 || imgY > transform.renderHeight) {
-                      return; // Ignored letterbox/pillarbox margin click
-                    }
-                    if (calibrationPoints.length >= 4) {
-                      return;
-                    }
-                    const normX = Math.max(0, Math.min(1, imgX / transform.renderWidth));
-                    const normY = Math.max(0, Math.min(1, imgY / transform.renderHeight));
-                    setCalibrationPoints(prev => [
-                      ...prev,
-                      { x: Number(normX.toFixed(4)), y: Number(normY.toFixed(4)) }
-                    ]);
-                  }}
-                >
-                  {/* Top Header / Instructions */}
-                  <div id="calibration-header-card" className="flex items-center justify-between bg-slate-900/90 border border-slate-700/80 px-3.5 py-2 rounded-lg text-white shadow-lg pointer-events-auto">
-                    <div className="flex items-center gap-2">
-                      <Gauge className="w-4 h-4 text-indigo-400" />
-                      <span className="font-semibold text-xs">Road Speed Calibration</span>
-                      <span className="text-slate-400 text-xs">·</span>
-                      <span className="text-xs text-indigo-300 font-medium">
-                        {calibrationPoints.length === 0 && 'Click Point 1: Top-Left (far left road corner)'}
-                        {calibrationPoints.length === 1 && 'Click Point 2: Top-Right (far right road corner)'}
-                        {calibrationPoints.length === 2 && 'Click Point 3: Bottom-Right (near right road corner)'}
-                        {calibrationPoints.length === 3 && 'Click Point 4: Bottom-Left (near left road corner)'}
-                        {calibrationPoints.length >= 4 && '✓ 4 points placed. Adjust reference dimensions below and save.'}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsCalibrating(false)}
-                      className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors cursor-pointer"
-                      title="Close calibration overlay"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* SVG Overlay for Quadrilateral Polygon & Corner Markers */}
-                  <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    {(() => {
-                      const video = videoRef.current;
-                      if (!video || !video.videoWidth || !video.videoHeight) return null;
-                      const parentRect = containerRef.current?.getBoundingClientRect();
-                      const vidRect = video.getBoundingClientRect();
-                      if (!parentRect) return null;
-
-                      const isCover = isFullscreen;
-                      const transform = computeVideoTransform(
-                        { videoWidth: video.videoWidth, videoHeight: video.videoHeight },
-                        { containerWidth: vidRect.width, containerHeight: vidRect.height },
-                        isCover ? 'cover' : 'contain'
-                      );
-
-                      const leftOffset = vidRect.left - parentRect.left + transform.offsetX;
-                      const topOffset = vidRect.top - parentRect.top + transform.offsetY;
-
-                      const pts = calibrationPoints.map(p => ({
-                        x: leftOffset + p.x * transform.renderWidth,
-                        y: topOffset + p.y * transform.renderHeight
-                      }));
-
-                      const pointLabels = ['1: Top-Left', '2: Top-Right', '3: Bottom-Right', '4: Bottom-Left'];
-
-                      return (
-                        <svg className="w-full h-full absolute inset-0">
-                          {pts.length >= 2 && (
-                            <polygon
-                              points={pts.map(p => `${p.x},${p.y}`).join(' ')}
-                              fill={pts.length === 4 ? 'rgba(99, 102, 241, 0.25)' : 'none'}
-                              stroke="#6366f1"
-                              strokeWidth="2"
-                              strokeDasharray={pts.length === 4 ? 'none' : '4 4'}
-                            />
-                          )}
-                          {pts.map((p, i) => (
-                            <g key={i}>
-                              <circle cx={p.x} cy={p.y} r="7" fill="#4f46e5" stroke="#ffffff" strokeWidth="2" />
-                              <text
-                                x={p.x}
-                                y={p.y - 10}
-                                fill="#ffffff"
-                                fontSize="11"
-                                fontWeight="bold"
-                                textAnchor="middle"
-                                className="drop-shadow-md select-none font-sans"
-                              >
-                                {pointLabels[i]}
-                              </text>
-                            </g>
-                          ))}
-                        </svg>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Bottom Control Bar */}
-                  <div
-                    id="calibration-controls-card"
-                    className="bg-slate-900/95 border border-slate-700/80 px-3.5 py-2.5 rounded-lg text-white shadow-2xl flex flex-wrap items-center justify-between gap-2.5 pointer-events-auto"
-                  >
-                    <div className="flex flex-wrap items-center gap-3 text-xs">
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-slate-300 font-medium">Road Width:</label>
-                        <input
-                          type="number"
-                          min="1.0"
-                          max="50.0"
-                          step="0.5"
-                          value={refWidth}
-                          onChange={e => setRefWidth(Math.max(0.5, parseFloat(e.target.value) || 3.5))}
-                          className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
-                        />
-                        <span className="text-slate-400">meters</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-slate-300 font-medium">Segment Length:</label>
-                        <input
-                          type="number"
-                          min="2.0"
-                          max="200.0"
-                          step="1.0"
-                          value={refHeight}
-                          onChange={e => setRefHeight(Math.max(1.0, parseFloat(e.target.value) || 15.0))}
-                          className="w-16 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
-                        />
-                        <span className="text-slate-400">meters</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <label className="text-slate-300 font-medium">Speed Limit:</label>
-                        <input
-                          type="number"
-                          min="10"
-                          max="150"
-                          step="5"
-                          value={calSpeedLimit}
-                          onChange={e => setCalSpeedLimit(Math.max(10, parseInt(e.target.value) || 60))}
-                          className="w-14 bg-slate-800 border border-slate-600 rounded px-2 py-0.5 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
-                        />
-                        <span className="text-slate-400">km/h</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCalibrationPoints([
-                            { x: 0.35, y: 0.38 },
-                            { x: 0.65, y: 0.38 },
-                            { x: 0.85, y: 0.88 },
-                            { x: 0.15, y: 0.88 }
-                          ]);
-                        }}
-                        className="px-2.5 py-1 text-xs text-indigo-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-indigo-700/50 rounded font-medium transition-colors cursor-pointer"
-                        title="Set standard highway/lane trapezoid preset"
-                      >
-                        Road Preset
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCalibrationPoints([])}
-                        className="px-2.5 py-1 text-xs text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded font-medium transition-colors cursor-pointer"
-                      >
-                        Reset
-                      </button>
-                      {calibration && (
-                        <button
-                          type="button"
-                          onClick={() => void clearCalibration()}
-                          className="px-2.5 py-1 text-xs text-rose-300 hover:text-rose-100 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 rounded font-medium transition-colors cursor-pointer"
-                        >
-                          Clear
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        disabled={calibrationPoints.length !== 4 || refWidth <= 0 || refHeight <= 0}
-                        onClick={() => {
-                          void saveCalibration({
-                            referenceWidth: refWidth,
-                            referenceHeight: refHeight,
-                            speedLimit: calSpeedLimit,
-                            tolerance: calTolerance,
-                            calibrationArea: calibrationPoints
-                          });
-                        }}
-                        className="px-3 py-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed rounded shadow-xs transition-colors cursor-pointer"
-                      >
-                        Save Calibration
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Single Unified Analysis Progress Overlay */}
               {isJobActive && (
                 <div className="absolute inset-0 bg-slate-950/70 backdrop-blur-[2px] flex flex-col items-center justify-center p-4 text-center z-30">
@@ -3493,39 +3144,6 @@ export default function Analyze() {
                 </div>
               )}
             </div>
-
-            {/* Speed Calibration Notice Banner when uncalibrated */}
-            {sourceInfo && (!calibration || calibration.calibrationArea?.length !== 4) && (
-              <div className="bg-amber-50 border border-amber-200/90 rounded-lg px-3.5 py-2 flex items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Gauge className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span className="truncate">
-                    <span className="font-semibold">Speed uncalibrated:</span> Real-world km/h speed measurements require 4 ground-plane road calibration points.
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const video = videoRef.current;
-                    if (video && !video.paused) {
-                      video.pause();
-                    }
-                    if (calibration && calibration.calibrationArea?.length === 4) {
-                      setCalibrationPoints(calibration.calibrationArea);
-                      setRefWidth(calibration.referenceWidth || 3.5);
-                      setRefHeight(calibration.referenceHeight || 15.0);
-                      setCalSpeedLimit(calibration.speedLimit || 60);
-                    } else {
-                      setCalibrationPoints([]);
-                    }
-                    setIsCalibrating(true);
-                  }}
-                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-[11px] rounded transition-colors cursor-pointer shrink-0"
-                >
-                  Calibrate Speed
-                </button>
-              </div>
-            )}
 
             {/* Playback Toolbar */}
             <div className="bg-white border border-slate-200 rounded-lg px-3.5 py-2 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 text-xs shadow-xs min-h-[46px]" id="analyze-controls">

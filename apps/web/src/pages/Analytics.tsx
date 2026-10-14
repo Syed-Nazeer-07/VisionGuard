@@ -547,7 +547,7 @@ export default function Analytics() {
             <span>Reports</span>
           </Link>
           <Link
-            to="/app/incidents"
+            to="/app/cases?tab=incidents"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
           >
             <ShieldAlert className="w-3.5 h-3.5 text-blue-500" />
@@ -699,7 +699,7 @@ export default function Analytics() {
           </div>
           <div className="flex items-center gap-2">
             <Link
-              to="/app/incidents?tab=review"
+              to="/app/cases?tab=review"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition-colors"
             >
               <Clock className="w-3.5 h-3.5 text-amber-400" />
@@ -1069,7 +1069,7 @@ export default function Analytics() {
                           </button>
                         ) : (
                           <button
-                            onClick={() => navigate('/app/incidents')}
+                            onClick={() => navigate('/app/cases?tab=incidents')}
                             className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-md text-xs font-medium transition-colors cursor-pointer shadow-2xs"
                           >
                             Details

@@ -84,64 +84,61 @@ export class ByteTracker {
     this.tracks = this.tracks.filter(t => t.state !== 'Removed');
 
     // 10. Export current tracking results
-    // Only return fresh confirmed tracks (timeSinceUpdate <= 1) or tentative with timeSinceUpdate === 0
-    return this.tracks
-      .filter(t => {
-        if (t.state === 'Confirmed') {
-          if (t.timeSinceUpdate > 1) return false;
-        } else if (t.state === 'Tentative') {
-          if (t.timeSinceUpdate !== 0) return false;
-        } else {
-          return false;
-        }
+    // Return confirmed tracks (tolerating up to 2 missed inference steps with Kalman prediction) or tentative with timeSinceUpdate === 0
+    const out: TrackedObject[] = [];
+    for (const t of this.tracks) {
+      if (t.state === 'Lost' || t.state === 'Removed') {
+        continue;
+      }
+      // Emit confirmed tracks, or tentative tracks with high confidence (>= 0.60) on first sighting.
+      // Low-confidence tentative tracks must achieve hitCount >= 2 before rendering.
+      const isValidEmission = (t.state === 'Confirmed') || (t.hitCount >= 2) || (t.prob >= 0.60 && t.timeSinceUpdate === 0);
+      if (!isValidEmission) {
+        continue;
+      }
+      if (t.timeSinceUpdate > 2) {
+        continue;
+      }
 
-        // Reject static roadside poles and bollards misclassified as person
-        if (t.className === 'person' && t.lastBox) {
-          const aspect = t.lastBox.h / Math.max(1, t.lastBox.w);
-          if (aspect > 3.4 || (t.lastBox.w < 12 && aspect > 2.8)) {
-            return false;
-          }
-        }
-        return true;
-      })
-      .map(t => {
-        const state = t.kf.getState();
-        // For freshly detected frames (timeSinceUpdate === 0), use the exact detected box
-        // to prevent any Kalman filter coordinate drift or box displacement.
-        const useDetectedBox = t.timeSinceUpdate === 0 && t.lastBox;
-        const boxX = useDetectedBox ? t.lastBox.x : state.cx;
-        const boxY = useDetectedBox ? t.lastBox.y : state.cy;
-        const boxW = useDetectedBox ? t.lastBox.w : state.w;
-        const boxH = useDetectedBox ? t.lastBox.h : state.h;
+      const state = t.kf.getState();
+      // For freshly detected frames (timeSinceUpdate === 0), use the exact detected box
+      // to prevent any Kalman filter coordinate drift or box displacement.
+      const useDetectedBox = t.timeSinceUpdate === 0 && t.lastBox;
+      const boxX = useDetectedBox ? t.lastBox.x : state.cx;
+      const boxY = useDetectedBox ? t.lastBox.y : state.cy;
+      const boxW = useDetectedBox ? t.lastBox.w : state.w;
+      const boxH = useDetectedBox ? t.lastBox.h : state.h;
 
-        // Strict geometric validation: discard corrupt or degenerate boxes
-        if (!Number.isFinite(boxX) || !Number.isFinite(boxY) || !Number.isFinite(boxW) || !Number.isFinite(boxH)) {
-          return null;
-        }
-        if (boxW < 4 || boxH < 4) {
-          return null;
-        }
+      // Strict geometric validation: discard corrupt or degenerate boxes
+      if (!Number.isFinite(boxX) || !Number.isFinite(boxY) || !Number.isFinite(boxW) || !Number.isFinite(boxH)) {
+        continue;
+      }
+      if (boxW < 4 || boxH < 4) {
+        continue;
+      }
 
-        return {
-          x: boxX,
-          y: boxY,
-          w: boxW,
-          h: boxH,
-          dx: state.dx,
-          dy: state.dy,
-          dw: state.dw,
-          dh: state.dh,
-          prob: t.prob,
-          classId: t.classId,
-          className: t.className,
-          trackId: t.trackId,
-          state: t.state,
-          frameCount: t.frameCount,
-          timeSinceUpdate: t.timeSinceUpdate,
-          hitCount: t.hitCount
-        };
-      })
-      .filter((t): t is TrackedObject => t !== null);
+      out.push({
+        x: boxX,
+        y: boxY,
+        w: boxW,
+        h: boxH,
+        dx: state.dx,
+        dy: state.dy,
+        dw: state.dw,
+        dh: state.dh,
+        prob: t.prob,
+        classId: t.classId,
+        className: t.className,
+        trackId: t.trackId,
+        state: t.state,
+        frameCount: t.frameCount,
+        timeSinceUpdate: t.timeSinceUpdate,
+        hitCount: t.hitCount,
+        observationType: t.timeSinceUpdate > 0 ? 'predicted' : 'detection'
+      });
+    }
+
+    return out;
   }
 
   reset() {

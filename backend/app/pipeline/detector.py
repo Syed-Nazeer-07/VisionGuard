@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
+import threading
 import cv2
 import numpy as np
 import onnxruntime as ort
@@ -21,8 +22,8 @@ COCO_LABELS = [
     "toothbrush"
 ]
 
-# Traffic-relevant classes: person, bicycle, car, motorcycle, bus, truck, traffic light
-ALLOWED_CLASSES = {0, 1, 2, 3, 5, 7, 9}
+# Traffic-relevant classes: person (0), bicycle (1), car (2), motorcycle (3), bus (5), truck (7)
+ALLOWED_CLASSES = {0, 1, 2, 3, 5, 7}
 ALLOWED_CLASSES_ARR = np.array(sorted(list(ALLOWED_CLASSES)), dtype=np.int32)
 
 class RawDetection:
@@ -57,6 +58,7 @@ class YOLODetector:
         self.active_provider: str = "Unknown"
         self.available_providers: List[str] = ort.get_available_providers()
         self.input_size: int = 640
+        self._infer_lock = threading.Lock()
         
         # Pre-allocated reusable buffers for zero-allocation inference loop
         self._padded_buffer = np.full((self.input_size, self.input_size, 3), 114, dtype=np.uint8)
@@ -161,39 +163,40 @@ class YOLODetector:
         pad_w = int(round((target_size - scaled_w) / 2.0))
         pad_h = int(round((target_size - scaled_h) / 2.0))
 
-        # Check if padding geometry changed; if so, re-initialize letterbox border
-        geom = (scaled_w, scaled_h, pad_w, pad_h)
-        if self._last_pad_geometry != geom:
-            self._padded_buffer.fill(114)
-            self._last_pad_geometry = geom
+        with self._infer_lock:
+            # Check if padding geometry changed; if so, re-initialize letterbox border
+            geom = (scaled_w, scaled_h, pad_w, pad_h)
+            if self._last_pad_geometry != geom:
+                self._padded_buffer.fill(114)
+                self._last_pad_geometry = geom
 
-        # 1. Resize and color-convert only the active video region
-        resized = cv2.resize(bgr_frame, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
-        rgb_resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        self._padded_buffer[pad_h:pad_h + scaled_h, pad_w:pad_w + scaled_w] = rgb_resized
+            # 1. Resize and color-convert only the active video region
+            resized = cv2.resize(bgr_frame, (scaled_w, scaled_h), interpolation=cv2.INTER_LINEAR)
+            rgb_resized = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            self._padded_buffer[pad_h:pad_h + scaled_h, pad_w:pad_w + scaled_w] = rgb_resized
 
-        # 2. Vectorized normalization directly into pre-allocated contiguous float32 tensor
-        np.divide(self._padded_buffer.transpose(2, 0, 1), 255.0, out=self._input_tensor[0])
+            # 2. Vectorized normalization directly into pre-allocated contiguous float32 tensor
+            np.divide(self._padded_buffer.transpose(2, 0, 1), 255.0, out=self._input_tensor[0])
 
-        # 3. ONNX Inference (with dynamic fallback to CPU if GPU execution encounters runtime error)
-        try:
-            outputs = self.session.run([self.output_name], {self.input_name: self._input_tensor})
-        except Exception as run_err:
-            if self.active_provider == "DmlExecutionProvider":
-                logger.warning(f"DirectML inference failed at runtime ({run_err}); falling back to CPUExecutionProvider")
-                sess_opts = ort.SessionOptions()
-                sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-                sess_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
-                if settings.CPU_INTRA_OP_THREADS > 0:
-                    sess_opts.intra_op_num_threads = settings.CPU_INTRA_OP_THREADS
-                if settings.CPU_INTER_OP_THREADS > 0:
-                    sess_opts.inter_op_num_threads = settings.CPU_INTER_OP_THREADS
-                self.session = ort.InferenceSession(str(self.model_path), sess_opts, providers=["CPUExecutionProvider"])
-                self.active_provider = "CPUExecutionProvider"
+            # 3. ONNX Inference (with dynamic fallback to CPU if GPU execution encounters runtime error)
+            try:
                 outputs = self.session.run([self.output_name], {self.input_name: self._input_tensor})
-            else:
-                raise run_err
-        raw_output = outputs[0]  # shape: (1, 84, 8400)
+            except Exception as run_err:
+                if self.active_provider == "DmlExecutionProvider":
+                    logger.warning(f"DirectML inference failed at runtime ({run_err}); falling back to CPUExecutionProvider")
+                    sess_opts = ort.SessionOptions()
+                    sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                    sess_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+                    if settings.CPU_INTRA_OP_THREADS > 0:
+                        sess_opts.intra_op_num_threads = settings.CPU_INTRA_OP_THREADS
+                    if settings.CPU_INTER_OP_THREADS > 0:
+                        sess_opts.inter_op_num_threads = settings.CPU_INTER_OP_THREADS
+                    self.session = ort.InferenceSession(str(self.model_path), sess_opts, providers=["CPUExecutionProvider"])
+                    self.active_provider = "CPUExecutionProvider"
+                    outputs = self.session.run([self.output_name], {self.input_name: self._input_tensor})
+                else:
+                    raise run_err
+            raw_output = outputs[0]  # shape: (1, 84, 8400)
 
         # Transpose raw model output: (84, 8400) -> (8400, 84)
         predictions = raw_output[0].T
@@ -205,7 +208,10 @@ class YOLODetector:
         class_ids = np.argmax(scores, axis=1)
 
         # 4. Vectorized filtering: anchors above threshold AND in target traffic classes
-        mask = (max_probs >= conf_th) & np.isin(class_ids, ALLOWED_CLASSES_ARR)
+        # Class-specific confidence: person requires at least 0.38 (rejects roadside bollards and shadows),
+        # vehicles require at least conf_th (default 0.25 - 0.28).
+        min_probs = np.where(class_ids == 0, max(conf_th, 0.38), conf_th)
+        mask = (max_probs >= min_probs) & np.isin(class_ids, ALLOWED_CLASSES_ARR)
         valid_indices = np.flatnonzero(mask)
 
         if len(valid_indices) == 0:
@@ -219,8 +225,10 @@ class YOLODetector:
         tl_x = v_boxes[:, 0] - v_boxes[:, 2] * 0.5
         tl_y = v_boxes[:, 1] - v_boxes[:, 3] * 0.5
 
-        # Class offsets ensure bicycles (1), motorcycles (3), cars (2), and persons (0) do not suppress each other
-        class_offsets = v_cids * 4096.0
+        # Class offsets: bicycles (1), motorcycles (3), and persons (0) do not suppress each other
+        # Four-wheel road vehicles (car=2, bus=5, truck=7) share the vehicle suppression pool
+        nms_groups = np.where(np.isin(v_cids, [2.0, 5.0, 7.0]), 2.0, v_cids)
+        class_offsets = nms_groups * 4096.0
         boxes_for_nms = np.column_stack((tl_x + class_offsets, tl_y + class_offsets, v_boxes[:, 2], v_boxes[:, 3])).tolist()
         probs_for_nms = v_probs.tolist()
 
@@ -230,7 +238,7 @@ class YOLODetector:
 
         selected_indices = indices.flatten() if hasattr(indices, "flatten") else [int(i[0]) for i in indices]
 
-        results: List[RawDetection] = []
+        candidates: List[RawDetection] = []
         for i in selected_indices:
             orig_idx = valid_indices[i]
             cx, cy, w, h = boxes[orig_idx]
@@ -245,14 +253,38 @@ class YOLODetector:
             cname = COCO_LABELS[cid] if cid < len(COCO_LABELS) else f"class_{cid}"
             prob = float(max_probs[orig_idx])
 
+            # Discard implausibly large boxes covering majority of screen
+            if src_w > orig_w * 0.85 or src_h > orig_h * 0.85:
+                continue
+
+            # Discard tiny noise artifacts
+            if src_w < 8.0 or src_h < 8.0:
+                continue
+
             # Geometric plausibility check for class 0 ('person'):
             # Reject stationary vertical roadside poles, bollards, and signposts
             if cid == 0:
                 aspect = src_h / max(1.0, src_w)
-                if aspect > 3.5 or (src_w < 12 and aspect > 2.8) or (aspect > 3.1 and prob < 0.50):
+                if aspect > 3.2 or aspect < 1.1 or (src_w < 14.0 and aspect > 2.5) or (aspect > 2.8 and prob < 0.50):
+                    continue
+                if src_h < 18.0:
                     continue
 
-            results.append(RawDetection(
+            # Geometric plausibility check for vehicles (bicycle, car, motorcycle, bus, truck):
+            # Reject painted road markings, lane dividers, crosswalk stripes, and curb shadows
+            if cid in (1, 2, 3, 5, 7):
+                veh_aspect = src_w / max(1.0, src_h)
+                if veh_aspect > 4.0 or veh_aspect < 0.25:
+                    continue
+                if src_w < 12.0 or src_h < 12.0:
+                    continue
+                # Perspective road artifact rejection:
+                # Road markings, lane dashes, and circular manhole covers in the lower road foreground (cy > 0.60 * orig_h)
+                # cannot be smaller than 65px tall in perspective unless clipped at the image edge.
+                if src_cy > orig_h * 0.60 and src_h < 65.0 and (src_cy + src_h * 0.5 < orig_h - 15.0):
+                    continue
+
+            candidates.append(RawDetection(
                 cx=src_cx,
                 cy=src_cy,
                 w=src_w,
@@ -261,5 +293,51 @@ class YOLODetector:
                 class_id=cid,
                 class_name=cname
             ))
+
+        # 6. Containment suppression (IoM) and rider/vehicle unification
+        # Sort candidates descending by confidence
+        candidates.sort(key=lambda d: d.prob, reverse=True)
+        results: List[RawDetection] = []
+        for d in candidates:
+            suppress = False
+            for s in results:
+                # Rule A: Sub-box containment for same class group (vehicles car/bus/truck, or bicycle/motorcycle)
+                # If a smaller box is largely inside a larger vehicle box (IoM >= 0.55), suppress it
+                same_group = (d.class_id == s.class_id) or \
+                    (d.class_id in (2, 5, 7) and s.class_id in (2, 5, 7)) or \
+                    (d.class_id in (1, 3) and s.class_id in (1, 3))
+                if same_group:
+                    x1 = max(d.cx - d.w * 0.5, s.cx - s.w * 0.5)
+                    y1 = max(d.cy - d.h * 0.5, s.cy - s.h * 0.5)
+                    x2 = min(d.cx + d.w * 0.5, s.cx + s.w * 0.5)
+                    y2 = min(d.cy + d.h * 0.5, s.cy + s.h * 0.5)
+                    iw = max(0.0, x2 - x1)
+                    ih = max(0.0, y2 - y1)
+                    inter = iw * ih
+                    if inter > 0:
+                        min_area = min(d.w * d.h, s.w * s.h)
+                        if (inter / min_area) >= 0.55:
+                            suppress = True
+                            break
+
+                # Rule B: Person rider overlapping two-wheeler (motorcycle or bicycle)
+                # When a person detection overlaps a motorcycle/bicycle (IoM >= 0.40 or IoU >= 0.20),
+                # the two-wheeler vehicle takes precedence (suppress person to prevent duplicate boxes)
+                elif d.class_id == 0 and s.class_id in (1, 3):
+                    x1 = max(d.cx - d.w * 0.5, s.cx - s.w * 0.5)
+                    y1 = max(d.cy - d.h * 0.5, s.cy - s.h * 0.5)
+                    x2 = min(d.cx + d.w * 0.5, s.cx + s.w * 0.5)
+                    y2 = min(d.cy + d.h * 0.5, s.cy + s.h * 0.5)
+                    iw = max(0.0, x2 - x1)
+                    ih = max(0.0, y2 - y1)
+                    inter = iw * ih
+                    if inter > 0:
+                        min_area = min(d.w * d.h, s.w * s.h)
+                        if (inter / min_area) >= 0.40:
+                            suppress = True
+                            break
+
+            if not suppress:
+                results.append(d)
 
         return results

@@ -19,11 +19,11 @@ class ProcessingSpeed(str, Enum):
 
 PROFILE_THRESHOLDS: Dict[str, Dict[str, float]] = {
     DetectionProfile.BALANCED.value: {
-        "confidence_threshold": 0.20,
+        "confidence_threshold": 0.35,
         "iou_threshold": 0.45
     },
     DetectionProfile.HIGH_RECALL.value: {
-        "confidence_threshold": 0.15,
+        "confidence_threshold": 0.25,
         "iou_threshold": 0.45
     }
 }
@@ -57,7 +57,7 @@ class JobSummary(BaseModel):
     average_speed_kmh: Optional[float] = None
     speed_violations_count: int = 0
     detection_profile: str = "balanced"
-    confidence_threshold: float = 0.20
+    confidence_threshold: float = 0.35
     iou_threshold: float = 0.45
     processing_speed: str = "full"
     frame_stride: int = 1
@@ -70,7 +70,7 @@ class JobCreateResponse(BaseModel):
     message: str
     created_at: str
     detection_profile: str = "balanced"
-    confidence_threshold: float = 0.20
+    confidence_threshold: float = 0.35
     iou_threshold: float = 0.45
     processing_speed: str = "full"
     frame_stride: int = 1
@@ -87,7 +87,7 @@ class JobDetailResponse(BaseModel):
     save_to_history: bool = False
     video_id: Optional[str] = None
     detection_profile: str = "balanced"
-    confidence_threshold: float = 0.20
+    confidence_threshold: float = 0.35
     iou_threshold: float = 0.45
     processing_speed: str = "full"
     frame_stride: int = 1

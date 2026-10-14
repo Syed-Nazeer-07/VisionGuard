@@ -42,7 +42,7 @@ interface IncidentItem {
 function getAnalysisSummary(video: VideoAsset) {
   const meta = (video.metadata && typeof video.metadata === 'object' && !Array.isArray(video.metadata) ? video.metadata : {}) as Record<string, any>;
   const vehicles = meta.unique_vehicles ?? meta.summary?.unique_vehicles ?? null;
-  const frames = meta.total_frames ?? meta.processed_frames ?? meta.summary?.total_frames ?? video.frame_count ?? null;
+  const frames = meta.total_frames ?? meta.processed_frames ?? meta.summary?.total_frames ?? meta.frame_count ?? null;
   const incidents = meta.speed_violations_count ?? meta.summary?.speed_violations_count ?? 0;
   const profile = meta.detection_profile === 'high_recall' ? 'High Recall' : (meta.detection_profile === 'balanced' ? 'Balanced' : null);
   const speed = meta.processing_speed === 'fast' ? 'Fast (2x)' : (meta.processing_speed === 'full' ? 'Full (1x)' : null);
@@ -139,7 +139,7 @@ export function Dashboard() {
   const totalFramesAnalyzed = useMemo(() => {
     return analyzedVideos.reduce((acc, v) => {
       const meta = (v.metadata && typeof v.metadata === 'object' && !Array.isArray(v.metadata) ? v.metadata : {}) as Record<string, any>
-      const count = Number(meta.total_frames ?? meta.processed_frames ?? meta.summary?.total_frames ?? v.frame_count ?? 0)
+      const count = Number(meta.total_frames ?? meta.processed_frames ?? meta.summary?.total_frames ?? meta.frame_count ?? 0)
       return acc + count
     }, 0)
   }, [analyzedVideos])
@@ -412,7 +412,7 @@ export function Dashboard() {
 
         {/* Incidents Recorded */}
         <div 
-          onClick={() => navigate('/app/incidents')}
+          onClick={() => navigate('/app/cases?tab=incidents')}
           className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs hover:border-rose-300 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between"
         >
           <div className="flex items-center justify-between">
@@ -627,7 +627,7 @@ export function Dashboard() {
                             "px-1.5 py-0.5 rounded text-[10px] font-semibold border inline-flex items-center gap-1",
                             isCompleted 
                               ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : v.processing_status === 'processing' || v.processing_status === 'analyzing'
+                              : (v.processing_status as string) === 'processing' || (v.processing_status as string) === 'analyzing'
                               ? "bg-indigo-50 text-indigo-700 border-indigo-200"
                               : "bg-slate-100 text-slate-600 border-slate-200"
                           )}>
@@ -691,8 +691,8 @@ export function Dashboard() {
               <h3 className="text-sm font-bold text-slate-900 truncate">Recent Incidents</h3>
               <p className="text-xs text-slate-500 mt-0.5 truncate">Recorded traffic events and infractions.</p>
             </div>
-            <Link to="/app/incidents" className="text-xs font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1 shrink-0 ml-2">
-              <span>Incident Center</span> <ChevronRight className="w-3.5 h-3.5" />
+            <Link to="/app/cases?tab=incidents" className="text-xs font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1 shrink-0 ml-2">
+              <span>View Incidents</span> <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
 
@@ -725,11 +725,11 @@ export function Dashboard() {
                         key={inc.id}
                         onClick={() => {
                           if (inc.id) {
-                            navigate(`/app/incidents?id=${inc.id}`)
+                            navigate(`/app/cases?tab=incidents&id=${inc.id}`)
                           } else if (inc.video_id) {
                             navigate(`/app/videos?video=${encodeURIComponent(inc.video_id)}`)
                           } else {
-                            navigate('/app/incidents')
+                            navigate('/app/cases?tab=incidents')
                           }
                         }}
                         className="hover:bg-slate-50/60 transition-colors cursor-pointer group"

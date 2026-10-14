@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo, type ReactNode } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Film, Activity, FileWarning, Image, ChevronRight, Eye, Terminal, AlertTriangle, Loader2, Play, Pause, ArrowLeft, RotateCcw, Gauge, Layers, ShieldAlert, Clock, CheckCircle2 } from 'lucide-react';
+import { Film, Activity, FileWarning, Image, ChevronRight, Eye, Terminal, AlertTriangle, Loader2, Play, Pause, ArrowLeft, RotateCcw } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { db, type AnalysisRun, type VideoAsset } from '../services/db';
 import { getSignedUrl } from '../pipeline/evidence/storage';
@@ -9,6 +9,8 @@ import { availabilityMessage, fallbackVideoNumbers, fetchStorageInfo, getAssetAv
 import { uploadManager } from '../services/uploadManager';
 import { AnalysisLogPanel } from '../components/analysis/AnalysisLogPanel';
 import { computeVideoTransform, sourceTopLeftBoxToDisplay, sourcePointToDisplay } from '../pipeline/rendering/transform';
+import { drawBoundingBoxes } from '../pipeline/rendering/overlay';
+import type { TrackedObject, TrackState } from '../pipeline/types';
 import { loadArtifactFromStorage, findFrameAtMediaTime, type BackendArtifactPayload } from '../services/backendAnalysis';
 import type { Json } from '../types/supabase';
 
@@ -114,9 +116,9 @@ export interface VideoReviewProps {
 }
 
 export default function VideoReview({ videoId: propVideoId, onBack, showSidebar = true }: VideoReviewProps = {}) {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const videoId = propVideoId || searchParams.get('video');
-  const timeParam = searchParams.get('time') || searchParams.get('t');
   const incidentParam = searchParams.get('incident');
 
   const [videos, setVideos] = useState<VideoAsset[]>([]);
@@ -293,44 +295,57 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
   }, [data, selectedRunId]);
 
   const framesAnalyzed = useMemo(() => {
+    const meta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
     return data?.artifact?.total_frames ??
       selectedRun?.frames_processed ??
-      data?.asset?.frame_count ??
+      meta.frame_count ??
       (tracks.length > 0 ? Math.max(...tracks.map(t => t.frame_count || 0)) : 0);
   }, [data, selectedRun, tracks]);
 
   const uniqueVehicles = useMemo(() => {
-    return data?.artifact?.summary?.unique_tracks ??
-      (data?.asset?.metadata && typeof data.asset.metadata === 'object' && (data.asset.metadata as Record<string, any>).unique_vehicles) ??
+    const summary = data?.artifact?.summary as any;
+    const meta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
+    return summary?.unique_vehicles ??
+      summary?.unique_tracks ??
+      meta.unique_vehicles ??
       tracks.length;
   }, [data, tracks]);
 
   const detectionProfileLabel = useMemo(() => {
-    const prof = data?.artifact?.summary?.detection_profile || selectedRun?.metrics?.detection_profile || (data?.asset?.metadata as Record<string, any> | undefined)?.detection_profile;
+    const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
+    const assetMeta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
+    const prof = data?.artifact?.summary?.detection_profile || runMeta.detection_profile || assetMeta.detection_profile;
     if (prof === 'high_recall') return 'High Recall';
     if (prof === 'balanced') return 'Balanced';
     return 'Balanced';
   }, [data, selectedRun]);
 
   const processingSpeedLabel = useMemo(() => {
-    const speed = data?.artifact?.summary?.processing_speed || selectedRun?.metrics?.processing_speed || (data?.asset?.metadata as Record<string, any> | undefined)?.processing_speed;
+    const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
+    const assetMeta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
+    const speed = data?.artifact?.summary?.processing_speed || runMeta.processing_speed || assetMeta.processing_speed;
     if (speed === 'fast') return 'Fast (2x)';
     if (speed === 'full') return 'Full (1x)';
     return 'Full (1x)';
   }, [data, selectedRun]);
 
   const effectiveFps = useMemo(() => {
-    const fps = data?.artifact?.summary?.effective_fps ??
-      data?.artifact?.metrics?.effective_fps ??
+    const summary = data?.artifact?.summary as any;
+    const artifactMeta = (data?.artifact as any)?.metrics;
+    const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
+    const fps = summary?.effective_fps ??
+      artifactMeta?.effective_fps ??
       selectedRun?.fps ??
-      selectedRun?.metrics?.fps;
+      runMeta.fps;
     return typeof fps === 'number' && fps > 0 ? `${Math.round(fps)} FPS` : null;
   }, [data, selectedRun]);
 
   const averageSpeedLabel = useMemo(() => {
+    const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
+    const assetMeta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
     const avg = data?.artifact?.summary?.average_speed_kmh ??
-      selectedRun?.metrics?.summary?.average_speed_kmh ??
-      (data?.asset?.metadata as Record<string, any> | undefined)?.average_speed_kmh;
+      runMeta?.summary?.average_speed_kmh ??
+      assetMeta?.average_speed_kmh;
     if (typeof avg === 'number' && avg > 0) return `${Math.round(avg)} km/h`;
     const trackSpeeds = tracks.flatMap(t => trajectoryOf(t).map(p => p.speed).filter((s): s is number => typeof s === 'number'));
     if (trackSpeeds.length > 0) {
@@ -398,54 +413,36 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
 
       // 1. If we have the full frame artifact from backend inference, render exact boxes and tracks
       if (artifactRef.current && artifactRef.current.frames.length > 0) {
-        const curFrame = findFrameAtMediaTime(artifactRef.current.frames, now);
+        const curFrame = findFrameAtMediaTime(artifactRef.current.frames, now, 0.40);
         if (curFrame) {
-          for (const track of curFrame.tracks) {
-            const tl_x = Math.round(track.x - track.w / 2);
-            const tl_y = Math.round(track.y - track.h / 2);
-            const box = sourceTopLeftBoxToDisplay({ x: tl_x, y: tl_y, w: track.w, h: track.h }, transform);
+          const mappedTracks: TrackedObject[] = curFrame.tracks.map(track => ({
+            x: track.x,
+            y: track.y,
+            w: track.w,
+            h: track.h,
+            trackId: track.track_id,
+            classId: track.class_id,
+            className: track.class_name,
+            prob: track.prob,
+            state: (track.state as TrackState) || 'Confirmed',
+            frameCount: 1,
+            timeSinceUpdate: track.time_since_update ?? 0,
+            speed: track.speed !== null ? track.speed : undefined,
+            velocity: track.velocity !== null ? track.velocity : undefined,
+            isOverspeed: track.is_overspeed ?? false,
+            observationType: track.observation_type as any
+          }));
 
-            // Color coding based on class
-            let strokeColor = '#06b6d4'; // default cyan (car)
-            if (track.class_name === 'truck') strokeColor = '#f59e0b'; // amber
-            else if (track.class_name === 'bus') strokeColor = '#10b981'; // emerald
-            else if (track.class_name === 'motorcycle') strokeColor = '#8b5cf6'; // purple
-            else if (track.class_name === 'bicycle') strokeColor = '#ec4899'; // pink
-            else if (track.class_name === 'person') strokeColor = '#64748b'; // slate
-
-            // Style box stroke based on observation_type
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = 2.5;
-            if (track.observation_type === 'interpolated') {
-              ctx.setLineDash([4, 4]);
-            } else if (track.observation_type === 'predicted') {
-              ctx.setLineDash([2, 4]);
-            } else {
-              ctx.setLineDash([]);
-            }
-            ctx.strokeRect(box.x, box.y, box.w, box.h);
-            ctx.setLineDash([]);
-
-            // Clean minimal label: `#<id> <CLASS> · <speed> km/h` or `#<id> <CLASS> · Speed uncalibrated`
-            const rawClass = (track.class_name || 'vehicle').toLowerCase();
-            const isPerson = rawClass === 'person' || rawClass === 'pedestrian';
-            const vehicleType = (track.class_name || 'vehicle').toUpperCase();
-            let label: string;
-            if (isPerson) {
-              label = `#${track.track_id} PERSON`;
-            } else if (typeof track.speed === 'number' && track.speed >= 0) {
-              label = `#${track.track_id} ${vehicleType} · ${Math.round(track.speed)} km/h`;
-            } else {
-              label = `#${track.track_id} ${vehicleType} · Speed uncalibrated`;
-            }
-
-            ctx.font = 'bold 11px Inter, sans-serif';
-            const textWidth = ctx.measureText(label).width;
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-            ctx.fillRect(box.x, Math.max(0, box.y - 20), textWidth + 10, 18);
-            ctx.fillStyle = strokeColor;
-            ctx.fillText(label, box.x + 5, Math.max(13, box.y - 6));
-          }
+          drawBoundingBoxes(
+            ctx,
+            mappedTracks,
+            canvas.width,
+            canvas.height,
+            video.videoWidth,
+            video.videoHeight,
+            false,
+            0
+          );
         }
       } else {
         // Fallback to trajectory interpolation for older records
@@ -453,6 +450,23 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
           const traj = trajectoryOf(t);
           const cur = sampleAt(traj, now);
           if (!cur) continue;
+
+          const [bx, by, bw, bh] = cur.bbox;
+          // Discard implausibly large bounding boxes or tiny noise
+          if (bw > video.videoWidth * 0.85 || bh > video.videoHeight * 0.85) continue;
+          if (bw < 6 || bh < 6) continue;
+
+          const rawClass = (t.object_type || 'vehicle').toLowerCase();
+          const isPerson = rawClass === 'person' || rawClass === 'pedestrian';
+
+          // Geometric plausibility filter: discard road markings and vertical poles
+          if (isPerson) {
+            const pAspect = bh / Math.max(1, bw);
+            if (pAspect > 3.4 || pAspect < 1.1) continue;
+          } else {
+            const vAspect = bw / Math.max(1, bh);
+            if (vAspect > 4.0 || vAspect < 0.22) continue;
+          }
 
           // Trail of the last ~3 seconds (in source pixels)
           ctx.strokeStyle = 'rgba(34, 211, 238, 0.55)';
@@ -470,14 +484,11 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
           }
           ctx.stroke();
 
-          const [bx, by, bw, bh] = cur.bbox;
           const box = sourceTopLeftBoxToDisplay({ x: bx, y: by, w: bw, h: bh }, transform);
           ctx.strokeStyle = '#06b6d4';
           ctx.lineWidth = 2.5;
           ctx.strokeRect(box.x, box.y, box.w, box.h);
 
-          const rawClass = (t.object_type || 'vehicle').toLowerCase();
-          const isPerson = rawClass === 'person' || rawClass === 'pedestrian';
           const vehicleType = (t.object_type || 'vehicle').toUpperCase();
           let label: string;
           if (isPerson) {
@@ -485,7 +496,7 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
           } else if (typeof cur.speed === 'number' && cur.speed >= 0) {
             label = `#${t.track_id} ${vehicleType} · ${Math.round(cur.speed)} km/h`;
           } else {
-            label = `#${t.track_id} ${vehicleType} · Speed uncalibrated`;
+            label = `#${t.track_id} ${vehicleType}`;
           }
           ctx.font = 'bold 11px Inter, sans-serif';
           const textWidth = ctx.measureText(label).width;

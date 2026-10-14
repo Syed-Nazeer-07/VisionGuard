@@ -3,8 +3,8 @@
  * Every value here is in MEDIA TIME seconds (the <video> element's own clock): result age is
  * `displayed frame media time - result frame media time`, never a wall-clock difference.
  */
-export const MAX_OVERLAY_AGE_SECONDS = 0.18;
-export const MAX_OVERLAY_FUTURE_SKEW_SECONDS = 0.025;
+export const MAX_OVERLAY_AGE_SECONDS = 0.50;
+export const MAX_OVERLAY_FUTURE_SKEW_SECONDS = 0.033;
 /** A single request outstanding this long means the worker is wedged: it is replaced. */
 export const WORKER_STALL_RESTART_MS = 20000;
 /** Consecutive per-frame inference exceptions tolerated before the run is stopped. */

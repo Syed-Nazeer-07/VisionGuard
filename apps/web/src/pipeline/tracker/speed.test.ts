@@ -11,13 +11,11 @@ describe('SpeedEstimator', () => {
     expect(result).toBeNull();
   });
 
-  it('returns estimated speed on second update when uncalibrated', () => {
+  it('returns null on second update when uncalibrated (no homography matrix)', () => {
     const est = new SpeedEstimator(60, 5);
     est.update(1, { x: 0.5, y: 0.5, w: 0.1, h: 0.1 }, 0);
     const result = est.update(1, { x: 0.6, y: 0.5, w: 0.1, h: 0.1 }, 1.0);
-    expect(result).not.toBeNull();
-    expect(result?.isEstimated).toBe(true);
-    expect(result?.speed).toBeGreaterThanOrEqual(0);
+    expect(result).toBeNull();
   });
 
   it('reports non-negative scalar speed for vehicles moving in positive coordinate direction (+Y and +X)', () => {

@@ -28,12 +28,11 @@ import { supabase } from '../../lib/supabase'
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 
-// Primary visible navigation items (5 primary destinations)
+// Primary visible navigation items (4 primary destinations)
 const PRIMARY_NAV = [
   { name: 'Dashboard', path: '/app', icon: LayoutDashboard, roles: ['Viewer', 'Operator', 'Supervisor', 'Admin'] },
   { name: 'Live Analysis', path: '/app/analyze', icon: Activity, roles: ['Viewer', 'Operator', 'Supervisor', 'Admin'] },
   { name: 'History', path: '/app/videos', icon: Clock, roles: ['Viewer', 'Operator', 'Supervisor', 'Admin'] },
-  { name: 'Incident Center', path: '/app/incidents', icon: ShieldAlert, roles: ['Viewer', 'Operator', 'Supervisor', 'Admin'] },
   { name: 'Cases', path: '/app/cases', icon: FolderSearch, roles: ['Viewer', 'Operator', 'Supervisor', 'Admin'] },
 ]
 
@@ -351,7 +350,7 @@ export function AppLayout() {
           <div className="flex items-center space-x-3 sm:space-x-4">
             {/* Notifications / Pending Review Queue */}
             <Link 
-              to="/app/incidents?tab=review"
+              to="/app/cases?tab=review"
               className="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors outline-none shrink-0"
               title="Prioritized Review Queue"
             >

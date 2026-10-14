@@ -237,19 +237,19 @@ export function IncidentCenter() {
       supabase
         .from('evidence')
         .select('id, incident_id, file_path, thumbnail_path, file_type, created_at')
-        .then(evRes => {
+        .then((evRes: any) => {
           if (!evRes.error && evRes.data) {
             setEvidenceList(evRes.data as EvidenceRecord[])
           }
         })
-        .catch(err => {
+        .catch((err: any) => {
           console.warn('Optional evidence lookup error:', err)
         })
 
       supabase
         .from('cases')
         .select('id, incident_id, status')
-        .then(casesRes => {
+        .then((casesRes: any) => {
           if (!casesRes.error && casesRes.data) {
             setCases(casesRes.data)
           } else {
@@ -257,13 +257,13 @@ export function IncidentCenter() {
             supabase
               .from('cases')
               .select('id, status')
-              .then(fb => {
+              .then((fb: any) => {
                 if (!fb.error && fb.data) setCases(fb.data)
               })
               .catch(() => {})
           }
         })
-        .catch(err => {
+        .catch((err: any) => {
           console.warn('Optional cases lookup error:', err)
         })
 

@@ -41,9 +41,19 @@ class ArtifactManager:
             "frames": frames
         }
 
-        # Stream write gzip-compressed JSON directly without giant memory buffer duplicates
-        with gzip.open(artifact_path, "wt", encoding="utf-8", compresslevel=3) as f:
-            json.dump(payload, f, separators=(',', ':'))
+        # Atomic write to temporary file first, then rename to destination
+        temp_path = artifact_path.with_suffix('.tmp')
+        try:
+            with gzip.open(temp_path, "wt", encoding="utf-8", compresslevel=3) as f:
+                json.dump(payload, f, separators=(',', ':'))
+            temp_path.replace(artifact_path)
+        except Exception:
+            if temp_path.exists():
+                try:
+                    temp_path.unlink()
+                except Exception:
+                    pass
+            raise
 
         # Cache payload in memory to eliminate repeated disk unzips on subsequent queries
         self._cache[job_id] = payload

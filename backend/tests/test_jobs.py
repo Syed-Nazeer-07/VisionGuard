@@ -110,7 +110,7 @@ async def test_detection_profiles_and_job_isolation(client: AsyncClient, synthet
     assert resp_hr.status_code == 201
     hr_data = resp_hr.json()
     assert hr_data["detection_profile"] == "high_recall"
-    assert hr_data["confidence_threshold"] == 0.15
+    assert hr_data["confidence_threshold"] == 0.25
     assert hr_data["iou_threshold"] == 0.45
 
     # 2. Submit Balanced job
@@ -122,19 +122,19 @@ async def test_detection_profiles_and_job_isolation(client: AsyncClient, synthet
     assert resp_bal.status_code == 201
     bal_data = resp_bal.json()
     assert bal_data["detection_profile"] == "balanced"
-    assert bal_data["confidence_threshold"] == 0.20
+    assert bal_data["confidence_threshold"] == 0.35
     assert bal_data["iou_threshold"] == 0.45
 
     # 3. Check detail endpoint for both jobs
     detail_hr = await client.get(f"/api/v1/analysis/jobs/{hr_data['job_id']}")
     assert detail_hr.status_code == 200
     assert detail_hr.json()["detection_profile"] == "high_recall"
-    assert detail_hr.json()["confidence_threshold"] == 0.15
+    assert detail_hr.json()["confidence_threshold"] == 0.25
 
     detail_bal = await client.get(f"/api/v1/analysis/jobs/{bal_data['job_id']}")
     assert detail_bal.status_code == 200
     assert detail_bal.json()["detection_profile"] == "balanced"
-    assert detail_bal.json()["confidence_threshold"] == 0.20
+    assert detail_bal.json()["confidence_threshold"] == 0.35
 
 @pytest.mark.asyncio
 async def test_invalid_processing_speed(client: AsyncClient, synthetic_video: Path):

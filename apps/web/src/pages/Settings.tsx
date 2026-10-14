@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { 
-  User, Bell, Shield, Key, Save, Mail,
-  Loader2, CheckCircle2, Sliders, Monitor, Cpu, 
-  Layers, Check, Globe, AlertTriangle
+  User, Bell, Shield, Key, Save,
+  Loader2, Monitor, Cpu, 
+  Check, AlertTriangle
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import { useAuthStore } from '../store/auth'
@@ -424,9 +424,9 @@ export function Settings() {
                     <option value="/app">Operational Dashboard (/app)</option>
                     <option value="/app/analyze">Live Video Analysis (/app/analyze)</option>
                     <option value="/app/videos">History & Video Review (/app/videos)</option>
-                    <option value="/app/incidents">Incident Center (/app/incidents)</option>
-                    <option value="/app/incidents?tab=review">Incident Review Queue (/app/incidents?tab=review)</option>
                     <option value="/app/cases">Case Management (/app/cases)</option>
+                    <option value="/app/cases?tab=incidents">All Incidents (/app/cases?tab=incidents)</option>
+                    <option value="/app/cases?tab=review">Review Queue (/app/cases?tab=review)</option>
                     <option value="/app/analytics">Traffic Analytics & Intelligence (/app/analytics)</option>
                     <option value="/app/reports">Reports (/app/reports)</option>
                   </select>

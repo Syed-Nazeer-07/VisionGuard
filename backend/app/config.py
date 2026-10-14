@@ -33,7 +33,7 @@ class Settings(BaseModel):
     MAX_UPLOAD_SIZE_BYTES: int = int(os.getenv("VISIONGUARD_MAX_UPLOAD_BYTES", str(1024 * 1024 * 1024)))
     
     # Inference parameters
-    CONFIDENCE_THRESHOLD: float = float(os.getenv("VISIONGUARD_CONF_THRESHOLD", "0.20"))
+    CONFIDENCE_THRESHOLD: float = float(os.getenv("VISIONGUARD_CONF_THRESHOLD", "0.35"))
     IOU_THRESHOLD: float = float(os.getenv("VISIONGUARD_IOU_THRESHOLD", "0.45"))
     
     # Execution provider override (None = auto-detect)

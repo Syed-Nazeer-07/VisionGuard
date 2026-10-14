@@ -63,3 +63,32 @@ def test_duplicate_detection_does_not_fragment_tracks():
     assert len(tracks_f2) == 1
     assert tracks_f2[0]["track_id"] == car_id
 
+def test_class_grouping():
+    from app.pipeline.tracker import class_group
+    assert class_group(2) == 2  # car
+    assert class_group(5) == 2  # bus
+    assert class_group(7) == 2  # truck
+    assert class_group(0) == 0  # person
+    assert class_group(1) == 1  # bicycle
+    assert class_group(3) == 3  # motorcycle
+
+def test_tracker_class_voting_stability():
+    tracker = ByteTracker(track_threshold=0.5, match_threshold=0.2)
+    tracker.reset()
+
+    # 3 confident car frames
+    tracks1 = tracker.update([RawDetection(cx=200.0, cy=300.0, w=80.0, h=60.0, prob=0.95, class_id=2, class_name="car")])
+    assert tracks1[0]["class_name"] == "car"
+    track_id = tracks1[0]["track_id"]
+
+    tracker.update([RawDetection(cx=202.0, cy=301.0, w=80.0, h=60.0, prob=0.95, class_id=2, class_name="car")])
+    tracker.update([RawDetection(cx=204.0, cy=302.0, w=80.0, h=60.0, prob=0.95, class_id=2, class_name="car")])
+
+    # 1 frame momentarily detected as truck
+    tracks_noisy = tracker.update([RawDetection(cx=206.0, cy=303.0, w=80.0, h=60.0, prob=0.85, class_id=7, class_name="truck")])
+    assert len(tracks_noisy) == 1
+    assert tracks_noisy[0]["track_id"] == track_id
+    # Decayed voting keeps stable class 'car'
+    assert tracks_noisy[0]["class_name"] == "car"
+
+

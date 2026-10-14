@@ -121,33 +121,44 @@ class Track:
         self.class_id: int = detection.class_id
         self.class_name: str = detection.class_name
         self.last_box: Optional[RawDetection] = detection
+        self.class_scores: Dict[int, float] = {detection.class_id: detection.prob}
+        self.class_names: Dict[int, str] = {detection.class_id: detection.class_name}
 
     def predict(self) -> None:
         self.kf.predict()
         self.frame_count += 1
         self.time_since_update += 1
 
-    def update(self, detection: RawDetection) -> None:
+    def _observe(self, detection: RawDetection) -> None:
         self.kf.update(detection.cx, detection.cy, detection.w, detection.h)
         self.hit_count += 1
         self.time_since_update = 0
         self.prob = detection.prob
-        self.class_id = detection.class_id
-        self.class_name = detection.class_name
         self.last_box = detection
 
+        # Decayed class voting across history prevents frame-to-frame vehicle label flipping
+        for cid in list(self.class_scores.keys()):
+            self.class_scores[cid] *= 0.9
+        self.class_scores[detection.class_id] = self.class_scores.get(detection.class_id, 0.0) + detection.prob
+        self.class_names[detection.class_id] = detection.class_name
+
+        best_id = self.class_id
+        best_score = self.class_scores.get(best_id, -1.0)
+        for cid, score in self.class_scores.items():
+            if score > best_score:
+                best_id = cid
+                best_score = score
+        self.class_id = best_id
+        self.class_name = self.class_names.get(best_id, detection.class_name)
+
+    def update(self, detection: RawDetection) -> None:
+        self._observe(detection)
         if self.state == "Tentative" and self.hit_count >= 2:
             self.state = "Confirmed"
 
     def reactivate(self, detection: RawDetection) -> None:
-        self.kf.update(detection.cx, detection.cy, detection.w, detection.h)
-        self.hit_count += 1
-        self.time_since_update = 0
+        self._observe(detection)
         self.state = "Confirmed"
-        self.prob = detection.prob
-        self.class_id = detection.class_id
-        self.class_name = detection.class_name
-        self.last_box = detection
 
     def mark_lost(self) -> None:
         self.state = "Lost"
@@ -158,13 +169,9 @@ class Track:
 def class_group(class_id: int) -> int:
     """
     Traffic association grouping:
-    - 1, 3: bicycle, motorcycle (two-wheel vehicles)
-    - 2, 5, 7: car, bus, truck (four-wheel road vehicles)
-    - 0: person
-    Tracks will never associate with detections of a different object kind.
+    - 2, 5, 7: car, bus, truck (four-wheel road vehicles share association group 2)
+    - 0, 1, 3: person, bicycle, motorcycle maintain distinct classes
     """
-    if class_id in (1, 3):
-        return 1
     if class_id in (2, 5, 7):
         return 2
     return class_id
@@ -265,44 +272,53 @@ class ByteTracker:
         # 10. Filter out removed tracks
         self.tracks = [t for t in self.tracks if t.state != "Removed"]
 
-        # 11. Format results: only return fresh tracks (time_since_update <= 1)
+        # 11. Format results: only return fresh, confirmed or high-confidence tracks
         results: List[Dict[str, Any]] = []
         for t in self.tracks:
-            if (t.state == "Confirmed" and t.time_since_update <= 1) or (t.state == "Tentative" and t.time_since_update == 0):
-                kf_state = t.kf.get_state()
-                # For freshly detected frames, use exact detected box to prevent Kalman drift
-                if t.time_since_update == 0 and t.last_box:
-                    box_x = t.last_box.cx
-                    box_y = t.last_box.cy
-                    box_w = t.last_box.w
-                    box_h = t.last_box.h
-                else:
-                    box_x = kf_state["cx"]
-                    box_y = kf_state["cy"]
-                    box_w = kf_state["w"]
-                    box_h = kf_state["h"]
+            if t.state in ("Lost", "Removed"):
+                continue
+            # Emit confirmed tracks, or tentative tracks with high confidence (>= 0.60) on first sighting.
+            # Low-confidence tentative tracks must achieve hit_count >= 2 before rendering.
+            is_valid_emission = (t.state == "Confirmed") or (t.hit_count >= 2) or (t.prob >= 0.60 and t.time_since_update == 0)
+            if not is_valid_emission:
+                continue
+            if t.time_since_update > 2:
+                continue
 
-                # Strict geometry validation
-                if not (math.isfinite(box_x) and math.isfinite(box_y) and math.isfinite(box_w) and math.isfinite(box_h)):
-                    continue
-                if box_w < 4.0 or box_h < 4.0:
-                    continue
+            kf_state = t.kf.get_state()
+            # For freshly detected frames, use exact detected box to prevent Kalman drift
+            if t.time_since_update == 0 and t.last_box:
+                box_x = t.last_box.cx
+                box_y = t.last_box.cy
+                box_w = t.last_box.w
+                box_h = t.last_box.h
+            else:
+                box_x = kf_state["cx"]
+                box_y = kf_state["cy"]
+                box_w = kf_state["w"]
+                box_h = kf_state["h"]
 
-                results.append({
-                    "track_id": t.track_id,
-                    "x": round(box_x, 2),
-                    "y": round(box_y, 2),
-                    "w": round(box_w, 2),
-                    "h": round(box_h, 2),
-                    "dx": round(kf_state["dx"], 2),
-                    "dy": round(kf_state["dy"], 2),
-                    "prob": round(t.prob, 4),
-                    "class_id": t.class_id,
-                    "class_name": t.class_name,
-                    "state": t.state,
-                    "time_since_update": t.time_since_update,
-                    "observation_type": "detection" if t.time_since_update == 0 else "predicted",
-                    "prediction_confidence": 1.0 if t.time_since_update == 0 else round(max(0.0, 1.0 - 0.2 * t.time_since_update), 2)
-                })
+            # Strict geometry validation
+            if not (math.isfinite(box_x) and math.isfinite(box_y) and math.isfinite(box_w) and math.isfinite(box_h)):
+                continue
+            if box_w < 4.0 or box_h < 4.0:
+                continue
+
+            results.append({
+                "track_id": t.track_id,
+                "x": round(box_x, 2),
+                "y": round(box_y, 2),
+                "w": round(box_w, 2),
+                "h": round(box_h, 2),
+                "dx": round(kf_state["dx"], 2),
+                "dy": round(kf_state["dy"], 2),
+                "prob": round(t.prob, 4),
+                "class_id": t.class_id,
+                "class_name": t.class_name,
+                "state": t.state,
+                "time_since_update": t.time_since_update,
+                "observation_type": "detection" if t.time_since_update == 0 else "predicted",
+                "prediction_confidence": 1.0 if t.time_since_update == 0 else round(max(0.0, 1.0 - 0.2 * t.time_since_update), 2)
+            })
 
         return results

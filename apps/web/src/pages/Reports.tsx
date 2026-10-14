@@ -367,13 +367,14 @@ export function Reports() {
       if (meta.durationSeconds) totalDurationSeconds += meta.durationSeconds
       else {
         const v = videos.find(vid => vid.id === r.video_id)
-        if (v?.duration_seconds) totalDurationSeconds += v.duration_seconds
+        if (v?.duration) totalDurationSeconds += v.duration
       }
 
       if (meta.totalFrames) totalFramesAnalyzed += meta.totalFrames
       else {
         const v = videos.find(vid => vid.id === r.video_id)
-        if (v?.frame_count) totalFramesAnalyzed += v.frame_count
+        const vMeta = (v?.metadata && typeof v.metadata === 'object' ? v.metadata : {}) as Record<string, any>
+        if (vMeta.frame_count) totalFramesAnalyzed += Number(vMeta.frame_count)
       }
 
       profilesSet.add(meta.profile)
@@ -1395,7 +1396,7 @@ export function Reports() {
                   <optgroup label="Specific Saved Videos">
                     {completedVideos.map(v => (
                       <option key={v.id} value={`video:${v.id}`}>
-                        {videoDisplayName(v, fallbackNumbers)} — {v.filename} ({v.duration_seconds ? `${Math.round(v.duration_seconds)}s` : 'analyzed'})
+                        {videoDisplayName(v, fallbackNumbers)} — {v.filename} ({v.duration ? `${Math.round(v.duration)}s` : 'analyzed'})
                       </option>
                     ))}
                   </optgroup>

@@ -115,7 +115,7 @@ function getPriorityScore(inc: QueueIncident): number {
 
 export default function ReviewQueue() {
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const { user, role } = useAuthStore()
 
   // Data states
@@ -559,7 +559,7 @@ export default function ReviewQueue() {
   }
 
   const handleOpenIncidentCenter = (inc: QueueIncident) => {
-    navigate(`/app/incidents?id=${inc.id}`)
+    navigate(`/app/cases?tab=incidents&id=${inc.id}`)
   }
 
   // ==========================================================================
@@ -586,11 +586,11 @@ export default function ReviewQueue() {
 
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            to="/app/incidents"
+            to="/app/cases?tab=incidents"
             className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
           >
             <ShieldAlert className="w-3.5 h-3.5 text-blue-500" />
-            <span>Incident Center</span>
+            <span>All Incidents</span>
           </Link>
           <Link
             to="/app/cases"

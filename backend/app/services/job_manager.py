@@ -33,7 +33,7 @@ class JobRecord:
         self.save_to_history = save_to_history
         self.video_id = video_id
         self.detection_profile = detection_profile
-        self.confidence_threshold = conf_threshold if conf_threshold is not None else (0.15 if detection_profile == "high_recall" else 0.20)
+        self.confidence_threshold = conf_threshold if conf_threshold is not None else (0.25 if detection_profile == "high_recall" else settings.CONFIDENCE_THRESHOLD)
         self.iou_threshold = iou_threshold if iou_threshold is not None else 0.45
         self.processing_speed = processing_speed
         self.frame_stride = frame_stride
@@ -132,7 +132,7 @@ class JobManager:
 
         stride = 2 if speed_key == "fast" else 1
 
-        conf_th = 0.15 if profile_key == "high_recall" else 0.20
+        conf_th = 0.25 if profile_key == "high_recall" else settings.CONFIDENCE_THRESHOLD
         iou_th = 0.45
 
         job_id = uuid.uuid4().hex

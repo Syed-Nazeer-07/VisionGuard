@@ -12,7 +12,6 @@ import { ResetPassword } from './pages/auth/ResetPassword'
 // Main Pages
 import { Dashboard } from './pages/Dashboard'
 import { Cases } from './pages/Cases'
-import { IncidentCenter } from './pages/IncidentCenter'
 import { Users } from './pages/Users'
 import { Config } from './pages/Config'
 import { AuditLogs } from './pages/AuditLogs'
@@ -30,11 +29,20 @@ function VideoReviewRedirect() {
   return <Navigate to={`/app/videos${search ? `?${search}` : ''}`} replace />
 }
 
+function IncidentsRedirect() {
+  const [searchParams] = useSearchParams()
+  const params = new URLSearchParams(searchParams)
+  if (!params.has('tab')) {
+    params.set('tab', 'incidents')
+  }
+  return <Navigate to={`/app/cases?${params.toString()}`} replace />
+}
+
 function ReviewQueueRedirect() {
   const [searchParams] = useSearchParams()
-  const search = searchParams.toString()
-  const target = search ? `/app/incidents?tab=review&${search}` : '/app/incidents?tab=review'
-  return <Navigate to={target} replace />
+  const params = new URLSearchParams(searchParams)
+  params.set('tab', 'review')
+  return <Navigate to={`/app/cases?${params.toString()}`} replace />
 }
 
 function AppHome() {
@@ -74,13 +82,13 @@ function App() {
               <Route path="videos" element={<VideoLibrary />} />
               <Route path="video-review" element={<VideoReviewRedirect />} />
               <Route path="history" element={<Navigate to="/app/videos" replace />} />
-              <Route path="alerts" element={<Navigate to="/app/incidents" replace />} />
-              <Route path="violations" element={<Navigate to="/app/incidents" replace />} />
+              <Route path="alerts" element={<Navigate to="/app/cases?tab=incidents" replace />} />
+              <Route path="violations" element={<Navigate to="/app/cases?tab=incidents" replace />} />
               <Route path="scene-setup" element={<Navigate to="/app/analyze" replace />} />
 
               {/* Staff operations */}
               <Route element={<RequireRole allowedRoles={['Viewer', 'Operator', 'Supervisor', 'Admin']} />}>
-                <Route path="incidents" element={<IncidentCenter />} />
+                <Route path="incidents" element={<IncidentsRedirect />} />
               </Route>
               <Route element={<RequireRole allowedRoles={['Viewer', 'Operator', 'Supervisor', 'Admin']} />}>
                 <Route path="cases" element={<Cases />} />

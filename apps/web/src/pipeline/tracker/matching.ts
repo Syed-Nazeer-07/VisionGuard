@@ -23,7 +23,6 @@ export function getIOU(box1: {x: number, y: number, w: number, h: number}, box2:
  * association group. Everything else is its own group, so a person can never take over a car.
  */
 export function classGroup(classId: number): number {
-  if (classId === 1 || classId === 3) return 1;
   if (classId === 2 || classId === 5 || classId === 7) return 2;
   return classId;
 }

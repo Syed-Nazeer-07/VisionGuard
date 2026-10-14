@@ -52,8 +52,8 @@ class VideoProcessor:
             if width <= 0 or height <= 0:
                 raise ValueError(f"Corrupt or empty video dimensions: {width}x{height}")
 
-            # Initialize ByteTracker with track_threshold aligned to detection profile
-            eff_track_th = min(0.25, max(0.15, conf_threshold or 0.20))
+            # Initialize ByteTracker with track_threshold aligned to detection profile (>= 0.45 for track initiation)
+            eff_track_th = max(0.45, conf_threshold or settings.CONFIDENCE_THRESHOLD)
             tracker = ByteTracker(track_threshold=eff_track_th)
             interpolator = TrackInterpolator()
             speed_estimator = SpeedEstimator(homography_matrix=homography_matrix)

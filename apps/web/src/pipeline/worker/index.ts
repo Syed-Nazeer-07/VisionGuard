@@ -263,17 +263,22 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       const inferenceTime = performance.now() - start;
 
-      const confidenceThreshold = typeof msg.confidenceThreshold === 'number' ? msg.confidenceThreshold : 0.20;
+      const confidenceThreshold = typeof msg.confidenceThreshold === 'number' ? msg.confidenceThreshold : 0.35;
       const iouThreshold = typeof msg.iouThreshold === 'number' ? msg.iouThreshold : 0.45;
-      tracker.trackThreshold = Math.min(0.25, Math.max(0.15, confidenceThreshold));
-      let boxes = processOutput(output.data as Float32Array, confidenceThreshold, iouThreshold);
+      tracker.trackThreshold = Math.max(0.45, confidenceThreshold);
+      const boxes = processOutput(
+        output.data as Float32Array,
+        confidenceThreshold,
+        iouThreshold,
+        ratio,
+        padW,
+        padH,
+        width,
+        height
+      );
 
-      // Filter for target classes (person, bicycle, car, motorcycle, bus, truck, traffic light)
-      const allowedClasses = [0, 1, 2, 3, 5, 7, 9];
-      boxes = boxes.filter(b => allowedClasses.includes(b.classId));
-
-      // ByteTrack runs in MODEL space: boxes are CENTER-format (cx, cy, w, h) in 640x640 letterbox
-      // pixels. It is updated exactly once per processed frame, here.
+      // ByteTrack runs in SOURCE VIDEO coordinates (cx, cy, w, h).
+      // Updated exactly once per processed frame.
       const tracks = tracker.update(boxes);
 
       // Safe dt for velocity calculation (avoid divide by zero and overly long frames)
@@ -283,15 +288,12 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       const platesEnabled = featureFlags?.plate_detection ?? false;
 
       for (const track of tracks) {
-        // Convert once from model space to ORIGINAL video pixels (still CENTER format).
-        track.x = (track.x - padW) / ratio;
-        track.y = (track.y - padH) / ratio;
-        track.w = track.w / ratio;
-        track.h = track.h / ratio;
-        if (track.dx !== undefined) track.dx = (track.dx / ratio) / safeDt;
-        if (track.dy !== undefined) track.dy = (track.dy / ratio) / safeDt;
-        if (track.dw !== undefined) track.dw = (track.dw / ratio) / safeDt;
-        if (track.dh !== undefined) track.dh = (track.dh / ratio) / safeDt;
+        // Track coordinates are already in original source video pixels (CENTER format cx, cy, w, h).
+        // Convert tracker displacement from pixels/frame to pixels/second:
+        if (track.dx !== undefined) track.dx = track.dx / safeDt;
+        if (track.dy !== undefined) track.dy = track.dy / safeDt;
+        if (track.dw !== undefined) track.dw = track.dw / safeDt;
+        if (track.dh !== undefined) track.dh = track.dh / safeDt;
 
         const isVehicle = track.className === 'car' || track.className === 'truck' || track.className === 'bus' || track.className === 'motorcycle' || track.className === 'bicycle';
         if (speedEstimator && isVehicle) {
@@ -330,14 +332,6 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (!currentBest || score > currentBest.score) {
           evidenceJobs.push({ track: { ...track }, plate, score });
         }
-      }
-
-      // Raw detections are reported in original video pixels (CENTER format) as well.
-      for (const box of boxes) {
-        box.x = (box.x - padW) / ratio;
-        box.y = (box.y - padH) / ratio;
-        box.w = box.w / ratio;
-        box.h = box.h / ratio;
       }
 
       const violations = ruleEngine.evaluate(tracks, {

@@ -35,15 +35,15 @@ export const DETECTION_PROFILES: Record<DetectionProfile, DetectionProfileConfig
   balanced: {
     id: 'balanced',
     label: 'Balanced',
-    description: 'Standard detection with balanced false-positive rejection (0.20 conf • 0.45 IoU)',
-    confidenceThreshold: 0.20,
+    description: 'Standard detection with balanced false-positive rejection (0.35 conf • 0.45 IoU)',
+    confidenceThreshold: 0.35,
     iouThreshold: 0.45
   },
   high_recall: {
     id: 'high_recall',
     label: 'High Recall',
-    description: 'Detects more distant and partially occluded vehicles (0.15 conf • 0.45 IoU)',
-    confidenceThreshold: 0.15,
+    description: 'Detects more distant and partially occluded vehicles (0.25 conf • 0.45 IoU)',
+    confidenceThreshold: 0.25,
     iouThreshold: 0.45
   }
 };
@@ -139,6 +139,7 @@ export interface BackendTrackedObject {
   velocity?: number | null;
   is_overspeed?: boolean;
   state?: string;
+  time_since_update?: number;
   observation_type?: 'detection' | 'interpolated' | 'predicted';
   prediction_confidence?: number | null;
 }

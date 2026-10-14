@@ -143,7 +143,7 @@ export class SpeedEstimator {
       vx: vxKmh,
       vy: vyKmh,
       isOverspeed: state.overspeedCount >= 3,
-      isEstimated
+      isEstimated: true
     };
   }
 

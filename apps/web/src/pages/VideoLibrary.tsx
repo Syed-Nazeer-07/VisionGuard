@@ -70,21 +70,21 @@ export function VideoLibrary() {
         const hasArtifact = Boolean(meta.artifact_storage_path)
         const isJobActiveLocally = Boolean(activeJob && activeJob.videoId === v.id && (activeJob.status === 'running' || activeJob.status === 'queued'))
 
-        if (!isJobActiveLocally && (v.processing_status === 'processing' || v.processing_status === 'queued')) {
+        if (!isJobActiveLocally && ((v.processing_status as string) === 'processing' || (v.processing_status as string) === 'queued')) {
           if (hasArtifact) {
             void supabase.from('video_assets').update({ processing_status: 'completed' }).eq('id', v.id)
-            return { ...v, processing_status: 'completed' }
+            return { ...v, processing_status: 'completed' as const }
           } else {
             const uploadAgeMs = v.uploaded_at ? Date.now() - new Date(v.uploaded_at).getTime() : Infinity
             if (uploadAgeMs > 5 * 60 * 1000) {
               void supabase.from('video_assets').update({ processing_status: 'failed' }).eq('id', v.id)
-              return { ...v, processing_status: 'failed' }
+              return { ...v, processing_status: 'failed' as const }
             }
           }
         }
         return v
       })
-      setVideos(reconciled)
+      setVideos(reconciled as VideoAsset[])
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -231,7 +231,7 @@ export function VideoLibrary() {
                   // Check if currently active or queued in background
                   const isJobActiveLocally = Boolean(activeJob && activeJob.videoId === video.id && (activeJob.status === 'running' || activeJob.status === 'queued'))
                   const uploadAgeMs = video.uploaded_at ? Date.now() - new Date(video.uploaded_at).getTime() : Infinity
-                  const isFreshProcessing = (video.processing_status === 'processing' || video.processing_status === 'queued') && uploadAgeMs < 5 * 60 * 1000
+                  const isFreshProcessing = ((video.processing_status as string) === 'processing' || (video.processing_status as string) === 'queued') && uploadAgeMs < 5 * 60 * 1000
                   const isActivelyAnalyzing = isJobActiveLocally || (!hasCompletedArtifact && isFreshProcessing)
 
                   // Check if processing explicitly failed or artifact is missing

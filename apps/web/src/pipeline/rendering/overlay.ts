@@ -18,6 +18,10 @@ function checkCollision(r1: LabelRect, r2: LabelRect): boolean {
   );
 }
 
+export interface OverlayOptions {
+  demoSpeed?: boolean;
+}
+
 export function drawBoundingBoxes(
   ctx: CanvasRenderingContext2D,
   tracks: TrackedObject[],
@@ -26,7 +30,8 @@ export function drawBoundingBoxes(
   videoWidth: number,
   videoHeight: number,
   isCover: boolean = false,
-  timeDelta: number = 0
+  timeDelta: number = 0,
+  _options?: OverlayOptions
 ): { rendered: number, stale: number } {
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
   let rendered = 0;
@@ -60,7 +65,7 @@ export function drawBoundingBoxes(
 
   for (const track of sortedTracks) {
     // Only render fresh active tracks; avoid stale predictions drifting onto empty pavement
-    if (track.timeSinceUpdate !== undefined && track.timeSinceUpdate > 1) {
+    if (track.timeSinceUpdate !== undefined && track.timeSinceUpdate > 2) {
       stale++;
       continue;
     }
@@ -69,8 +74,34 @@ export function drawBoundingBoxes(
     if (!Number.isFinite(track.x) || !Number.isFinite(track.y) || !Number.isFinite(track.w) || !Number.isFinite(track.h)) {
       continue;
     }
-    if (track.w < 4 || track.h < 4) {
+    if (track.w < 6 || track.h < 6) {
       continue;
+    }
+    // Reject implausibly large bounding boxes covering majority of the frame
+    if (track.w > videoWidth * 0.85 || track.h > videoHeight * 0.85) {
+      continue;
+    }
+
+    const rawClass = (track.className || 'vehicle').toLowerCase();
+    const isPerson = rawClass === 'person' || rawClass === 'pedestrian';
+    const vehicleType = (track.className || 'vehicle').toUpperCase();
+
+    // Geometric plausibility filter: discard road markings, stripes, and pole artifacts
+    if (isPerson) {
+      const pAspect = track.h / Math.max(1, track.w);
+      if (pAspect > 3.4 || pAspect < 1.1) {
+        continue;
+      }
+    } else {
+      const vAspect = track.w / Math.max(1, track.h);
+      if (vAspect > 4.0 || vAspect < 0.22) {
+        continue;
+      }
+      // Perspective road artifact rejection:
+      // Road markings and circular manhole covers in the lower foreground road cannot be smaller than 65px
+      if (track.y > videoHeight * 0.60 && track.h < 65 && (track.y + track.h * 0.5 < videoHeight - 15)) {
+        continue;
+      }
     }
 
     const { x, y, w, h } = sourceCenterBoxToDisplay(
@@ -114,20 +145,18 @@ export function drawBoundingBoxes(
     ctx.setLineDash([]);
 
     // Format label:
-    // Supported vehicles: `#<id> <VEHICLE> · <speed> km/h` when calibrated, or `#<id> <VEHICLE> · Speed uncalibrated`
+    // Supported vehicles: `#<id> <VEHICLE> · <speed> km/h` when genuinely calibrated, or cleanly `#<id> <VEHICLE>`
     // People/Pedestrians: `#<id> PERSON` (NEVER display speed labels for people/pedestrians)
-    const rawClass = (track.className || 'vehicle').toLowerCase();
-    const isPerson = rawClass === 'person' || rawClass === 'pedestrian';
-    const vehicleType = (track.className || 'vehicle').toUpperCase();
-    const hasCalibratedSpeed = !isPerson && track.speed !== undefined && track.speed !== null && !Number.isNaN(track.speed) && track.speed >= 0;
+    const hasCalibratedSpeed = !isPerson && track.speed !== undefined && track.speed !== null;
 
     let label: string;
     if (isPerson) {
       label = `#${track.trackId} PERSON`;
     } else if (hasCalibratedSpeed) {
-      label = `#${track.trackId} ${vehicleType} · ${Math.round(track.speed!)} km/h`;
+      const displaySpeed = Math.max(0, Math.round(Number.isFinite(track.speed) ? track.speed! : 0));
+      label = `#${track.trackId} ${vehicleType} · ${displaySpeed} km/h`;
     } else {
-      label = `#${track.trackId} ${vehicleType} · Speed uncalibrated`;
+      label = `#${track.trackId} ${vehicleType}`;
     }
 
     ctx.font = isConfirmed ? 'bold 12px sans-serif' : '11px sans-serif';
@@ -178,18 +207,26 @@ export function drawBoundingBoxes(
     }
 
     // If all preferred placements collide:
-    // For smaller or tentative vehicles in dense traffic, suppress label pill rather than stacking
+    // Try side placements (right or left of the box), or suppress label pill rather than stacking
     if (!chosenCandidate) {
-      const isLowPriority = !isConfirmed || (w * h < 1600 && !track.isOverspeed);
-      if (isLowPriority) {
-        // Label suppressed for readability, box remains visible
-        continue;
+      const sideCandidates: Array<{ x: number; y: number }> = [
+        { x: x + w + 2, y: y },
+        { x: x - labelW - 2, y: y }
+      ];
+      for (const side of sideCandidates) {
+        if (side.x >= 4 && side.x + labelW <= canvasWidth - 4 && side.y >= 2 && side.y + labelH <= canvasHeight - 2) {
+          const sideRect: LabelRect = { x: side.x, y: side.y, w: labelW, h: labelH };
+          if (!occupiedLabels.some(occ => checkCollision(sideRect, occ))) {
+            chosenCandidate = sideRect;
+            break;
+          }
+        }
       }
 
-      // Confirmed or overspeed track: fallback to clamped position above or inside
-      const fallbackY = (y - labelH - 2 >= 2) ? (y - labelH - 2) : Math.min(canvasHeight - labelH - 2, y + 2);
-      const fallbackX = Math.max(4, Math.min(canvasWidth - labelW - 4, x));
-      chosenCandidate = { x: fallbackX, y: fallbackY, w: labelW, h: labelH };
+      // If still colliding with an existing label pill, suppress label to prevent overlapping text
+      if (!chosenCandidate) {
+        continue;
+      }
     }
 
     occupiedLabels.push(chosenCandidate);

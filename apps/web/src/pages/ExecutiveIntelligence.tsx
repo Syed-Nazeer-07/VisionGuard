@@ -342,9 +342,9 @@ export function ExecutiveIntelligence() {
 
     scopedVideos.forEach(v => {
       if (v.processing_status === 'completed' || latestRunPerVideo.has(v.id)) {
-        totalSeconds += Number(v.duration_seconds || 0)
         const meta = (v.metadata && typeof v.metadata === 'object' ? v.metadata : {}) as Record<string, any>
-        totalFrames += Number(meta.total_frames ?? meta.processed_frames ?? meta.summary?.total_frames ?? v.frame_count ?? 0)
+        totalSeconds += Number(v.duration || meta.duration_seconds || 0)
+        totalFrames += Number(meta.total_frames ?? meta.processed_frames ?? meta.summary?.total_frames ?? meta.frame_count ?? 0)
       }
     })
 
@@ -753,7 +753,7 @@ export function ExecutiveIntelligence() {
 
           {/* Quick Navigation into Specialized Workflows */}
           <Link
-            to="/app/review-queue"
+            to="/app/cases?tab=review"
             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold shadow-2xs transition-colors"
           >
             <span>Review Queue</span>
@@ -1121,7 +1121,7 @@ export function ExecutiveIntelligence() {
               <p className="text-xs text-slate-500 mt-0.5">Critical and High infractions awaiting human verification.</p>
             </div>
             <Link
-              to="/app/review-queue"
+              to="/app/cases?tab=review"
               className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1"
             >
               <span>Review Queue</span>
@@ -1164,15 +1164,15 @@ export function ExecutiveIntelligence() {
 
                     <div className="flex items-center gap-1.5 shrink-0">
                       <Link
-                        to={`/app/review-queue?id=${inc.id}`}
+                        to={`/app/cases?tab=review&id=${inc.id}`}
                         className="px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-600 border border-slate-200 rounded text-xs font-semibold shadow-2xs transition-colors"
                       >
                         Review
                       </Link>
                       <Link
-                        to={`/app/incidents?id=${inc.id}`}
+                        to={`/app/cases?tab=incidents&id=${inc.id}`}
                         className="p-1 text-slate-400 hover:text-slate-700"
-                        title="View in Incident Center"
+                        title="View in Incidents"
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </Link>
