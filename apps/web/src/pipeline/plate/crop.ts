@@ -8,11 +8,17 @@ export async function generatePlateCrop(bitmap: ImageBitmap, plate: PlateDetecti
   const width = bitmap.width;
   const height = bitmap.height;
   
-  const px = Math.max(0, Math.floor(plate.x * width));
-  const py = Math.max(0, Math.floor(plate.y * height));
-  const pw = Math.min(width - px, Math.floor(plate.w * width));
-  const ph = Math.min(height - py, Math.floor(plate.h * height));
-  
+  const isNormalized = plate.x <= 1 && plate.y <= 1 && plate.w <= 1 && plate.h <= 1;
+  const rawX = isNormalized ? plate.x * width : plate.x;
+  const rawY = isNormalized ? plate.y * height : plate.y;
+  const rawW = isNormalized ? plate.w * width : plate.w;
+  const rawH = isNormalized ? plate.h * height : plate.h;
+
+  const px = Math.max(0, Math.floor(rawX));
+  const py = Math.max(0, Math.floor(rawY));
+  const pw = Math.min(width - px, Math.max(1, Math.floor(rawW)));
+  const ph = Math.min(height - py, Math.max(1, Math.floor(rawH)));
+
   if (pw <= 0 || ph <= 0) {
     throw new Error('Invalid plate crop dimensions');
   }

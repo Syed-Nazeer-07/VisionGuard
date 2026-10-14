@@ -312,3 +312,25 @@ export function uploadStorageProvider(): VideoStorageProvider {
   const configured = import.meta.env.VITE_VIDEO_STORAGE_PROVIDER
   return configured === 'supabase' ? providers.supabase : providers.b2
 }
+
+/**
+ * Deletes a video asset with cascade cleanup of its durable analysis artifacts.
+ */
+export async function deleteVideoWithArtifacts(video: Pick<VideoAsset, 'id' | 'storage_path' | 'storage_provider' | 'metadata'>): Promise<void> {
+  const meta = (video.metadata && typeof video.metadata === 'object' && !Array.isArray(video.metadata) ? video.metadata : {}) as Record<string, any>;
+  const artifactPath = meta.artifact_storage_path;
+  const artifactBucket = meta.artifact_bucket || 'videos';
+  if (artifactPath && typeof artifactPath === 'string') {
+    try {
+      await supabase.storage.from(artifactBucket).remove([artifactPath]);
+    } catch (e) {
+      console.warn('Failed to remove artifact from storage:', e);
+    }
+  }
+  try {
+    await supabase.storage.from('videos').remove([`artifacts/${video.id}/results.json.gz`]);
+  } catch {}
+
+  // Delete via provider (which deletes video file + deletes video_assets row cascading everything)
+  await storageProviderFor(video).deleteVideo(video);
+}

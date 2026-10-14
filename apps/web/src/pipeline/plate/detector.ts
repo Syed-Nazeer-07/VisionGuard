@@ -13,8 +13,9 @@ export function detectPlateRegion(track: TrackedObject): PlateDetection | null {
   // Plate width ~ 30% of vehicle width, height ~ 15% of vehicle height
   const pw = track.w * 0.3;
   const ph = track.h * 0.15;
-  const px = track.x + (track.w / 2) - (pw / 2);
-  const py = track.y + track.h - ph - (track.h * 0.05); // slightly above the bottom
+  // track.x and track.y are the CENTER coordinates of the vehicle
+  const px = track.x - (pw / 2);
+  const py = track.y + (track.h / 2) - ph - (track.h * 0.05); // near the vehicle bottom
 
   return {
     x: px,

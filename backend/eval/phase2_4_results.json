@@ -1,0 +1,358 @@
+{
+  "timestamp": "2026-10-13T05:25:21Z",
+  "detector_accuracy_common_frames": {
+    "odd_balanced": {
+      "iou_50": {
+        "tp": 227,
+        "fp": 85,
+        "fn": 146,
+        "duplicate_detections": 0,
+        "precision": 0.7276,
+        "recall": 0.6086,
+        "f1": 0.6628
+      },
+      "iou_75": {
+        "tp": 225,
+        "fp": 87,
+        "fn": 148,
+        "duplicate_detections": 0,
+        "precision": 0.7212,
+        "recall": 0.6032,
+        "f1": 0.6569
+      },
+      "mean_iou": 0.9285
+    },
+    "odd_high_recall": {
+      "iou_50": {
+        "tp": 256,
+        "fp": 94,
+        "fn": 117,
+        "duplicate_detections": 1,
+        "precision": 0.7314,
+        "recall": 0.6863,
+        "f1": 0.7082
+      },
+      "iou_75": {
+        "tp": 254,
+        "fp": 96,
+        "fn": 119,
+        "duplicate_detections": 0,
+        "precision": 0.7257,
+        "recall": 0.681,
+        "f1": 0.7026
+      },
+      "mean_iou": 0.9268
+    },
+    "all_balanced": {
+      "iou_50": {
+        "tp": 1114,
+        "fp": 430,
+        "fn": 673,
+        "duplicate_detections": 3,
+        "precision": 0.7215,
+        "recall": 0.6234,
+        "f1": 0.6689
+      },
+      "iou_75": {
+        "tp": 1097,
+        "fp": 447,
+        "fn": 690,
+        "duplicate_detections": 0,
+        "precision": 0.7105,
+        "recall": 0.6139,
+        "f1": 0.6587
+      },
+      "mean_iou": 0.9313
+    },
+    "all_high_recall": {
+      "iou_50": {
+        "tp": 1209,
+        "fp": 478,
+        "fn": 578,
+        "duplicate_detections": 4,
+        "precision": 0.7167,
+        "recall": 0.6766,
+        "f1": 0.696
+      },
+      "iou_75": {
+        "tp": 1186,
+        "fp": 501,
+        "fn": 601,
+        "duplicate_detections": 0,
+        "precision": 0.703,
+        "recall": 0.6637,
+        "f1": 0.6828
+      },
+      "mean_iou": 0.9285
+    }
+  },
+  "temporal_overlay_localization": {
+    "balanced": {
+      "full_detection": {
+        "iou_50": {
+          "tp": 1114,
+          "fp": 430,
+          "fn": 673,
+          "duplicate_detections": 3,
+          "precision": 0.7215,
+          "recall": 0.6234,
+          "f1": 0.6689
+        },
+        "iou_75": {
+          "tp": 1097,
+          "fp": 447,
+          "fn": 690,
+          "duplicate_detections": 0,
+          "precision": 0.7105,
+          "recall": 0.6139,
+          "f1": 0.6587
+        },
+        "mean_iou": 0.9313
+      },
+      "strict_raw": {
+        "iou_50": {
+          "tp": 227,
+          "fp": 85,
+          "fn": 1560,
+          "duplicate_detections": 0,
+          "precision": 0.7276,
+          "recall": 0.127,
+          "f1": 0.2163
+        },
+        "iou_75": {
+          "tp": 225,
+          "fp": 87,
+          "fn": 1562,
+          "duplicate_detections": 0,
+          "precision": 0.7212,
+          "recall": 0.1259,
+          "f1": 0.2144
+        },
+        "mean_iou": 0.9285
+      },
+      "nearest_stale": {
+        "iou_50": {
+          "tp": 520,
+          "fp": 935,
+          "fn": 1267,
+          "duplicate_detections": 3,
+          "precision": 0.3574,
+          "recall": 0.291,
+          "f1": 0.3208
+        },
+        "iou_75": {
+          "tp": 394,
+          "fp": 1061,
+          "fn": 1393,
+          "duplicate_detections": 0,
+          "precision": 0.2708,
+          "recall": 0.2205,
+          "f1": 0.2431
+        },
+        "mean_iou": 0.835
+      },
+      "motion_interpolated": {
+        "iou_50": {
+          "tp": 443,
+          "fp": 670,
+          "fn": 1344,
+          "duplicate_detections": 4,
+          "precision": 0.398,
+          "recall": 0.2479,
+          "f1": 0.3055
+        },
+        "iou_75": {
+          "tp": 360,
+          "fp": 753,
+          "fn": 1427,
+          "duplicate_detections": 0,
+          "precision": 0.3235,
+          "recall": 0.2015,
+          "f1": 0.2483
+        },
+        "mean_iou": 0.8603,
+        "obs_type_counts": {
+          "detection": 312,
+          "interpolated": 398,
+          "predicted": 403
+        },
+        "obs_breakdown": {
+          "detection": {
+            "tp": 227,
+            "fp": 85,
+            "precision": 0.7276,
+            "mean_iou": 0.9285,
+            "count": 312
+          },
+          "interpolated": {
+            "tp": 159,
+            "fp": 239,
+            "precision": 0.3995,
+            "mean_iou": 0.8134,
+            "count": 398
+          },
+          "predicted": {
+            "tp": 57,
+            "fp": 346,
+            "precision": 0.1414,
+            "mean_iou": 0.7198,
+            "count": 403
+          }
+        }
+      }
+    },
+    "high_recall": {
+      "full_detection": {
+        "iou_50": {
+          "tp": 1209,
+          "fp": 478,
+          "fn": 578,
+          "duplicate_detections": 4,
+          "precision": 0.7167,
+          "recall": 0.6766,
+          "f1": 0.696
+        },
+        "iou_75": {
+          "tp": 1186,
+          "fp": 501,
+          "fn": 601,
+          "duplicate_detections": 0,
+          "precision": 0.703,
+          "recall": 0.6637,
+          "f1": 0.6828
+        },
+        "mean_iou": 0.9285
+      },
+      "strict_raw": {
+        "iou_50": {
+          "tp": 256,
+          "fp": 94,
+          "fn": 1531,
+          "duplicate_detections": 1,
+          "precision": 0.7314,
+          "recall": 0.1433,
+          "f1": 0.2396
+        },
+        "iou_75": {
+          "tp": 254,
+          "fp": 96,
+          "fn": 1533,
+          "duplicate_detections": 0,
+          "precision": 0.7257,
+          "recall": 0.1421,
+          "f1": 0.2377
+        },
+        "mean_iou": 0.9268
+      },
+      "nearest_stale": {
+        "iou_50": {
+          "tp": 612,
+          "fp": 1015,
+          "fn": 1175,
+          "duplicate_detections": 5,
+          "precision": 0.3762,
+          "recall": 0.3425,
+          "f1": 0.3585
+        },
+        "iou_75": {
+          "tp": 475,
+          "fp": 1152,
+          "fn": 1312,
+          "duplicate_detections": 0,
+          "precision": 0.2919,
+          "recall": 0.2658,
+          "f1": 0.2783
+        },
+        "mean_iou": 0.8361
+      },
+      "motion_interpolated": {
+        "iou_50": {
+          "tp": 522,
+          "fp": 721,
+          "fn": 1265,
+          "duplicate_detections": 6,
+          "precision": 0.42,
+          "recall": 0.2921,
+          "f1": 0.3446
+        },
+        "iou_75": {
+          "tp": 426,
+          "fp": 817,
+          "fn": 1361,
+          "duplicate_detections": 0,
+          "precision": 0.3427,
+          "recall": 0.2384,
+          "f1": 0.2812
+        },
+        "mean_iou": 0.8581,
+        "obs_type_counts": {
+          "detection": 350,
+          "interpolated": 467,
+          "predicted": 426
+        },
+        "obs_breakdown": {
+          "detection": {
+            "tp": 256,
+            "fp": 94,
+            "precision": 0.7314,
+            "mean_iou": 0.9268,
+            "count": 350
+          },
+          "interpolated": {
+            "tp": 214,
+            "fp": 253,
+            "precision": 0.4582,
+            "mean_iou": 0.8124,
+            "count": 467
+          },
+          "predicted": {
+            "tp": 52,
+            "fp": 374,
+            "precision": 0.1221,
+            "mean_iou": 0.7082,
+            "count": 426
+          }
+        }
+      }
+    }
+  },
+  "stream_benchmark_continuity": {
+    "full_detection": {
+      "processing_speed": "full",
+      "num_frames": 300,
+      "inferred_frames": 300,
+      "total_generated_frames": 300,
+      "total_duration_s": 11.145,
+      "effective_video_fps": 26.92,
+      "inference_fps": 36.67,
+      "decode_time_total_s": 2.721,
+      "detect_time_total_s": 8.181,
+      "track_time_total_s": 0.216,
+      "interp_time_total_s": 0,
+      "unique_tracks": 66,
+      "max_simultaneous_tracks": 15,
+      "avg_track_lifetime_frames": 49.2,
+      "short_lived_fragmented_tracks": 17,
+      "persistent_tracks": 39
+    },
+    "fast_processing": {
+      "processing_speed": "fast",
+      "num_frames": 300,
+      "inferred_frames": 150,
+      "total_generated_frames": 300,
+      "total_duration_s": 6.187,
+      "effective_video_fps": 48.49,
+      "inference_fps": 36.3,
+      "decode_time_total_s": 1.898,
+      "detect_time_total_s": 4.132,
+      "track_time_total_s": 0.117,
+      "interp_time_total_s": 0.0262,
+      "unique_tracks": 60,
+      "max_simultaneous_tracks": 15,
+      "avg_track_lifetime_frames": 52.8,
+      "short_lived_fragmented_tracks": 11,
+      "persistent_tracks": 40
+    },
+    "speedup_ratio": 1.8
+  }
+}

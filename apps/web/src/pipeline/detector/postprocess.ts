@@ -25,7 +25,12 @@ export function nonMaxSuppression(boxes: BoundingBox[], iouThreshold: number): B
   for (const box of boxes) {
     let shouldSelect = true;
     for (const selectedBox of selected) {
-      if (iou(box, selectedBox) > iouThreshold) {
+      // Class-aware suppression: only suppress if from the same class or 4-wheeler vehicle group (car, bus, truck)
+      // Two-wheelers (bicycle, motorcycle) and persons must NOT suppress each other or vehicles
+      const sameGroup = box.classId === selectedBox.classId ||
+        ((box.classId === 2 || box.classId === 5 || box.classId === 7) &&
+         (selectedBox.classId === 2 || selectedBox.classId === 5 || selectedBox.classId === 7));
+      if (sameGroup && iou(box, selectedBox) > iouThreshold) {
         shouldSelect = false;
         break;
       }
@@ -64,6 +69,16 @@ export function processOutput(
       const cy = outputData[1 * numAnchors + i];
       const w = outputData[2 * numAnchors + i];
       const h = outputData[3 * numAnchors + i];
+
+      // Conservative geometric plausibility check for class 0 ('person'):
+      // Reject stationary vertical roadside poles, bollards, and signposts misclassified as people.
+      // Real pedestrians have an aspect ratio (h/w) between 1.2 and ~3.2.
+      if (maxClassId === 0) {
+        const aspect = h / Math.max(1, w);
+        if (aspect > 3.5 || (w < 12 && aspect > 2.8) || (aspect > 3.1 && maxProb < 0.50)) {
+          continue;
+        }
+      }
 
       boxes.push({
         x: cx,

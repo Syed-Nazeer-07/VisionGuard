@@ -5,11 +5,16 @@ import { matchDetectionsToTracks } from './matching';
 export class ByteTracker {
   public tracks: Track[] = [];
   public trackThreshold: number = 0.5;
-  public matchThreshold: number = 0.8;
+  /**
+   * Minimum IoU for the first (high-confidence) association. ByteTrack's usual match_thresh of 0.8
+   * is a cost (1 - IoU), i.e. IoU >= 0.2. A stricter value fragments tracks whenever frames are
+   * dropped because vehicles move far between processed frames.
+   */
+  public matchThreshold: number = 0.2;
   public maxTimeLost: number = 30;
 
   update(detections: BoundingBox[]): TrackedObject[] {
-    // 1. Predict new locations
+    // 1. Predict new locations for all current tracks
     for (const t of this.tracks) {
       t.predict();
     }
@@ -22,64 +27,121 @@ export class ByteTracker {
     const activeTracks = this.tracks.filter(t => t.state === 'Confirmed' || t.state === 'Tentative');
     const lostTracks = this.tracks.filter(t => t.state === 'Lost');
 
-    // 4. First association: Match high conf detections with active tracks
-    const firstMatch = matchDetectionsToTracks(highDetections, activeTracks, 0.2); // Low IOU threshold to allow matches
+    // 4. First association: Match high confidence detections with active tracks
+    const firstMatch = matchDetectionsToTracks(highDetections, activeTracks, this.matchThreshold);
     
     for (const [trackIdx, detIdx] of firstMatch.matches) {
       activeTracks[trackIdx].update(highDetections[detIdx]);
     }
 
-    // 5. Second association: Match remaining unmatched active tracks with low conf detections
+    // 5. Second association: Match remaining unmatched active tracks with low confidence detections
     const unmatchedActiveTracks = firstMatch.unmatchedTracks.map(idx => activeTracks[idx]);
-    const secondMatch = matchDetectionsToTracks(lowDetections, unmatchedActiveTracks, 0.5); // Stricter threshold
+    const secondMatch = matchDetectionsToTracks(lowDetections, unmatchedActiveTracks, 0.5);
 
     for (const [trackIdx, detIdx] of secondMatch.matches) {
       unmatchedActiveTracks[trackIdx].update(lowDetections[detIdx]);
     }
 
-    // 6. Handle unmatched tracks (both active and lost)
-    const stillUnmatchedTracks = new Set(unmatchedActiveTracks.map((_, i) => i));
-    for (const [trackIdx, _] of secondMatch.matches) {
-      stillUnmatchedTracks.delete(trackIdx);
+    // 6. Handle unmatched active tracks
+    const stillUnmatchedActiveIndices = new Set(unmatchedActiveTracks.map((_, i) => i));
+    for (const [trackIdx] of secondMatch.matches) {
+      stillUnmatchedActiveIndices.delete(trackIdx);
     }
     
-    for (const idx of Array.from(stillUnmatchedTracks)) {
+    for (const idx of Array.from(stillUnmatchedActiveIndices)) {
       unmatchedActiveTracks[idx].markLost();
     }
 
-    for (const t of lostTracks) {
-      // Very basic: just let them stay lost until maxTimeLost
-      if (t.timeSinceUpdate > this.maxTimeLost) {
-        t.state = 'Removed';
+    // 7. Third association: Recover lost tracks using remaining unmatched high confidence detections
+    const remainingHighDetections = firstMatch.unmatchedDetections.map(idx => highDetections[idx]);
+    const thirdMatch = matchDetectionsToTracks(remainingHighDetections, lostTracks, 0.3);
+
+    for (const [lostIdx, detIdx] of thirdMatch.matches) {
+      lostTracks[lostIdx].reActivate(remainingHighDetections[detIdx]);
+    }
+
+    // Clean up lost tracks that exceeded maxTimeLost
+    const recoveredLostIndices = new Set(thirdMatch.matches.map(([lostIdx]) => lostIdx));
+    for (let i = 0; i < lostTracks.length; i++) {
+      if (!recoveredLostIndices.has(i)) {
+        if (lostTracks[i].timeSinceUpdate > this.maxTimeLost) {
+          lostTracks[i].markRemoved();
+        }
       }
     }
 
-    // 7. Create new tracks from unmatched high confidence detections
-    for (const idx of firstMatch.unmatchedDetections) {
-      this.tracks.push(new Track(highDetections[idx]));
+    // 8. Create new tracks from remaining unmatched high confidence detections
+    const stillUnmatchedHighIndices = new Set(remainingHighDetections.map((_, i) => i));
+    for (const [, detIdx] of thirdMatch.matches) {
+      stillUnmatchedHighIndices.delete(detIdx);
     }
 
-    // Clean up removed tracks
+    for (const detIdx of Array.from(stillUnmatchedHighIndices)) {
+      this.tracks.push(new Track(remainingHighDetections[detIdx]));
+    }
+
+    // 9. Clean up removed tracks
     this.tracks = this.tracks.filter(t => t.state !== 'Removed');
 
-    // Export current tracking results
+    // 10. Export current tracking results
+    // Only return fresh confirmed tracks (timeSinceUpdate <= 1) or tentative with timeSinceUpdate === 0
     return this.tracks
-      .filter(t => t.state === 'Confirmed' || (t.state === 'Tentative' && t.frameCount >= 1))
+      .filter(t => {
+        if (t.state === 'Confirmed') {
+          if (t.timeSinceUpdate > 1) return false;
+        } else if (t.state === 'Tentative') {
+          if (t.timeSinceUpdate !== 0) return false;
+        } else {
+          return false;
+        }
+
+        // Reject static roadside poles and bollards misclassified as person
+        if (t.className === 'person' && t.lastBox) {
+          const aspect = t.lastBox.h / Math.max(1, t.lastBox.w);
+          if (aspect > 3.4 || (t.lastBox.w < 12 && aspect > 2.8)) {
+            return false;
+          }
+        }
+        return true;
+      })
       .map(t => {
         const state = t.kf.getState();
+        // For freshly detected frames (timeSinceUpdate === 0), use the exact detected box
+        // to prevent any Kalman filter coordinate drift or box displacement.
+        const useDetectedBox = t.timeSinceUpdate === 0 && t.lastBox;
+        const boxX = useDetectedBox ? t.lastBox.x : state.cx;
+        const boxY = useDetectedBox ? t.lastBox.y : state.cy;
+        const boxW = useDetectedBox ? t.lastBox.w : state.w;
+        const boxH = useDetectedBox ? t.lastBox.h : state.h;
+
+        // Strict geometric validation: discard corrupt or degenerate boxes
+        if (!Number.isFinite(boxX) || !Number.isFinite(boxY) || !Number.isFinite(boxW) || !Number.isFinite(boxH)) {
+          return null;
+        }
+        if (boxW < 4 || boxH < 4) {
+          return null;
+        }
+
         return {
-          x: state.cx,
-          y: state.cy,
-          w: state.w,
-          h: state.h,
+          x: boxX,
+          y: boxY,
+          w: boxW,
+          h: boxH,
+          dx: state.dx,
+          dy: state.dy,
+          dw: state.dw,
+          dh: state.dh,
           prob: t.prob,
           classId: t.classId,
           className: t.className,
           trackId: t.trackId,
           state: t.state,
-          frameCount: t.frameCount
+          frameCount: t.frameCount,
+          timeSinceUpdate: t.timeSinceUpdate,
+          hitCount: t.hitCount
         };
-      });
+      })
+      .filter((t): t is TrackedObject => t !== null);
   }
 
   reset() {

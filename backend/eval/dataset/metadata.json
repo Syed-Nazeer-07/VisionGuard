@@ -1,0 +1,1393 @@
+{
+  "video_source": "assets\\car-detection.mp4",
+  "total_frames_in_source": 9184,
+  "source_fps": 30.0,
+  "sampled_frames_count": 119,
+  "samples": [
+    {
+      "sample_id": "sample_000",
+      "frame_index": 50,
+      "timestamp_seconds": 1.667,
+      "image_filename": "frame_00050.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_001",
+      "frame_index": 100,
+      "timestamp_seconds": 3.333,
+      "image_filename": "frame_00100.jpg",
+      "tags": [
+        "light_flow",
+        "clear_weather"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_002",
+      "frame_index": 223,
+      "timestamp_seconds": 7.433,
+      "image_filename": "frame_00223.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_003",
+      "frame_index": 250,
+      "timestamp_seconds": 8.333,
+      "image_filename": "frame_00250.jpg",
+      "tags": [
+        "distant_vehicles",
+        "lane_transition"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_004",
+      "frame_index": 396,
+      "timestamp_seconds": 13.2,
+      "image_filename": "frame_00396.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_005",
+      "frame_index": 400,
+      "timestamp_seconds": 13.333,
+      "image_filename": "frame_00400.jpg",
+      "tags": [
+        "small_vehicles",
+        "horizon"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_006",
+      "frame_index": 550,
+      "timestamp_seconds": 18.333,
+      "image_filename": "frame_00550.jpg",
+      "tags": [
+        "shadows",
+        "moderate_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_007",
+      "frame_index": 569,
+      "timestamp_seconds": 18.967,
+      "image_filename": "frame_00569.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_008",
+      "frame_index": 700,
+      "timestamp_seconds": 23.333,
+      "image_filename": "frame_00700.jpg",
+      "tags": [
+        "truck_present",
+        "moderate_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_009",
+      "frame_index": 742,
+      "timestamp_seconds": 24.733,
+      "image_filename": "frame_00742.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_010",
+      "frame_index": 850,
+      "timestamp_seconds": 28.333,
+      "image_filename": "frame_00850.jpg",
+      "tags": [
+        "truck_present",
+        "distant_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_011",
+      "frame_index": 915,
+      "timestamp_seconds": 30.5,
+      "image_filename": "frame_00915.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_012",
+      "frame_index": 950,
+      "timestamp_seconds": 31.667,
+      "image_filename": "frame_00950.jpg",
+      "tags": [
+        "bus_present",
+        "dense_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_013",
+      "frame_index": 1050,
+      "timestamp_seconds": 35.0,
+      "image_filename": "frame_01050.jpg",
+      "tags": [
+        "bus_present",
+        "truck_present",
+        "dense_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_014",
+      "frame_index": 1088,
+      "timestamp_seconds": 36.267,
+      "image_filename": "frame_01088.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_015",
+      "frame_index": 1150,
+      "timestamp_seconds": 38.333,
+      "image_filename": "frame_01150.jpg",
+      "tags": [
+        "heavy_traffic",
+        "boundary_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_016",
+      "frame_index": 1250,
+      "timestamp_seconds": 41.667,
+      "image_filename": "frame_01250.jpg",
+      "tags": [
+        "truck_present",
+        "dense_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_017",
+      "frame_index": 1261,
+      "timestamp_seconds": 42.033,
+      "image_filename": "frame_01261.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_018",
+      "frame_index": 1350,
+      "timestamp_seconds": 45.0,
+      "image_filename": "frame_01350.jpg",
+      "tags": [
+        "bus_present",
+        "truck_present",
+        "dense_traffic",
+        "overlapping_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_019",
+      "frame_index": 1434,
+      "timestamp_seconds": 47.8,
+      "image_filename": "frame_01434.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_020",
+      "frame_index": 1450,
+      "timestamp_seconds": 48.333,
+      "image_filename": "frame_01450.jpg",
+      "tags": [
+        "truck_present",
+        "dense_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_021",
+      "frame_index": 1550,
+      "timestamp_seconds": 51.667,
+      "image_filename": "frame_01550.jpg",
+      "tags": [
+        "truck_present",
+        "shadows"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_022",
+      "frame_index": 1607,
+      "timestamp_seconds": 53.567,
+      "image_filename": "frame_01607.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_023",
+      "frame_index": 1650,
+      "timestamp_seconds": 55.0,
+      "image_filename": "frame_01650.jpg",
+      "tags": [
+        "dense_traffic",
+        "multi_lane_cluster",
+        "occluded_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_024",
+      "frame_index": 1750,
+      "timestamp_seconds": 58.333,
+      "image_filename": "frame_01750.jpg",
+      "tags": [
+        "truck_present",
+        "dense_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_025",
+      "frame_index": 1780,
+      "timestamp_seconds": 59.333,
+      "image_filename": "frame_01780.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_026",
+      "frame_index": 1900,
+      "timestamp_seconds": 63.333,
+      "image_filename": "frame_01900.jpg",
+      "tags": [
+        "bus_present",
+        "dense_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_027",
+      "frame_index": 1953,
+      "timestamp_seconds": 65.1,
+      "image_filename": "frame_01953.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_028",
+      "frame_index": 2050,
+      "timestamp_seconds": 68.333,
+      "image_filename": "frame_02050.jpg",
+      "tags": [
+        "truck_present",
+        "lane_merging"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_029",
+      "frame_index": 2126,
+      "timestamp_seconds": 70.867,
+      "image_filename": "frame_02126.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_030",
+      "frame_index": 2150,
+      "timestamp_seconds": 71.667,
+      "image_filename": "frame_02150.jpg",
+      "tags": [
+        "distant_vehicles",
+        "fast_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_031",
+      "frame_index": 2250,
+      "timestamp_seconds": 75.0,
+      "image_filename": "frame_02250.jpg",
+      "tags": [
+        "bus_present",
+        "truck_present"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_032",
+      "frame_index": 2299,
+      "timestamp_seconds": 76.633,
+      "image_filename": "frame_02299.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_033",
+      "frame_index": 2380,
+      "timestamp_seconds": 79.333,
+      "image_filename": "frame_02380.jpg",
+      "tags": [
+        "shadows",
+        "reflections"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_034",
+      "frame_index": 2472,
+      "timestamp_seconds": 82.4,
+      "image_filename": "frame_02472.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_035",
+      "frame_index": 2500,
+      "timestamp_seconds": 83.333,
+      "image_filename": "frame_02500.jpg",
+      "tags": [
+        "boundary_vehicles",
+        "sparse_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_036",
+      "frame_index": 2645,
+      "timestamp_seconds": 88.167,
+      "image_filename": "frame_02645.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_037",
+      "frame_index": 2650,
+      "timestamp_seconds": 88.333,
+      "image_filename": "frame_02650.jpg",
+      "tags": [
+        "light_traffic",
+        "high_speed"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_038",
+      "frame_index": 2800,
+      "timestamp_seconds": 93.333,
+      "image_filename": "frame_02800.jpg",
+      "tags": [
+        "distant_vehicles",
+        "light_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_039",
+      "frame_index": 2818,
+      "timestamp_seconds": 93.933,
+      "image_filename": "frame_02818.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_040",
+      "frame_index": 2950,
+      "timestamp_seconds": 98.333,
+      "image_filename": "frame_02950.jpg",
+      "tags": [
+        "sparse_flow",
+        "shadows"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_041",
+      "frame_index": 2991,
+      "timestamp_seconds": 99.7,
+      "image_filename": "frame_02991.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_042",
+      "frame_index": 3100,
+      "timestamp_seconds": 103.333,
+      "image_filename": "frame_03100.jpg",
+      "tags": [
+        "truck_present",
+        "moderate_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_043",
+      "frame_index": 3164,
+      "timestamp_seconds": 105.467,
+      "image_filename": "frame_03164.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_044",
+      "frame_index": 3250,
+      "timestamp_seconds": 108.333,
+      "image_filename": "frame_03250.jpg",
+      "tags": [
+        "truck_present",
+        "distant_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_045",
+      "frame_index": 3337,
+      "timestamp_seconds": 111.233,
+      "image_filename": "frame_03337.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_046",
+      "frame_index": 3400,
+      "timestamp_seconds": 113.333,
+      "image_filename": "frame_03400.jpg",
+      "tags": [
+        "bus_present",
+        "truck_present"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_047",
+      "frame_index": 3510,
+      "timestamp_seconds": 117.0,
+      "image_filename": "frame_03510.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_048",
+      "frame_index": 3550,
+      "timestamp_seconds": 118.333,
+      "image_filename": "frame_03550.jpg",
+      "tags": [
+        "dense_traffic",
+        "overlapping_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_049",
+      "frame_index": 3683,
+      "timestamp_seconds": 122.767,
+      "image_filename": "frame_03683.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_050",
+      "frame_index": 3700,
+      "timestamp_seconds": 123.333,
+      "image_filename": "frame_03700.jpg",
+      "tags": [
+        "truck_present",
+        "moderate_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_051",
+      "frame_index": 3850,
+      "timestamp_seconds": 128.333,
+      "image_filename": "frame_03850.jpg",
+      "tags": [
+        "small_vehicles",
+        "horizon"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_052",
+      "frame_index": 3856,
+      "timestamp_seconds": 128.533,
+      "image_filename": "frame_03856.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_053",
+      "frame_index": 4000,
+      "timestamp_seconds": 133.333,
+      "image_filename": "frame_04000.jpg",
+      "tags": [
+        "bus_present",
+        "lane_cluster"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_054",
+      "frame_index": 4029,
+      "timestamp_seconds": 134.3,
+      "image_filename": "frame_04029.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_055",
+      "frame_index": 4150,
+      "timestamp_seconds": 138.333,
+      "image_filename": "frame_04150.jpg",
+      "tags": [
+        "truck_present",
+        "shadows"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_056",
+      "frame_index": 4202,
+      "timestamp_seconds": 140.067,
+      "image_filename": "frame_04202.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_057",
+      "frame_index": 4300,
+      "timestamp_seconds": 143.333,
+      "image_filename": "frame_04300.jpg",
+      "tags": [
+        "dense_traffic",
+        "occluded_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_058",
+      "frame_index": 4375,
+      "timestamp_seconds": 145.833,
+      "image_filename": "frame_04375.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_059",
+      "frame_index": 4450,
+      "timestamp_seconds": 148.333,
+      "image_filename": "frame_04450.jpg",
+      "tags": [
+        "truck_present",
+        "boundary_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_060",
+      "frame_index": 4548,
+      "timestamp_seconds": 151.6,
+      "image_filename": "frame_04548.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_061",
+      "frame_index": 4600,
+      "timestamp_seconds": 153.333,
+      "image_filename": "frame_04600.jpg",
+      "tags": [
+        "distant_vehicles",
+        "moderate_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_062",
+      "frame_index": 4721,
+      "timestamp_seconds": 157.367,
+      "image_filename": "frame_04721.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_063",
+      "frame_index": 4750,
+      "timestamp_seconds": 158.333,
+      "image_filename": "frame_04750.jpg",
+      "tags": [
+        "truck_present",
+        "shadows"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_064",
+      "frame_index": 4894,
+      "timestamp_seconds": 163.133,
+      "image_filename": "frame_04894.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_065",
+      "frame_index": 4900,
+      "timestamp_seconds": 163.333,
+      "image_filename": "frame_04900.jpg",
+      "tags": [
+        "light_traffic",
+        "clear_road"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_066",
+      "frame_index": 5050,
+      "timestamp_seconds": 168.333,
+      "image_filename": "frame_05050.jpg",
+      "tags": [
+        "dense_traffic",
+        "multi_lane"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_067",
+      "frame_index": 5067,
+      "timestamp_seconds": 168.9,
+      "image_filename": "frame_05067.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_068",
+      "frame_index": 5200,
+      "timestamp_seconds": 173.333,
+      "image_filename": "frame_05200.jpg",
+      "tags": [
+        "bus_present",
+        "truck_present"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_069",
+      "frame_index": 5240,
+      "timestamp_seconds": 174.667,
+      "image_filename": "frame_05240.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_070",
+      "frame_index": 5350,
+      "timestamp_seconds": 178.333,
+      "image_filename": "frame_05350.jpg",
+      "tags": [
+        "dense_traffic",
+        "peak_congestion",
+        "overlapping_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_071",
+      "frame_index": 5400,
+      "timestamp_seconds": 180.0,
+      "image_filename": "frame_05400.jpg",
+      "tags": [
+        "peak_density",
+        "occluded_vehicles",
+        "overlapping_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_072",
+      "frame_index": 5413,
+      "timestamp_seconds": 180.433,
+      "image_filename": "frame_05413.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_073",
+      "frame_index": 5500,
+      "timestamp_seconds": 183.333,
+      "image_filename": "frame_05500.jpg",
+      "tags": [
+        "dense_traffic",
+        "truck_present"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_074",
+      "frame_index": 5586,
+      "timestamp_seconds": 186.2,
+      "image_filename": "frame_05586.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_075",
+      "frame_index": 5600,
+      "timestamp_seconds": 186.667,
+      "image_filename": "frame_05600.jpg",
+      "tags": [
+        "dense_traffic",
+        "boundary_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_076",
+      "frame_index": 5700,
+      "timestamp_seconds": 190.0,
+      "image_filename": "frame_05700.jpg",
+      "tags": [
+        "peak_density",
+        "distant_vehicles",
+        "overlapping_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_077",
+      "frame_index": 5759,
+      "timestamp_seconds": 191.967,
+      "image_filename": "frame_05759.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_078",
+      "frame_index": 5800,
+      "timestamp_seconds": 193.333,
+      "image_filename": "frame_05800.jpg",
+      "tags": [
+        "bus_present",
+        "truck_present",
+        "dense_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_079",
+      "frame_index": 5900,
+      "timestamp_seconds": 196.667,
+      "image_filename": "frame_05900.jpg",
+      "tags": [
+        "dense_traffic",
+        "multi_lane_cluster"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_080",
+      "frame_index": 5932,
+      "timestamp_seconds": 197.733,
+      "image_filename": "frame_05932.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_081",
+      "frame_index": 6000,
+      "timestamp_seconds": 200.0,
+      "image_filename": "frame_06000.jpg",
+      "tags": [
+        "truck_present",
+        "dense_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_082",
+      "frame_index": 6105,
+      "timestamp_seconds": 203.5,
+      "image_filename": "frame_06105.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_083",
+      "frame_index": 6150,
+      "timestamp_seconds": 205.0,
+      "image_filename": "frame_06150.jpg",
+      "tags": [
+        "truck_present",
+        "shadows"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_084",
+      "frame_index": 6278,
+      "timestamp_seconds": 209.267,
+      "image_filename": "frame_06278.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_085",
+      "frame_index": 6300,
+      "timestamp_seconds": 210.0,
+      "image_filename": "frame_06300.jpg",
+      "tags": [
+        "bus_present",
+        "moderate_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_086",
+      "frame_index": 6450,
+      "timestamp_seconds": 215.0,
+      "image_filename": "frame_06450.jpg",
+      "tags": [
+        "dense_traffic",
+        "boundary_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_087",
+      "frame_index": 6451,
+      "timestamp_seconds": 215.033,
+      "image_filename": "frame_06451.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_088",
+      "frame_index": 6600,
+      "timestamp_seconds": 220.0,
+      "image_filename": "frame_06600.jpg",
+      "tags": [
+        "truck_present",
+        "lane_merging"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_089",
+      "frame_index": 6624,
+      "timestamp_seconds": 220.8,
+      "image_filename": "frame_06624.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_090",
+      "frame_index": 6750,
+      "timestamp_seconds": 225.0,
+      "image_filename": "frame_06750.jpg",
+      "tags": [
+        "distant_vehicles",
+        "moderate_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_091",
+      "frame_index": 6797,
+      "timestamp_seconds": 226.567,
+      "image_filename": "frame_06797.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_092",
+      "frame_index": 6900,
+      "timestamp_seconds": 230.0,
+      "image_filename": "frame_06900.jpg",
+      "tags": [
+        "light_flow",
+        "clear_path"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_093",
+      "frame_index": 6970,
+      "timestamp_seconds": 232.333,
+      "image_filename": "frame_06970.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_094",
+      "frame_index": 7050,
+      "timestamp_seconds": 235.0,
+      "image_filename": "frame_07050.jpg",
+      "tags": [
+        "truck_present",
+        "light_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_095",
+      "frame_index": 7143,
+      "timestamp_seconds": 238.1,
+      "image_filename": "frame_07143.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_096",
+      "frame_index": 7200,
+      "timestamp_seconds": 240.0,
+      "image_filename": "frame_07200.jpg",
+      "tags": [
+        "light_shift",
+        "shadows",
+        "moderate_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_097",
+      "frame_index": 7316,
+      "timestamp_seconds": 243.867,
+      "image_filename": "frame_07316.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_098",
+      "frame_index": 7350,
+      "timestamp_seconds": 245.0,
+      "image_filename": "frame_07350.jpg",
+      "tags": [
+        "truck_present",
+        "distant_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_099",
+      "frame_index": 7489,
+      "timestamp_seconds": 249.633,
+      "image_filename": "frame_07489.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_100",
+      "frame_index": 7500,
+      "timestamp_seconds": 250.0,
+      "image_filename": "frame_07500.jpg",
+      "tags": [
+        "moderate_flow",
+        "boundary_vehicles"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_101",
+      "frame_index": 7650,
+      "timestamp_seconds": 255.0,
+      "image_filename": "frame_07650.jpg",
+      "tags": [
+        "truck_present",
+        "shadows"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_102",
+      "frame_index": 7662,
+      "timestamp_seconds": 255.4,
+      "image_filename": "frame_07662.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_103",
+      "frame_index": 7800,
+      "timestamp_seconds": 260.0,
+      "image_filename": "frame_07800.jpg",
+      "tags": [
+        "distant_vehicles",
+        "reflections"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_104",
+      "frame_index": 7835,
+      "timestamp_seconds": 261.167,
+      "image_filename": "frame_07835.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_105",
+      "frame_index": 7950,
+      "timestamp_seconds": 265.0,
+      "image_filename": "frame_07950.jpg",
+      "tags": [
+        "dense_traffic",
+        "multi_lane"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_106",
+      "frame_index": 8008,
+      "timestamp_seconds": 266.933,
+      "image_filename": "frame_08008.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_107",
+      "frame_index": 8100,
+      "timestamp_seconds": 270.0,
+      "image_filename": "frame_08100.jpg",
+      "tags": [
+        "truck_present",
+        "light_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_108",
+      "frame_index": 8181,
+      "timestamp_seconds": 272.7,
+      "image_filename": "frame_08181.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_109",
+      "frame_index": 8250,
+      "timestamp_seconds": 275.0,
+      "image_filename": "frame_08250.jpg",
+      "tags": [
+        "moderate_flow",
+        "clear_view"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_110",
+      "frame_index": 8354,
+      "timestamp_seconds": 278.467,
+      "image_filename": "frame_08354.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_111",
+      "frame_index": 8400,
+      "timestamp_seconds": 280.0,
+      "image_filename": "frame_08400.jpg",
+      "tags": [
+        "truck_present",
+        "shadows"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_112",
+      "frame_index": 8527,
+      "timestamp_seconds": 284.233,
+      "image_filename": "frame_08527.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_113",
+      "frame_index": 8550,
+      "timestamp_seconds": 285.0,
+      "image_filename": "frame_08550.jpg",
+      "tags": [
+        "boundary_vehicles",
+        "light_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_114",
+      "frame_index": 8700,
+      "timestamp_seconds": 290.0,
+      "image_filename": "frame_08700.jpg",
+      "tags": [
+        "distant_vehicles",
+        "light_flow"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_115",
+      "frame_index": 8850,
+      "timestamp_seconds": 295.0,
+      "image_filename": "frame_08850.jpg",
+      "tags": [
+        "moderate_flow",
+        "reflections"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_116",
+      "frame_index": 8873,
+      "timestamp_seconds": 295.767,
+      "image_filename": "frame_08873.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_117",
+      "frame_index": 9000,
+      "timestamp_seconds": 300.0,
+      "image_filename": "frame_09000.jpg",
+      "tags": [
+        "truck_present",
+        "tail_traffic"
+      ],
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "sample_id": "sample_118",
+      "frame_index": 9046,
+      "timestamp_seconds": 301.533,
+      "image_filename": "frame_09046.jpg",
+      "tags": [
+        "systematic_sample"
+      ],
+      "width": 1920,
+      "height": 1080
+    }
+  ]
+}

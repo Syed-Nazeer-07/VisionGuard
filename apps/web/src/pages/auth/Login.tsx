@@ -190,69 +190,87 @@ export function Login() {
       className="min-h-screen flex bg-white"
     >
       
-      {/* Left Panel - Brand Showcase (Hidden on Mobile) */}
-      <div className="hidden lg:flex lg:w-[55%] relative bg-slate-100 flex-col justify-center px-12 xl:px-20 border-r border-gray-200 overflow-hidden">
+      {/* Left Panel - Roadway Surveillance Showcase (Dedicated Sign In Visual Panel) */}
+      <div className="hidden lg:flex lg:w-[52%] xl:w-[54%] relative bg-slate-950 flex-col justify-between p-12 xl:p-16 border-r border-slate-800 overflow-hidden text-white select-none">
+        {/* Photorealistic Roadway CCTV Surveillance Background Image */}
+        <div className="absolute inset-0 z-0">
+          <img 
+            src="/signin_hero.jpg" 
+            alt="VisionGuard Roadway CCTV Surveillance" 
+            className="w-full h-full object-cover object-center filter brightness-[0.76] contrast-[1.12]"
+          />
+          {/* Subtle dark gradient scrim matching navy and indigo palette */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/75 to-slate-950/80" />
+          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-slate-950/60" />
+        </div>
         
-        {/* Top Brand Logo */}
-        <div className="absolute top-8 left-12 xl:left-20 flex items-center">
+        {/* Top Brand Logo & Status Indicator */}
+        <div className="relative z-10 flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-2.5 group">
-            <Shield className="w-7 h-7 text-gray-900" />
-            <span className="text-xl font-bold text-gray-900 tracking-tight">VisionGuard</span>
+            <div className="w-9 h-9 rounded-lg bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-xl font-bold text-white tracking-tight">VisionGuard</span>
           </Link>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/60 text-xs font-mono text-emerald-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span>SYSTEM ONLINE</span>
+          </div>
         </div>
 
-        {/* Center Content */}
-        <div className="relative z-10 w-full mt-4">
-          <div className="max-w-[500px]">
-            <h1 className="text-4xl xl:text-[42px] font-bold text-gray-900 leading-[1.1] mb-3 tracking-tight">
-              Traffic Intelligence for Modern Operations
+        {/* Center Editorial Content */}
+        <div className="relative z-10 my-auto py-8">
+          <div className="max-w-[480px]">
+            <div className="inline-block px-2.5 py-1 mb-4 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold tracking-wider uppercase font-mono">
+              Roadway Surveillance & Control
+            </div>
+            <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-4 tracking-tight">
+              Real-Time Situational Awareness for Modern Transit Networks
             </h1>
-            <p className="text-[16px] text-gray-600 leading-snug mb-8">
-              Access the VisionGuard Control Room to monitor traffic activity, review analytics, and manage operational alerts.
+            <p className="text-[15px] text-slate-300 leading-relaxed mb-8">
+              Access the VisionGuard Operations Center to monitor active camera streams, analyze flow telemetry, and manage roadway alerts.
             </p>
           </div>
           
-          {/* Dashboard Preview Image */}
-          <div className="relative w-full mt-8">
-            <div className="relative rounded-xl overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.08)] bg-white border border-gray-200/60 flex flex-col">
-              {/* Browser Header */}
-              <div className="h-8 bg-gray-50 border-b border-gray-100 flex items-center px-4 space-x-2 shrink-0">
-                <div className="w-2.5 h-2.5 rounded-full bg-gray-300"></div>
-                <div className="w-2.5 h-2.5 rounded-full bg-gray-300"></div>
-                <div className="w-2.5 h-2.5 rounded-full bg-gray-300"></div>
+          {/* Surveillance Telemetry HUD Card */}
+          <div className="rounded-xl bg-slate-900/80 backdrop-blur-md border border-slate-800 p-4 shadow-xl max-w-[480px]">
+            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 mb-3 text-xs font-mono text-slate-400">
+              <span className="text-slate-200 font-medium">CAM-09B · INTERSTATE ARTERIAL</span>
+              <span className="text-emerald-400">FPS: 29.8 · 1080p</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
+                <div className="text-[11px] text-slate-400 uppercase">Detection</div>
+                <div className="text-sm font-bold text-white mt-0.5">YOLO11-Nano</div>
               </div>
-              <img 
-                src="/platform_preview.png" 
-                alt="VisionGuard Platform Overview" 
-                className="w-full h-auto object-cover"
-              />
+              <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
+                <div className="text-[11px] text-slate-400 uppercase">Tracking</div>
+                <div className="text-sm font-bold text-white mt-0.5">ByteTrack</div>
+              </div>
+              <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
+                <div className="text-[11px] text-slate-400 uppercase">Velocity</div>
+                <div className="text-sm font-bold text-indigo-300 mt-0.5">Calibrated</div>
+              </div>
             </div>
           </div>
           
-          {/* Feature Badges below image */}
-          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2">
-            {[
-              "Browser-Based",
-              "Real-Time Monitoring",
-              "Operational Analytics",
-              "Multi-Camera Support"
-            ].map((feature, i) => (
-              <div key={i} className="flex items-center space-x-1.5 text-[13px] font-semibold text-gray-500">
-                <CheckCircle2 className="w-4 h-4 text-gray-400" />
-                <span>{feature}</span>
-              </div>
-            ))}
+          {/* Feature Badges */}
+          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-[13px] font-medium text-slate-300">
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Multi-Camera Ingest</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> WebGPU & Local Backend</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Sub-Second Incident Alerting</span>
           </div>
         </div>
 
-        {/* Bottom copyright */}
-        <div className="absolute bottom-8 left-12 xl:left-20">
-          <p className="text-[13px] font-medium text-gray-400">© 2026 VisionGuard Inc.</p>
+        {/* Bottom Security / Copyright */}
+        <div className="relative z-10 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/60 pt-4">
+          <span>Enterprise Role-Based Access Control</span>
+          <span>© 2026 VisionGuard AI</span>
         </div>
       </div>
 
       {/* Right Panel - Auth Form */}
-      <div className="w-full lg:w-[45%] flex flex-col items-center justify-center p-6 sm:p-12 bg-white relative h-screen overflow-y-auto">
+      <div className="w-full lg:w-[48%] xl:w-[46%] flex flex-col items-center justify-center p-6 sm:p-12 bg-white relative h-screen overflow-y-auto">
         
         {/* Mobile Logo Header */}
         <div className="absolute top-8 left-8 lg:hidden flex items-center space-x-2">

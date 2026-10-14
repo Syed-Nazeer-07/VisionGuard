@@ -1,0 +1,138 @@
+{
+  "common_frames_count": 26,
+  "common_balanced": {
+    "tp": 227,
+    "fp": 85,
+    "fn": 146,
+    "duplicate_detections": 0,
+    "precision": 0.7276,
+    "recall": 0.6086,
+    "f1": 0.6628
+  },
+  "common_high_recall": {
+    "tp": 256,
+    "fp": 94,
+    "fn": 117,
+    "duplicate_detections": 1,
+    "precision": 0.7314,
+    "recall": 0.6863,
+    "f1": 0.7082
+  },
+  "all_frames_count": 119,
+  "full_balanced": {
+    "tp": 1114,
+    "fp": 430,
+    "fn": 673,
+    "duplicate_detections": 3,
+    "precision": 0.7215,
+    "recall": 0.6234,
+    "f1": 0.6689
+  },
+  "full_high_recall": {
+    "tp": 1209,
+    "fp": 478,
+    "fn": 578,
+    "duplicate_detections": 4,
+    "precision": 0.7167,
+    "recall": 0.6766,
+    "f1": 0.696
+  },
+  "fast_temporal_balanced": {
+    "strict_raw": {
+      "tp": 227,
+      "fp": 85,
+      "fn": 1560,
+      "duplicate_detections": 0,
+      "precision": 0.7276,
+      "recall": 0.127,
+      "f1": 0.2163
+    },
+    "ui_playback": {
+      "tp": 520,
+      "fp": 935,
+      "fn": 1267,
+      "duplicate_detections": 3,
+      "precision": 0.3574,
+      "recall": 0.291,
+      "f1": 0.3208
+    }
+  },
+  "fast_temporal_high_recall": {
+    "strict_raw": {
+      "tp": 256,
+      "fp": 94,
+      "fn": 1531,
+      "duplicate_detections": 1,
+      "precision": 0.7314,
+      "recall": 0.1433,
+      "f1": 0.2396
+    },
+    "ui_playback": {
+      "tp": 612,
+      "fp": 1015,
+      "fn": 1175,
+      "duplicate_detections": 5,
+      "precision": 0.3762,
+      "recall": 0.3425,
+      "f1": 0.3585
+    }
+  },
+  "timestamp_matching": [
+    {
+      "time": 0.0,
+      "desc": "exact start",
+      "expected": 1,
+      "matched": 1,
+      "ok": true
+    },
+    {
+      "time": 0.0333,
+      "desc": "skipped frame 2 (nearest frame 1)",
+      "expected": 1,
+      "matched": 1,
+      "ok": true
+    },
+    {
+      "time": 0.0667,
+      "desc": "exact frame 3",
+      "expected": 3,
+      "matched": 3,
+      "ok": true
+    },
+    {
+      "time": 0.1,
+      "desc": "skipped frame 4 (nearest frame 3 or 5)",
+      "expected": 3,
+      "matched": 5,
+      "ok": true
+    },
+    {
+      "time": 0.1333,
+      "desc": "exact frame 5",
+      "expected": 5,
+      "matched": 5,
+      "ok": true
+    },
+    {
+      "time": -0.05,
+      "desc": "negative seek before start (within tolerance)",
+      "expected": 1,
+      "matched": 1,
+      "ok": true
+    },
+    {
+      "time": 9.9667,
+      "desc": "end frame",
+      "expected": 299,
+      "matched": 299,
+      "ok": true
+    },
+    {
+      "time": 10.5,
+      "desc": "beyond video end (outside tolerance)",
+      "expected": null,
+      "matched": null,
+      "ok": true
+    }
+  ]
+}

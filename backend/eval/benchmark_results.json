@@ -1,0 +1,636 @@
+{
+  "timestamp": "2026-10-13 09:12:27",
+  "dataset_info": {
+    "total_frames": 119,
+    "total_annotations": 1787,
+    "classes": [
+      "car",
+      "truck",
+      "bus",
+      "motorcycle"
+    ]
+  },
+  "hardware_info": {
+    "provider": "DmlExecutionProvider",
+    "intra_threads": 8,
+    "inter_threads": 1
+  },
+  "baseline_production": {
+    "config": {
+      "conf": 0.2,
+      "iou": 0.45,
+      "input_size": 640
+    },
+    "performance": {
+      "total_time_seconds": 5.49,
+      "fps": 21.68
+    },
+    "evaluation": {
+      "total_frames": 119,
+      "metrics": {
+        "iou_50": {
+          "iou_threshold": 0.5,
+          "overall": {
+            "tp": 1114,
+            "fp": 430,
+            "fn": 673,
+            "duplicate_detections": 3,
+            "precision": 0.7215,
+            "recall": 0.6234,
+            "f1": 0.6689
+          },
+          "per_class": {
+            "car": {
+              "tp": 959,
+              "fp": 426,
+              "fn": 392,
+              "precision": 0.6924,
+              "recall": 0.7098,
+              "f1": 0.701,
+              "mean_iou": 0.927
+            },
+            "truck": {
+              "tp": 124,
+              "fp": 1,
+              "fn": 242,
+              "precision": 0.992,
+              "recall": 0.3388,
+              "f1": 0.5051,
+              "mean_iou": 0.9614
+            },
+            "bus": {
+              "tp": 28,
+              "fp": 3,
+              "fn": 32,
+              "precision": 0.9032,
+              "recall": 0.4667,
+              "f1": 0.6154,
+              "mean_iou": 0.9482
+            },
+            "motorcycle": {
+              "tp": 3,
+              "fp": 0,
+              "fn": 7,
+              "precision": 1.0,
+              "recall": 0.3,
+              "f1": 0.4615,
+              "mean_iou": 0.9077
+            }
+          },
+          "per_size": {
+            "small": {
+              "tp": 0,
+              "fp": 12,
+              "fn": 14,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "medium": {
+              "tp": 725,
+              "fp": 289,
+              "fn": 294,
+              "precision": 0.715,
+              "recall": 0.7115,
+              "f1": 0.7132
+            },
+            "large": {
+              "tp": 389,
+              "fp": 129,
+              "fn": 365,
+              "precision": 0.751,
+              "recall": 0.5159,
+              "f1": 0.6116
+            }
+          },
+          "iou_distribution": {
+            "count": 1114,
+            "mean": 0.9313,
+            "median": 0.9443,
+            "min": 0.6023,
+            "max": 0.9999,
+            "std": 0.0614
+          },
+          "confusion_matrix": {
+            "car": {
+              "car": 0,
+              "truck": 0,
+              "bus": 1,
+              "motorcycle": 0
+            },
+            "truck": {
+              "car": 125,
+              "truck": 0,
+              "bus": 2,
+              "motorcycle": 0
+            },
+            "bus": {
+              "car": 1,
+              "truck": 0,
+              "bus": 0,
+              "motorcycle": 0
+            },
+            "motorcycle": {
+              "car": 0,
+              "truck": 0,
+              "bus": 0,
+              "motorcycle": 0
+            }
+          }
+        },
+        "iou_75": {
+          "iou_threshold": 0.75,
+          "overall": {
+            "tp": 1097,
+            "fp": 447,
+            "fn": 690,
+            "duplicate_detections": 0,
+            "precision": 0.7105,
+            "recall": 0.6139,
+            "f1": 0.6587
+          },
+          "per_class": {
+            "car": {
+              "tp": 943,
+              "fp": 442,
+              "fn": 408,
+              "precision": 0.6809,
+              "recall": 0.698,
+              "f1": 0.6893,
+              "mean_iou": 0.9309
+            },
+            "truck": {
+              "tp": 123,
+              "fp": 2,
+              "fn": 243,
+              "precision": 0.984,
+              "recall": 0.3361,
+              "f1": 0.501,
+              "mean_iou": 0.9642
+            },
+            "bus": {
+              "tp": 28,
+              "fp": 3,
+              "fn": 32,
+              "precision": 0.9032,
+              "recall": 0.4667,
+              "f1": 0.6154,
+              "mean_iou": 0.9482
+            },
+            "motorcycle": {
+              "tp": 3,
+              "fp": 0,
+              "fn": 7,
+              "precision": 1.0,
+              "recall": 0.3,
+              "f1": 0.4615,
+              "mean_iou": 0.9077
+            }
+          },
+          "per_size": {
+            "small": {
+              "tp": 0,
+              "fp": 12,
+              "fn": 14,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "medium": {
+              "tp": 713,
+              "fp": 301,
+              "fn": 306,
+              "precision": 0.7032,
+              "recall": 0.6997,
+              "f1": 0.7014
+            },
+            "large": {
+              "tp": 384,
+              "fp": 134,
+              "fn": 370,
+              "precision": 0.7413,
+              "recall": 0.5093,
+              "f1": 0.6038
+            }
+          },
+          "iou_distribution": {
+            "count": 1097,
+            "mean": 0.9351,
+            "median": 0.9452,
+            "min": 0.751,
+            "max": 0.9999,
+            "std": 0.0538
+          },
+          "confusion_matrix": {
+            "car": {
+              "car": 0,
+              "truck": 0,
+              "bus": 1,
+              "motorcycle": 0
+            },
+            "truck": {
+              "car": 118,
+              "truck": 0,
+              "bus": 2,
+              "motorcycle": 0
+            },
+            "bus": {
+              "car": 1,
+              "truck": 0,
+              "bus": 0,
+              "motorcycle": 0
+            },
+            "motorcycle": {
+              "car": 0,
+              "truck": 0,
+              "bus": 0,
+              "motorcycle": 0
+            }
+          }
+        }
+      }
+    }
+  },
+  "parameter_sweep": [
+    {
+      "name": "Conf 0.15, IoU 0.45 (High Recall)",
+      "conf": 0.15,
+      "iou_th": 0.45,
+      "fps": 21.7,
+      "iou_50": {
+        "tp": 1209,
+        "fp": 478,
+        "fn": 578,
+        "duplicate_detections": 4,
+        "precision": 0.7167,
+        "recall": 0.6766,
+        "f1": 0.696
+      },
+      "iou_75": {
+        "tp": 1186,
+        "fp": 501,
+        "fn": 601,
+        "duplicate_detections": 0,
+        "precision": 0.703,
+        "recall": 0.6637,
+        "f1": 0.6828
+      }
+    },
+    {
+      "name": "Conf 0.20, IoU 0.45 (Production Baseline)",
+      "conf": 0.2,
+      "iou_th": 0.45,
+      "fps": 21.6,
+      "iou_50": {
+        "tp": 1114,
+        "fp": 430,
+        "fn": 673,
+        "duplicate_detections": 3,
+        "precision": 0.7215,
+        "recall": 0.6234,
+        "f1": 0.6689
+      },
+      "iou_75": {
+        "tp": 1097,
+        "fp": 447,
+        "fn": 690,
+        "duplicate_detections": 0,
+        "precision": 0.7105,
+        "recall": 0.6139,
+        "f1": 0.6587
+      }
+    },
+    {
+      "name": "Conf 0.25, IoU 0.45 (Balanced)",
+      "conf": 0.25,
+      "iou_th": 0.45,
+      "fps": 21.8,
+      "iou_50": {
+        "tp": 1035,
+        "fp": 380,
+        "fn": 752,
+        "duplicate_detections": 1,
+        "precision": 0.7314,
+        "recall": 0.5792,
+        "f1": 0.6465
+      },
+      "iou_75": {
+        "tp": 1021,
+        "fp": 394,
+        "fn": 766,
+        "duplicate_detections": 0,
+        "precision": 0.7216,
+        "recall": 0.5713,
+        "f1": 0.6377
+      }
+    },
+    {
+      "name": "Conf 0.30, IoU 0.45 (High Precision)",
+      "conf": 0.3,
+      "iou_th": 0.45,
+      "fps": 17.5,
+      "iou_50": {
+        "tp": 984,
+        "fp": 338,
+        "fn": 803,
+        "duplicate_detections": 1,
+        "precision": 0.7443,
+        "recall": 0.5506,
+        "f1": 0.633
+      },
+      "iou_75": {
+        "tp": 970,
+        "fp": 352,
+        "fn": 817,
+        "duplicate_detections": 0,
+        "precision": 0.7337,
+        "recall": 0.5428,
+        "f1": 0.624
+      }
+    },
+    {
+      "name": "Conf 0.20, IoU 0.35 (Strict NMS)",
+      "conf": 0.2,
+      "iou_th": 0.35,
+      "fps": 17.2,
+      "iou_50": {
+        "tp": 1102,
+        "fp": 420,
+        "fn": 685,
+        "duplicate_detections": 0,
+        "precision": 0.724,
+        "recall": 0.6167,
+        "f1": 0.6661
+      },
+      "iou_75": {
+        "tp": 1084,
+        "fp": 438,
+        "fn": 703,
+        "duplicate_detections": 0,
+        "precision": 0.7122,
+        "recall": 0.6066,
+        "f1": 0.6552
+      }
+    },
+    {
+      "name": "Conf 0.20, IoU 0.55 (Relaxed NMS)",
+      "conf": 0.2,
+      "iou_th": 0.55,
+      "fps": 17.0,
+      "iou_50": {
+        "tp": 1121,
+        "fp": 454,
+        "fn": 666,
+        "duplicate_detections": 14,
+        "precision": 0.7117,
+        "recall": 0.6273,
+        "f1": 0.6669
+      },
+      "iou_75": {
+        "tp": 1100,
+        "fp": 475,
+        "fn": 687,
+        "duplicate_detections": 0,
+        "precision": 0.6984,
+        "recall": 0.6156,
+        "f1": 0.6544
+      }
+    }
+  ],
+  "horizon_enhanced": {
+    "config": {
+      "conf": 0.2,
+      "iou": 0.45,
+      "tiled_horizon": true
+    },
+    "performance": {
+      "total_time_seconds": 10.31,
+      "fps": 11.54
+    },
+    "evaluation": {
+      "total_frames": 119,
+      "metrics": {
+        "iou_50": {
+          "iou_threshold": 0.5,
+          "overall": {
+            "tp": 1144,
+            "fp": 527,
+            "fn": 643,
+            "duplicate_detections": 23,
+            "precision": 0.6846,
+            "recall": 0.6402,
+            "f1": 0.6617
+          },
+          "per_class": {
+            "car": {
+              "tp": 981,
+              "fp": 511,
+              "fn": 370,
+              "precision": 0.6575,
+              "recall": 0.7261,
+              "f1": 0.6901,
+              "mean_iou": 0.9195
+            },
+            "truck": {
+              "tp": 128,
+              "fp": 9,
+              "fn": 238,
+              "precision": 0.9343,
+              "recall": 0.3497,
+              "f1": 0.5089,
+              "mean_iou": 0.9496
+            },
+            "bus": {
+              "tp": 30,
+              "fp": 7,
+              "fn": 30,
+              "precision": 0.8108,
+              "recall": 0.5,
+              "f1": 0.6186,
+              "mean_iou": 0.9357
+            },
+            "motorcycle": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1.0,
+              "recall": 0.5,
+              "f1": 0.6667,
+              "mean_iou": 0.8242
+            }
+          },
+          "per_size": {
+            "small": {
+              "tp": 0,
+              "fp": 13,
+              "fn": 14,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "medium": {
+              "tp": 740,
+              "fp": 345,
+              "fn": 279,
+              "precision": 0.682,
+              "recall": 0.7262,
+              "f1": 0.7034
+            },
+            "large": {
+              "tp": 404,
+              "fp": 169,
+              "fn": 350,
+              "precision": 0.7051,
+              "recall": 0.5358,
+              "f1": 0.6089
+            }
+          },
+          "iou_distribution": {
+            "count": 1144,
+            "mean": 0.9229,
+            "median": 0.9429,
+            "min": 0.5035,
+            "max": 0.9999,
+            "std": 0.0802
+          },
+          "confusion_matrix": {
+            "car": {
+              "car": 0,
+              "truck": 0,
+              "bus": 1,
+              "motorcycle": 0
+            },
+            "truck": {
+              "car": 130,
+              "truck": 0,
+              "bus": 3,
+              "motorcycle": 0
+            },
+            "bus": {
+              "car": 2,
+              "truck": 2,
+              "bus": 0,
+              "motorcycle": 0
+            },
+            "motorcycle": {
+              "car": 0,
+              "truck": 0,
+              "bus": 0,
+              "motorcycle": 0
+            }
+          }
+        },
+        "iou_75": {
+          "iou_threshold": 0.75,
+          "overall": {
+            "tp": 1116,
+            "fp": 555,
+            "fn": 671,
+            "duplicate_detections": 1,
+            "precision": 0.6679,
+            "recall": 0.6245,
+            "f1": 0.6455
+          },
+          "per_class": {
+            "car": {
+              "tp": 958,
+              "fp": 534,
+              "fn": 393,
+              "precision": 0.6421,
+              "recall": 0.7091,
+              "f1": 0.6739,
+              "mean_iou": 0.9302
+            },
+            "truck": {
+              "tp": 124,
+              "fp": 13,
+              "fn": 242,
+              "precision": 0.9051,
+              "recall": 0.3388,
+              "f1": 0.493,
+              "mean_iou": 0.9637
+            },
+            "bus": {
+              "tp": 30,
+              "fp": 7,
+              "fn": 30,
+              "precision": 0.8108,
+              "recall": 0.5,
+              "f1": 0.6186,
+              "mean_iou": 0.9357
+            },
+            "motorcycle": {
+              "tp": 4,
+              "fp": 1,
+              "fn": 6,
+              "precision": 0.8,
+              "recall": 0.4,
+              "f1": 0.5333,
+              "mean_iou": 0.8978
+            }
+          },
+          "per_size": {
+            "small": {
+              "tp": 0,
+              "fp": 13,
+              "fn": 14,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0
+            },
+            "medium": {
+              "tp": 721,
+              "fp": 364,
+              "fn": 298,
+              "precision": 0.6645,
+              "recall": 0.7076,
+              "f1": 0.6854
+            },
+            "large": {
+              "tp": 395,
+              "fp": 178,
+              "fn": 359,
+              "precision": 0.6894,
+              "recall": 0.5239,
+              "f1": 0.5953
+            }
+          },
+          "iou_distribution": {
+            "count": 1116,
+            "mean": 0.934,
+            "median": 0.9442,
+            "min": 0.751,
+            "max": 0.9999,
+            "std": 0.0545
+          },
+          "confusion_matrix": {
+            "car": {
+              "car": 0,
+              "truck": 0,
+              "bus": 1,
+              "motorcycle": 0
+            },
+            "truck": {
+              "car": 119,
+              "truck": 0,
+              "bus": 2,
+              "motorcycle": 0
+            },
+            "bus": {
+              "car": 2,
+              "truck": 0,
+              "bus": 0,
+              "motorcycle": 0
+            },
+            "motorcycle": {
+              "car": 0,
+              "truck": 0,
+              "bus": 0,
+              "motorcycle": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

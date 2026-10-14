@@ -209,21 +209,56 @@ export function Landing() {
             </div>
           </FadeInSection>
 
-          {/* Professional Composite Visual */}
+          {/* Professional Composite Traffic Intelligence Visual */}
           <FadeInSection delay={300}>
             <div className="relative max-w-5xl mx-auto transition-transform hover:-translate-y-1 duration-500">
-              <div className="absolute inset-0 bg-gray-200 rounded-xl blur-xl opacity-40 transform translate-y-6"></div>
-              <div className="relative rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden ring-1 ring-gray-900/5 flex flex-col">
-                <div className="h-10 border-b border-gray-100 bg-gray-50 flex items-center px-4 gap-2">
-                  <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-                  <div className="w-3 h-3 rounded-full bg-gray-300"></div>
-                  <div className="w-3 h-3 rounded-full bg-gray-300"></div>
+              <div className="absolute inset-0 bg-indigo-500/10 rounded-2xl blur-2xl opacity-60 transform translate-y-6"></div>
+              <div className="relative rounded-2xl border border-slate-200/90 bg-slate-900 shadow-2xl overflow-hidden ring-1 ring-slate-900/10 flex flex-col text-left">
+                {/* Surveillance Stream Header */}
+                <div className="h-10 border-b border-slate-800 bg-slate-950/90 backdrop-blur px-4 flex items-center justify-between text-xs font-mono text-slate-300">
+                  <div className="flex items-center gap-2.5">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <span className="font-semibold text-emerald-400 tracking-wide text-[11px] sm:text-xs">LIVE MONITORING</span>
+                    <span className="text-slate-600">|</span>
+                    <span className="text-slate-300 text-[11px] sm:text-xs hidden sm:inline">HIGHWAY CORRIDOR 04 · NORTHBOUND EXPRESSWAY</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-slate-400 text-[11px]">
+                    <span className="hidden md:inline font-mono">1920×1080 · 30 FPS</span>
+                    <span className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-medium border border-indigo-500/30">AI VISION INFERENCE</span>
+                  </div>
                 </div>
-                <img 
-                  src="/dashboard_hero.png" 
-                  alt="VisionGuard Traffic Monitoring Composite" 
-                  className="w-full h-auto object-cover border-t border-gray-50"
-                />
+
+                {/* Hero Traffic Visual with Telemetry Scrim */}
+                <div className="relative w-full aspect-[16/9] max-h-[560px] overflow-hidden bg-slate-950">
+                  <img 
+                    src="/landing_hero.jpg" 
+                    alt="VisionGuard Highway Corridor Traffic Intelligence" 
+                    className="w-full h-full object-cover object-center transform hover:scale-[1.01] transition-transform duration-700"
+                  />
+                  {/* Subtle dark gradient scrim at bottom */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-transparent pointer-events-none" />
+
+                  {/* Active Telemetry Overlay HUD */}
+                  <div className="absolute bottom-4 left-4 right-4 flex flex-wrap items-end justify-between gap-3 pointer-events-none">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="bg-slate-900/85 backdrop-blur-md border border-slate-700/60 rounded-lg px-3 py-1.5 text-left text-xs shadow-lg">
+                        <span className="block text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Multi-Lane Flow Rate</span>
+                        <span className="font-bold text-white text-xs sm:text-sm">2,480 veh/hr · <span className="text-emerald-400 font-medium">Optimal Flow</span></span>
+                      </div>
+                      <div className="hidden sm:block bg-slate-900/85 backdrop-blur-md border border-slate-700/60 rounded-lg px-3 py-1.5 text-left text-xs shadow-lg">
+                        <span className="block text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Classification Engine</span>
+                        <span className="font-bold text-white text-xs sm:text-sm">Cars, Trucks, 2-Wheelers</span>
+                      </div>
+                    </div>
+                    <div className="bg-slate-900/85 backdrop-blur-md border border-slate-700/60 rounded-lg px-3 py-1.5 text-right text-xs shadow-lg">
+                      <span className="block text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Mean Velocity</span>
+                      <span className="font-bold text-indigo-300 text-xs sm:text-sm">62.4 km/h calibrated</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </FadeInSection>
@@ -301,8 +336,8 @@ export function Landing() {
                     <div className="w-2.5 h-2.5 rounded-full bg-gray-300"></div>
                   </div>
                   <img 
-                    src="/platform_preview.png" 
-                    alt="VisionGuard Platform Overview" 
+                    src="/traffic_monitoring_corridor.jpg" 
+                    alt="VisionGuard Traffic Visibility and Multi-Lane Monitoring" 
                     className="w-full h-auto object-cover"
                   />
                 </div>
@@ -446,8 +481,8 @@ export function Landing() {
                   <div className="w-2.5 h-2.5 rounded-full bg-gray-300"></div>
                 </div>
                 <img 
-                  src="/platform_preview.png" 
-                  alt="VisionGuard Interface" 
+                  src="/traffic_flow_analysis.jpg" 
+                  alt="VisionGuard Multi-Lane Traffic Flow & Vehicle Activity Analysis" 
                   className="w-full h-auto object-cover"
                 />
               </div>
@@ -505,8 +540,8 @@ export function Landing() {
               <FadeInSection delay={150}>
                 <div className="relative rounded-xl border border-gray-200 bg-white shadow-xl overflow-hidden ring-1 ring-gray-900/5">
                   <img 
-                    src="/dashboard_hero.png" 
-                    alt="VisionGuard Operations" 
+                    src="/traffic_operations_center.jpg" 
+                    alt="VisionGuard Urban Roadway Management & Situational Awareness" 
                     className="w-full h-auto object-cover"
                   />
                 </div>

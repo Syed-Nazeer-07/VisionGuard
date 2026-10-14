@@ -319,6 +319,7 @@ function persistStore() {
 
 const uploadedFilesMap = new Map<string, string>()
 uploadedFilesMap.set('car-detection.mp4', '/car-detection.mp4')
+const uploadedBlobsMap = new Map<string, Blob>()
 
 function createMockQueryBuilder(tableName: string) {
   let isSingle = false
@@ -569,6 +570,7 @@ const mockSupabase = {
           if (typeof window !== 'undefined' && (fileData instanceof Blob || fileData instanceof File)) {
             const blobUrl = URL.createObjectURL(fileData)
             uploadedFilesMap.set(filePath, blobUrl)
+            uploadedBlobsMap.set(filePath, fileData)
           }
           return { data: { path: filePath }, error: null }
         } catch (e: any) {
@@ -576,10 +578,16 @@ const mockSupabase = {
         }
       },
       remove: async (paths: string[]) => {
-        paths.forEach(p => uploadedFilesMap.delete(p))
+        paths.forEach(p => {
+          uploadedFilesMap.delete(p)
+          uploadedBlobsMap.delete(p)
+        })
         return { data: paths, error: null }
       },
-      download: async () => ({ data: new Blob(), error: null }),
+      download: async (filePath?: string) => {
+        const blob = filePath ? uploadedBlobsMap.get(filePath) : null
+        return { data: blob || new Blob(), error: null }
+      },
       list: async () => ({ data: [], error: null })
     })
   },

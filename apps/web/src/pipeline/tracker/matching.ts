@@ -18,9 +18,19 @@ export function getIOU(box1: {x: number, y: number, w: number, h: number}, box2:
   return intersection / (area1 + area2 - intersection + 1e-6);
 }
 
+/**
+ * COCO classes that detectors routinely confuse frame to frame (car / bus / truck) form one
+ * association group. Everything else is its own group, so a person can never take over a car.
+ */
+export function classGroup(classId: number): number {
+  if (classId === 1 || classId === 3) return 1;
+  if (classId === 2 || classId === 5 || classId === 7) return 2;
+  return classId;
+}
+
 export function matchDetectionsToTracks(
   detections: BoundingBox[],
-  tracks: { getState: () => { cx: number; cy: number; w: number; h: number } }[],
+  tracks: { getState: () => { cx: number; cy: number; w: number; h: number }; classId?: number }[],
   iouThreshold: number
 ): { matches: [number, number][]; unmatchedDetections: number[]; unmatchedTracks: number[] } {
   if (tracks.length === 0) {
@@ -41,12 +51,19 @@ export function matchDetectionsToTracks(
 
   const costMatrix: number[][] = [];
   for (let i = 0; i < tracks.length; i++) {
-    const trackState = tracks[i].getState();
+    const track = tracks[i];
+    const trackState = track.getState();
     const row: number[] = [];
     for (let j = 0; j < detections.length; j++) {
+      const det = detections[j];
+      // Class gating by group: tracks cannot associate with detections of a different object kind
+      if (track.classId !== undefined && det.classId !== undefined && classGroup(track.classId) !== classGroup(det.classId)) {
+        row.push(1.0);
+        continue;
+      }
       const iou = getIOU(
         { x: trackState.cx, y: trackState.cy, w: trackState.w, h: trackState.h },
-        detections[j]
+        det
       );
       // Cost is 1 - IOU. Munkres minimizes cost.
       row.push(1 - iou);

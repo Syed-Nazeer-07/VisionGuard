@@ -1,14 +1,23 @@
 import { useEffect, useState, useRef, useMemo, type ReactNode } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Film, Activity, FileWarning, Image, ChevronRight, Eye, Terminal, AlertTriangle, Loader2 } from 'lucide-react';
+import { Film, Activity, FileWarning, Image, ChevronRight, Eye, Terminal, AlertTriangle, Loader2, Play, Pause, ArrowLeft, RotateCcw, Gauge, Layers, ShieldAlert, Clock, CheckCircle2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { db, type AnalysisRun, type VideoAsset } from '../services/db';
 import { getSignedUrl } from '../pipeline/evidence/storage';
 import { availabilityMessage, fallbackVideoNumbers, fetchStorageInfo, getAssetAvailability, resolveVideoUrl, storageProviderLabel, videoDisplayName } from '../lib/videoAssets';
 import { uploadManager } from '../services/uploadManager';
 import { AnalysisLogPanel } from '../components/analysis/AnalysisLogPanel';
+import { computeVideoTransform, sourceTopLeftBoxToDisplay, sourcePointToDisplay } from '../pipeline/rendering/transform';
+import { loadArtifactFromStorage, findFrameAtMediaTime, type BackendArtifactPayload } from '../services/backendAnalysis';
 import type { Json } from '../types/supabase';
+
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
 
 interface TrajectoryPoint {
   time: number;
@@ -62,6 +71,7 @@ interface ReviewData {
   evidenceUrls: Record<string, { thumb: string; full: string }>;
   warnings: string[];
   identicalTo: VideoAsset | null;
+  artifact: BackendArtifactPayload | null;
 }
 
 type Tab = 'timeline' | 'tracks' | 'evidence' | 'logs';
@@ -97,9 +107,17 @@ function incidentMediaTime(inc: IncidentRow): number | null {
   return typeof t === 'number' && Number.isFinite(t) ? t : null;
 }
 
-export default function VideoReview() {
+export interface VideoReviewProps {
+  videoId?: string;
+  onBack?: () => void;
+  showSidebar?: boolean;
+}
+
+export default function VideoReview({ videoId: propVideoId, onBack, showSidebar = true }: VideoReviewProps = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const videoId = searchParams.get('video');
+  const videoId = propVideoId || searchParams.get('video');
+  const timeParam = searchParams.get('time') || searchParams.get('t');
+  const incidentParam = searchParams.get('incident');
 
   const [videos, setVideos] = useState<VideoAsset[]>([]);
   const [listLoading, setListLoading] = useState(true);
@@ -112,6 +130,10 @@ export default function VideoReview() {
   const [selectedRunId, setSelectedRunId] = useState<string>(ALL_RUNS);
   const [activeTab, setActiveTab] = useState<Tab>('timeline');
   const [selectedEvidence, setSelectedEvidence] = useState<EvidenceRow | null>(null);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [highlightedIncidentId, setHighlightedIncidentId] = useState<string | null>(incidentParam);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -124,12 +146,19 @@ export default function VideoReview() {
     (async () => {
       const { data: rows, error } = await supabase.from('video_assets').select('*').order('uploaded_at', { ascending: false });
       if (cancelled) return;
-      if (error) setListError(error.message || 'Failed to load videos');
-      else setVideos((rows || []) as VideoAsset[]);
+      if (error) {
+        setListError(error.message || 'Failed to load videos');
+      } else {
+        const fetched = (rows || []) as VideoAsset[];
+        setVideos(fetched);
+        if (showSidebar && !videoId && fetched.length > 0) {
+          setSearchParams({ video: fetched[0].id }, { replace: true });
+        }
+      }
       setListLoading(false);
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [videoId, setSearchParams]);
 
   // Everything shown for the review is loaded for exactly `videoId`. Switching A → B clears A's
   // state synchronously and discards any of A's requests that resolve late.
@@ -139,6 +168,9 @@ export default function VideoReview() {
     setPlaybackError(null);
     setSelectedRunId(ALL_RUNS);
     setSelectedEvidence(null);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsPlaying(false);
     if (!videoId) return;
 
     let cancelled = false;
@@ -217,10 +249,33 @@ export default function VideoReview() {
           : `${reason ?? 'No stored file exists for this video.'} It cannot be replayed.`);
       }
 
+      // Load durable analysis artifact from storage
+      let artifact: BackendArtifactPayload | null = null;
+      const meta = (typedAsset.metadata && typeof typedAsset.metadata === 'object' && !Array.isArray(typedAsset.metadata) ? typedAsset.metadata : {}) as Record<string, any>;
+      let artifactPath = meta.artifact_storage_path;
+      let artifactBucket = meta.artifact_bucket || 'videos';
+      if (!artifactPath && runs.length > 0) {
+        for (const r of runs) {
+          const runMeta = (r.metrics && typeof r.metrics === 'object' && !Array.isArray(r.metrics) ? r.metrics : {}) as Record<string, any>;
+          if (runMeta.artifact_storage_path) {
+            artifactPath = runMeta.artifact_storage_path;
+            artifactBucket = runMeta.artifact_bucket || 'videos';
+            break;
+          }
+        }
+      }
+      if (artifactPath && typeof artifactPath === 'string') {
+        try {
+          artifact = await loadArtifactFromStorage(artifactPath, artifactBucket);
+        } catch (e) {
+          warnings.push(`Analysis artifact could not be loaded: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+
       // Default to the latest run that produced tracks, so overlays from different runs never overlap.
       const runWithTracks = runs.find(r => tracks.some(t => t.analysis_run_id === r.id));
       setSelectedRunId(runWithTracks ? runWithTracks.id : ALL_RUNS);
-      setData({ asset: typedAsset, videoUrl, runs, tracks, incidents, evidence, evidenceUrls, warnings, identicalTo });
+      setData({ asset: typedAsset, videoUrl, runs, tracks, incidents, evidence, evidenceUrls, warnings, identicalTo, artifact });
       setDetailLoading(false);
     })();
 
@@ -231,9 +286,92 @@ export default function VideoReview() {
   const incidents = useMemo(() => (data ? inRun(data.incidents, selectedRunId) : []), [data, selectedRunId]);
   const evidence = useMemo(() => (data ? inRun(data.evidence, selectedRunId) : []), [data, selectedRunId]);
 
+  const selectedRun = useMemo(() => {
+    if (!data) return null;
+    if (selectedRunId === ALL_RUNS) return data.runs[0] || null;
+    return data.runs.find(r => r.id === selectedRunId) || null;
+  }, [data, selectedRunId]);
+
+  const framesAnalyzed = useMemo(() => {
+    return data?.artifact?.total_frames ??
+      selectedRun?.frames_processed ??
+      data?.asset?.frame_count ??
+      (tracks.length > 0 ? Math.max(...tracks.map(t => t.frame_count || 0)) : 0);
+  }, [data, selectedRun, tracks]);
+
+  const uniqueVehicles = useMemo(() => {
+    return data?.artifact?.summary?.unique_tracks ??
+      (data?.asset?.metadata && typeof data.asset.metadata === 'object' && (data.asset.metadata as Record<string, any>).unique_vehicles) ??
+      tracks.length;
+  }, [data, tracks]);
+
+  const detectionProfileLabel = useMemo(() => {
+    const prof = data?.artifact?.summary?.detection_profile || selectedRun?.metrics?.detection_profile || (data?.asset?.metadata as Record<string, any> | undefined)?.detection_profile;
+    if (prof === 'high_recall') return 'High Recall';
+    if (prof === 'balanced') return 'Balanced';
+    return 'Balanced';
+  }, [data, selectedRun]);
+
+  const processingSpeedLabel = useMemo(() => {
+    const speed = data?.artifact?.summary?.processing_speed || selectedRun?.metrics?.processing_speed || (data?.asset?.metadata as Record<string, any> | undefined)?.processing_speed;
+    if (speed === 'fast') return 'Fast (2x)';
+    if (speed === 'full') return 'Full (1x)';
+    return 'Full (1x)';
+  }, [data, selectedRun]);
+
+  const effectiveFps = useMemo(() => {
+    const fps = data?.artifact?.summary?.effective_fps ??
+      data?.artifact?.metrics?.effective_fps ??
+      selectedRun?.fps ??
+      selectedRun?.metrics?.fps;
+    return typeof fps === 'number' && fps > 0 ? `${Math.round(fps)} FPS` : null;
+  }, [data, selectedRun]);
+
+  const averageSpeedLabel = useMemo(() => {
+    const avg = data?.artifact?.summary?.average_speed_kmh ??
+      selectedRun?.metrics?.summary?.average_speed_kmh ??
+      (data?.asset?.metadata as Record<string, any> | undefined)?.average_speed_kmh;
+    if (typeof avg === 'number' && avg > 0) return `${Math.round(avg)} km/h`;
+    const trackSpeeds = tracks.flatMap(t => trajectoryOf(t).map(p => p.speed).filter((s): s is number => typeof s === 'number'));
+    if (trackSpeeds.length > 0) {
+      const mean = trackSpeeds.reduce((a, b) => a + b, 0) / trackSpeeds.length;
+      return `${Math.round(mean)} km/h`;
+    }
+    return 'Uncalibrated';
+  }, [data, selectedRun, tracks]);
+
+  const isUnanalyzed = useMemo(() => {
+    return !!data?.asset && data.asset.processing_status !== 'completed' && tracks.length === 0 && !data?.artifact;
+  }, [data, tracks]);
+
   // Replay persisted boxes + trajectories against the playhead. No inference is run here.
   const tracksRef = useRef<TrackRow[]>([]);
   tracksRef.current = tracks;
+  const artifactRef = useRef<BackendArtifactPayload | null>(null);
+  artifactRef.current = data?.artifact ?? null;
+
+  // Keyboard shortcuts: Space for play/pause, Left/Right for frame stepping
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const video = videoRef.current;
+      if (!video) return;
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (video.paused) video.play().catch(() => {});
+        else video.pause();
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        video.currentTime = Math.max(0, video.currentTime - (e.shiftKey ? 1.0 : 0.033));
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        video.currentTime = Math.min(video.duration || Infinity, video.currentTime + (e.shiftKey ? 1.0 : 0.033));
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   useEffect(() => {
     if (!data?.videoUrl) return;
     let raf = 0;
@@ -252,63 +390,154 @@ export default function VideoReview() {
       if (!video.videoWidth) return;
 
       const now = video.currentTime;
-        const videoRatio = video.videoWidth / video.videoHeight;
-        const canvasRatio = canvas.width / canvas.height;
+      const transform = computeVideoTransform(
+        { videoWidth: video.videoWidth, videoHeight: video.videoHeight },
+        { containerWidth: canvas.width, containerHeight: canvas.height },
+        'contain'
+      );
 
-        let renderWidth = canvas.width;
-        let renderHeight = canvas.height;
-        let offsetX = 0;
-        let offsetY = 0;
+      // 1. If we have the full frame artifact from backend inference, render exact boxes and tracks
+      if (artifactRef.current && artifactRef.current.frames.length > 0) {
+        const curFrame = findFrameAtMediaTime(artifactRef.current.frames, now);
+        if (curFrame) {
+          for (const track of curFrame.tracks) {
+            const tl_x = Math.round(track.x - track.w / 2);
+            const tl_y = Math.round(track.y - track.h / 2);
+            const box = sourceTopLeftBoxToDisplay({ x: tl_x, y: tl_y, w: track.w, h: track.h }, transform);
 
-        if (videoRatio > canvasRatio) {
-          renderHeight = canvas.width / videoRatio;
-          offsetY = (canvas.height - renderHeight) / 2;
-        } else {
-          renderWidth = canvas.height * videoRatio;
-          offsetX = (canvas.width - renderWidth) / 2;
+            // Color coding based on class
+            let strokeColor = '#06b6d4'; // default cyan (car)
+            if (track.class_name === 'truck') strokeColor = '#f59e0b'; // amber
+            else if (track.class_name === 'bus') strokeColor = '#10b981'; // emerald
+            else if (track.class_name === 'motorcycle') strokeColor = '#8b5cf6'; // purple
+            else if (track.class_name === 'bicycle') strokeColor = '#ec4899'; // pink
+            else if (track.class_name === 'person') strokeColor = '#64748b'; // slate
+
+            // Style box stroke based on observation_type
+            ctx.strokeStyle = strokeColor;
+            ctx.lineWidth = 2.5;
+            if (track.observation_type === 'interpolated') {
+              ctx.setLineDash([4, 4]);
+            } else if (track.observation_type === 'predicted') {
+              ctx.setLineDash([2, 4]);
+            } else {
+              ctx.setLineDash([]);
+            }
+            ctx.strokeRect(box.x, box.y, box.w, box.h);
+            ctx.setLineDash([]);
+
+            // Clean minimal label: `#<id> <CLASS> · <speed> km/h` or `#<id> <CLASS> · Speed uncalibrated`
+            const rawClass = (track.class_name || 'vehicle').toLowerCase();
+            const isPerson = rawClass === 'person' || rawClass === 'pedestrian';
+            const vehicleType = (track.class_name || 'vehicle').toUpperCase();
+            let label: string;
+            if (isPerson) {
+              label = `#${track.track_id} PERSON`;
+            } else if (typeof track.speed === 'number' && track.speed >= 0) {
+              label = `#${track.track_id} ${vehicleType} · ${Math.round(track.speed)} km/h`;
+            } else {
+              label = `#${track.track_id} ${vehicleType} · Speed uncalibrated`;
+            }
+
+            ctx.font = 'bold 11px Inter, sans-serif';
+            const textWidth = ctx.measureText(label).width;
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.fillRect(box.x, Math.max(0, box.y - 20), textWidth + 10, 18);
+            ctx.fillStyle = strokeColor;
+            ctx.fillText(label, box.x + 5, Math.max(13, box.y - 6));
+          }
         }
+      } else {
+        // Fallback to trajectory interpolation for older records
+        for (const t of tracksRef.current) {
+          const traj = trajectoryOf(t);
+          const cur = sampleAt(traj, now);
+          if (!cur) continue;
 
-        const sx = renderWidth / video.videoWidth;
-        const sy = renderHeight / video.videoHeight;
+          // Trail of the last ~3 seconds (in source pixels)
+          ctx.strokeStyle = 'rgba(34, 211, 238, 0.55)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          let started = false;
+          for (const p of traj) {
+            if (p.time < now - 3 || p.time > now) continue;
+            // Bottom center of vehicle touching the road
+            const pt = sourcePointToDisplay(
+              { x: p.bbox[0] + p.bbox[2] / 2, y: p.bbox[1] + p.bbox[3] },
+              transform
+            );
+            if (!started) { ctx.moveTo(pt.x, pt.y); started = true; } else ctx.lineTo(pt.x, pt.y);
+          }
+          ctx.stroke();
 
-      for (const t of tracksRef.current) {
-        const traj = trajectoryOf(t);
-        const cur = sampleAt(traj, now);
-        if (!cur) continue;
+          const [bx, by, bw, bh] = cur.bbox;
+          const box = sourceTopLeftBoxToDisplay({ x: bx, y: by, w: bw, h: bh }, transform);
+          ctx.strokeStyle = '#06b6d4';
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(box.x, box.y, box.w, box.h);
 
-        // Trail of the last ~3 seconds
-        ctx.strokeStyle = 'rgba(34, 211, 238, 0.55)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        let started = false;
-        for (const p of traj) {
-          if (p.time < now - 3 || p.time > now) continue;
-          const cx = (p.bbox[0] + p.bbox[2] / 2) * sx + offsetX;
-          const cy = (p.bbox[1] + p.bbox[3]) * sy + offsetY;
-          if (!started) { ctx.moveTo(cx, cy); started = true; } else ctx.lineTo(cx, cy);
+          const rawClass = (t.object_type || 'vehicle').toLowerCase();
+          const isPerson = rawClass === 'person' || rawClass === 'pedestrian';
+          const vehicleType = (t.object_type || 'vehicle').toUpperCase();
+          let label: string;
+          if (isPerson) {
+            label = `#${t.track_id} PERSON`;
+          } else if (typeof cur.speed === 'number' && cur.speed >= 0) {
+            label = `#${t.track_id} ${vehicleType} · ${Math.round(cur.speed)} km/h`;
+          } else {
+            label = `#${t.track_id} ${vehicleType} · Speed uncalibrated`;
+          }
+          ctx.font = 'bold 11px Inter, sans-serif';
+          const textWidth = ctx.measureText(label).width;
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+          ctx.fillRect(box.x, Math.max(0, box.y - 20), textWidth + 10, 18);
+          ctx.fillStyle = '#22d3ee';
+          ctx.fillText(label, box.x + 5, Math.max(13, box.y - 6));
         }
-        ctx.stroke();
-
-        const [bx, by, bw, bh] = cur.bbox;
-        const x = bx * sx + offsetX, y = by * sy + offsetY, w = bw * sx, h = bh * sy;
-        ctx.strokeStyle = '#06b6d4';
-        ctx.lineWidth = 2.5;
-        ctx.strokeRect(x, y, w, h);
-
-        const label = `${t.object_type || 'object'} #${t.track_id}${typeof cur.speed === 'number' ? ` · ${cur.speed} km/h` : ''}`;
-        ctx.font = 'bold 11px Inter, sans-serif';
-        const textWidth = ctx.measureText(label).width;
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
-        ctx.fillRect(x, Math.max(0, y - 20), textWidth + 10, 18);
-        ctx.fillStyle = '#22d3ee';
-        ctx.fillText(label, x + 5, Math.max(13, y - 6));
       }
     };
     raf = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(raf);
   }, [data?.videoUrl]);
 
+  // Seek to incident or time parameter when provided via query parameters
+  useEffect(() => {
+    if (!data?.videoUrl) return;
+    const timeVal = searchParams.get('time') || searchParams.get('t');
+    const incVal = searchParams.get('incident');
+    if (!timeVal && !incVal) return;
+
+    let targetTime: number | null = null;
+    if (timeVal) {
+      const parsed = parseFloat(timeVal);
+      if (Number.isFinite(parsed) && parsed >= 0) targetTime = parsed;
+    } else if (incVal && data.incidents.length > 0) {
+      const foundInc = data.incidents.find(i => i.id === incVal);
+      if (foundInc) {
+        targetTime = incidentMediaTime(foundInc);
+      }
+    }
+
+    if (targetTime !== null) {
+      const video = videoRef.current;
+      if (!video) return;
+      const applySeek = () => {
+        video.currentTime = Math.max(0, targetTime!);
+        setCurrentTime(targetTime!);
+        setActiveTab('timeline');
+        if (incVal) setHighlightedIncidentId(incVal);
+      };
+
+      if (video.readyState >= 1) {
+        applySeek();
+      } else {
+        video.addEventListener('loadedmetadata', applySeek, { once: true });
+      }
+    }
+  }, [data?.videoUrl, searchParams]);
+
   const seekToIncident = (inc: IncidentRow) => {
+    setHighlightedIncidentId(inc.id);
     const video = videoRef.current;
     const t = incidentMediaTime(inc);
     if (!video || t === null) return;
@@ -325,55 +554,57 @@ export default function VideoReview() {
 
   return (
     <div className="flex-1 h-[calc(100vh-64px)] overflow-hidden flex bg-slate-50">
-      {/* Video Selector Sidebar */}
-      <div className="w-80 border-r border-slate-200 bg-white flex flex-col h-full overflow-hidden shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10">
-        <div className="p-4 border-b border-slate-200 bg-white sticky top-0 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-              <Film className="w-5 h-5 text-indigo-600" />
-              Video Review
-            </h2>
-            <p className="text-xs text-slate-500 mt-0.5">Replay persistent AI analysis</p>
-          </div>
-          <span className="text-xs font-semibold bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100">
-            {videos.length} Videos
-          </span>
-        </div>
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {listLoading ? (
-            <div className="text-center p-6 text-sm text-slate-400">Loading video library...</div>
-          ) : listError ? (
-            <div className="text-center p-6 text-sm text-rose-600">Failed to load videos: {listError}</div>
-          ) : videos.length === 0 ? (
-            <div className="text-center p-6 text-sm text-slate-400">
-              No videos uploaded yet.
-              <Link to="/app/analyze" className="block mt-2 text-indigo-600 font-semibold hover:underline">
-                Upload a video in Analyze →
-              </Link>
+      {/* Video Selector Sidebar - shown when standalone */}
+      {showSidebar && (
+        <div className="w-80 border-r border-slate-200 bg-white flex flex-col h-full overflow-hidden shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-10">
+          <div className="p-4 border-b border-slate-200 bg-white sticky top-0 flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Film className="w-5 h-5 text-indigo-600" />
+                Video Review
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">Replay persistent AI analysis</p>
             </div>
-          ) : (
-            videos.map(v => (
-              <button
-                key={v.id}
-                onClick={() => selectVideo(v.id)}
-                className={cn(
-                  "w-full text-left p-3 rounded-xl border transition-all cursor-pointer",
-                  videoId === v.id
-                    ? 'bg-indigo-50 border-indigo-300 shadow-sm ring-1 ring-indigo-500/20'
-                    : 'bg-white border-slate-200 hover:border-indigo-200 hover:bg-slate-50 shadow-sm'
-                )}
-              >
-                <div className="font-semibold text-slate-900 text-sm truncate pr-2">{videoDisplayName(v, fallbackNumbers)}</div>
-                <div className="text-[11px] text-slate-500 truncate" title={v.filename}>{v.filename}</div>
-                <div className="text-xs text-slate-500 mt-1 flex justify-between items-center">
-                  <span>{v.uploaded_at ? new Date(v.uploaded_at).toLocaleDateString() : '—'}</span>
-                  <span className="font-mono text-[11px] text-slate-400">{v.id.split('-')[0]}</span>
-                </div>
-              </button>
-            ))
-          )}
+            <span className="text-xs font-semibold bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100">
+              {videos.length} Videos
+            </span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {listLoading ? (
+              <div className="text-center p-6 text-sm text-slate-400">Loading video library...</div>
+            ) : listError ? (
+              <div className="text-center p-6 text-sm text-rose-600">Failed to load videos: {listError}</div>
+            ) : videos.length === 0 ? (
+              <div className="text-center p-6 text-sm text-slate-400">
+                No videos uploaded yet.
+                <Link to="/app/analyze" className="block mt-2 text-indigo-600 font-semibold hover:underline">
+                  Upload a video in Analyze →
+                </Link>
+              </div>
+            ) : (
+              videos.map(v => (
+                <button
+                  key={v.id}
+                  onClick={() => selectVideo(v.id)}
+                  className={cn(
+                    "w-full text-left p-3 rounded-xl border transition-all cursor-pointer",
+                    videoId === v.id
+                      ? 'bg-indigo-50 border-indigo-300 shadow-sm ring-1 ring-indigo-500/20'
+                      : 'bg-white border-slate-200 hover:border-indigo-200 hover:bg-slate-50 shadow-sm'
+                  )}
+                >
+                  <div className="font-semibold text-slate-900 text-sm truncate pr-2">{videoDisplayName(v, fallbackNumbers)}</div>
+                  <div className="text-[11px] text-slate-500 truncate" title={v.filename}>{v.filename}</div>
+                  <div className="text-xs text-slate-500 mt-1 flex justify-between items-center">
+                    <span>{v.uploaded_at ? new Date(v.uploaded_at).toLocaleDateString() : '—'}</span>
+                    <span className="font-mono text-[11px] text-slate-400">{v.id.split('-')[0]}</span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Main Analysis Display & Trajectory Overlay */}
       <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50">
@@ -393,14 +624,126 @@ export default function VideoReview() {
           </div>
         ) : (
           <>
-            <div className="flex-1 p-6 flex flex-col items-center justify-center relative min-h-[50vh] overflow-hidden">
+            {/* Top Review Header */}
+            <div className="flex flex-wrap items-center justify-between px-6 py-3 border-b border-slate-200 bg-white gap-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onBack) onBack();
+                    else navigate('/app/videos');
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                  title="Return to Saved Videos"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" /> Back to History
+                </button>
+                <div className="h-4 w-px bg-slate-200" />
+                <span className="font-bold text-slate-900 text-sm">{assetName}</span>
+                <span className="text-xs text-slate-400 font-mono hidden sm:inline" title={asset.filename}>({asset.filename})</span>
+                <span className={cn(
+                  "px-2.5 py-0.5 rounded-full text-[11px] font-semibold border",
+                  asset.processing_status === 'completed'
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : asset.processing_status === 'processing'
+                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                    : "bg-slate-50 text-slate-600 border-slate-200"
+                )}>
+                  {asset.processing_status === 'completed' ? 'Completed' : asset.processing_status || 'Pending'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                {data.runs.length > 1 && (
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <label htmlFor="review-run-select">Run:</label>
+                    <select
+                      id="review-run-select"
+                      value={selectedRunId}
+                      onChange={e => setSelectedRunId(e.target.value)}
+                      className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value={ALL_RUNS}>All runs ({data.runs.length})</option>
+                      {data.runs.map(r => (
+                        <option key={r.id} value={r.id}>
+                          #{r.id.slice(0, 8)} · {new Date(r.started_at).toLocaleString()} · {r.status}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <Link
+                  to={`/app/analyze?video=${encodeURIComponent(asset.id)}&reanalyze=true`}
+                  className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                  title="Rerun inference on this video with chosen settings without overwriting prior results"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Analyze Again
+                </Link>
+              </div>
+            </div>
+
+            {/* Summary Metrics Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 px-6 py-3 border-b border-slate-200 bg-white/70 shrink-0">
+              <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Frames Analyzed</div>
+                <div className="text-lg font-bold text-slate-900 mt-0.5">{framesAnalyzed}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Total frames</div>
+              </div>
+              <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Unique Vehicles</div>
+                <div className="text-lg font-bold text-slate-900 mt-0.5">{uniqueVehicles}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Tracked IDs</div>
+              </div>
+              <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Incidents</div>
+                <div className="text-lg font-bold text-rose-600 mt-0.5">{incidents.length}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Recorded events</div>
+              </div>
+              <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Profile</div>
+                <div className="text-sm font-bold text-slate-800 mt-1 truncate">{detectionProfileLabel}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Detection profile</div>
+              </div>
+              <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Speed Mode</div>
+                <div className="text-sm font-bold text-slate-800 mt-1 truncate">{processingSpeedLabel}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">{effectiveFps ?? 'YOLO11n ONNX'}</div>
+              </div>
+              <div className="p-2.5 bg-slate-50 border border-slate-200/80 rounded-xl">
+                <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">Average Speed</div>
+                <div className="text-sm font-bold text-slate-800 mt-1">{averageSpeedLabel}</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">{averageSpeedLabel === 'Uncalibrated' ? 'Calibration inactive' : 'Speed zone'}</div>
+              </div>
+            </div>
+
+            {/* Unanalyzed Warning State */}
+            {isUnanalyzed && (
+              <div className="mx-6 mt-3 p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                  <div>
+                    <div className="text-sm font-bold text-amber-900">This video has not been analyzed yet</div>
+                    <div className="text-xs text-amber-700 mt-0.5">Run vehicle detection and tracking to generate traffic insights, trajectory overlays, and incident reports.</div>
+                  </div>
+                </div>
+                <Link
+                  to={`/app/analyze?video=${encodeURIComponent(asset.id)}`}
+                  className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs transition-colors shrink-0 cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" /> Start Analysis
+                </Link>
+              </div>
+            )}
+
+            <div className="flex-1 p-4 flex flex-col items-center justify-center relative min-h-[44vh] overflow-hidden">
               {data.warnings.length > 0 && (
-                <div className="mb-3 w-full max-w-4xl bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg text-xs">
+                <div className="mb-2 w-full max-w-4xl bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg text-xs">
                   Some persisted data could not be loaded: {data.warnings.join('; ')}
                 </div>
               )}
               {data.videoUrl ? (
-                <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-black max-h-[58vh] flex items-center justify-center border border-slate-800">
+                <div className="relative rounded-2xl overflow-hidden shadow-2xl bg-black max-h-[50vh] flex items-center justify-center border border-slate-800">
                   <video
                     key={asset.id}
                     ref={videoRef}
@@ -411,52 +754,134 @@ export default function VideoReview() {
                     playsInline
                     muted
                     preload="metadata"
+                    onTimeUpdate={(e) => {
+                      setCurrentTime(e.currentTarget.currentTime);
+                      if (e.currentTarget.duration) setDuration(e.currentTarget.duration);
+                    }}
+                    onLoadedMetadata={(e) => {
+                      if (e.currentTarget.duration) setDuration(e.currentTarget.duration);
+                    }}
+                    onPlay={() => setIsPlaying(true)}
+                    onPause={() => setIsPlaying(false)}
                     onError={() => setPlaybackError('The stored video could not be played (file missing or unreachable).')}
-                    className="max-h-[58vh] w-auto max-w-full"
+                    className="max-h-[50vh] w-auto max-w-full"
                   />
                   <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none z-10 w-full h-full" />
                 </div>
               ) : null}
+
+              {/* Interactive Timeline Scrubber with Incident Markers */}
+              {data.videoUrl && (
+                <div className="mt-2.5 w-full max-w-4xl bg-white border border-slate-200 rounded-xl p-2.5 shadow-xs space-y-1.5">
+                  <div className="flex items-center justify-between text-xs text-slate-600">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const v = videoRef.current;
+                          if (!v) return;
+                          if (v.paused) v.play().catch(() => {});
+                          else v.pause();
+                        }}
+                        className="p-1 hover:bg-slate-100 rounded text-slate-700 transition-colors cursor-pointer"
+                        title="Play / Pause (Space)"
+                      >
+                        {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (videoRef.current) videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 0.033);
+                        }}
+                        className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[11px] font-semibold text-slate-600 transition-colors cursor-pointer"
+                        title="Step Backward 1 Frame (←)"
+                      >
+                        -1 Frame
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (videoRef.current) videoRef.current.currentTime = Math.min(videoRef.current.duration || Infinity, videoRef.current.currentTime + 0.033);
+                        }}
+                        className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-[11px] font-semibold text-slate-600 transition-colors cursor-pointer"
+                        title="Step Forward 1 Frame (→)"
+                      >
+                        +1 Frame
+                      </button>
+                      <span className="font-mono text-xs font-semibold text-slate-800 ml-1">
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 text-[11px] text-slate-400">
+                      <span>Space: Play/Pause</span>
+                      <span>•</span>
+                      <span>←/→: Step (0.033s)</span>
+                      {incidents.length > 0 && (
+                        <>
+                          <span>•</span>
+                          <span className="text-rose-600 font-medium">{incidents.length} Incident Pins</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Scrubber Track with Incident Markers */}
+                  <div className="relative w-full h-4 flex items-center group cursor-pointer select-none">
+                    <div
+                      className="relative w-full h-2 bg-slate-200 rounded-full overflow-hidden"
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                        if (videoRef.current && duration > 0) {
+                          videoRef.current.currentTime = ratio * duration;
+                        }
+                      }}
+                    >
+                      <div
+                        className="h-full bg-indigo-600 rounded-full transition-all"
+                        style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                      />
+                    </div>
+
+                    {duration > 0 && incidents.map(inc => {
+                      const t = incidentMediaTime(inc);
+                      if (t === null) return null;
+                      const pct = Math.max(0, Math.min(100, (t / duration) * 100));
+                      const isCrit = inc.severity === 'Critical' || inc.severity === 'high';
+                      const isMed = inc.severity === 'Medium' || inc.severity === 'medium';
+                      const color = isCrit ? 'bg-rose-500' : isMed ? 'bg-amber-500' : 'bg-blue-500';
+                      const isHighlighted = highlightedIncidentId === inc.id;
+                      return (
+                        <button
+                          key={inc.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            seekToIncident(inc);
+                          }}
+                          className={cn(
+                            "absolute top-1/2 -translate-y-1/2 rounded-full shadow-sm transition-all z-20 cursor-pointer",
+                            color,
+                            isHighlighted 
+                              ? "w-3.5 h-3.5 ring-4 ring-indigo-400 ring-offset-1 scale-125 z-30" 
+                              : "w-2.5 h-2.5 ring-2 ring-white hover:scale-150"
+                          )}
+                          style={{ left: `calc(${pct}% - 5px)` }}
+                          title={`[${inc.severity || 'Incident'}] ${inc.incident_type || 'Violation'} at ${t.toFixed(1)}s (Click to seek)`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {data.identicalTo && (
-                <div className="mt-3 w-full max-w-4xl bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 rounded-lg text-xs">
+                <div className="mt-2 w-full max-w-4xl bg-amber-50 border border-amber-200 text-amber-800 px-3 py-1.5 rounded-lg text-xs">
                   This asset's stored file is byte-identical to {videoDisplayName(data.identicalTo, fallbackNumbers)} (same size and checksum) — the same source file was uploaded more than once. Tracks, incidents and evidence shown here belong to {assetName} only.
                 </div>
               )}
               {playbackError && (
-                <div className="mt-3 w-full max-w-4xl bg-rose-50 border border-rose-200 text-rose-700 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+                <div className="mt-2 w-full max-w-4xl bg-rose-50 border border-rose-200 text-rose-700 px-3 py-1.5 rounded-lg text-sm flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4" /> {playbackError}
                 </div>
               )}
-
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 w-full max-w-4xl text-xs text-slate-600 px-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-800">{assetName}</span>
-                  <span className="text-slate-400 truncate max-w-[200px]" title={asset.filename}>({asset.filename})</span>
-                  <span className="text-slate-400">·</span>
-                  <span className="text-slate-500">{tracks.length} Tracked Objects</span>
-                  <span className="text-slate-400">·</span>
-                  <span className="text-slate-500">{incidents.length} Incidents</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="review-run-select" className="text-slate-500">Run</label>
-                  <select
-                    id="review-run-select"
-                    value={selectedRunId}
-                    onChange={e => setSelectedRunId(e.target.value)}
-                    className="bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs"
-                  >
-                    <option value={ALL_RUNS}>All runs ({data.runs.length})</option>
-                    {data.runs.map(r => (
-                      <option key={r.id} value={r.id}>
-                        #{r.id.slice(0, 8)} · {new Date(r.started_at).toLocaleString()} · {r.status}
-                      </option>
-                    ))}
-                  </select>
-                  <Link to={`/app/analyze?video=${encodeURIComponent(asset.id)}`} className="text-indigo-600 font-semibold hover:underline">
-                    Analyze →
-                  </Link>
-                </div>
-              </div>
             </div>
 
             {/* Bottom Tabs */}
@@ -481,7 +906,10 @@ export default function VideoReview() {
                             key={inc.id}
                             onClick={() => seekToIncident(inc)}
                             className={cn(
-                              "p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-sm transition-all group",
+                              "p-3 rounded-xl flex items-center justify-between text-sm transition-all group",
+                              highlightedIncidentId === inc.id
+                                ? "bg-indigo-50/90 border-2 border-indigo-400 shadow-xs"
+                                : "bg-slate-50 border border-slate-200",
                               t !== null && data.videoUrl ? "hover:bg-indigo-50/60 hover:border-indigo-200 cursor-pointer" : ""
                             )}
                           >

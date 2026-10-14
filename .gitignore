@@ -15,3 +15,19 @@ build/
 
 # ONNX Runtime artifacts are served from node_modules by vite.config.ts; never commit copies
 apps/web/public/ort-wasm-*
+
+# Backend local runtime directories
+backend/.venv/
+backend/uploads/
+backend/artifacts/
+backend/.pytest_cache/
+.visionguard.pids
+
+# Local test video assets and scratch files
+assets/
+*.mp4
+*.zip
+*.patch
+tmp_venv/
+backend/eval/dataset/images/
+

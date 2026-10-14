@@ -35,6 +35,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newUser = newSession?.user ?? null
     const newRole = (newProfile?.role as Role) || (newUser ? 'Viewer' : null)
 
+    if (newSettings) {
+      try {
+        const filters = newSettings.saved_filters || {}
+        const profilePref = filters.default_detection_profile || newSettings.default_detection_profile
+        if (profilePref) {
+          localStorage.setItem('visionguard_detection_profile', profilePref)
+        }
+        const speedPref = filters.default_processing_speed || newSettings.default_processing_speed
+        if (speedPref) {
+          localStorage.setItem('visionguard_processing_speed', speedPref)
+        }
+        if (newSettings.density) {
+          localStorage.setItem('visionguard_density', newSettings.density)
+        }
+        if (newSettings.default_landing_page) {
+          localStorage.setItem('visionguard_default_landing_page', newSettings.default_landing_page)
+        }
+      } catch (e) {
+        console.warn('Could not sync user settings to localStorage:', e)
+      }
+    }
+
     if (isMountedRef.current) {
       setSession(newSession)
       setUser(newUser)
@@ -79,58 +101,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!globalBootstrapPromise) {
         globalBootstrapPromise = (async () => {
           try {
-            // 1. Restore the existing Supabase session
-            const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
+            // Timeout safeguard to ensure bootstrap never hangs indefinitely
+            const bootstrapTimeout = new Promise<{ session: Session | null; profile: any | null; settings: any | null }>(resolve => {
+              setTimeout(() => resolve({ session: null, profile: null, settings: null }), 5000)
+            })
 
-            if (sessionError || !currentSession) {
-              return { session: null, profile: null, settings: null }
-            }
+            const bootstrapAction = (async () => {
+              // 1. Restore the existing Supabase session
+              const { data: { session: currentSession }, error: sessionError } = await supabase.auth.getSession()
 
-            // 2. Load profile and workspace settings once
-            let loadedProfile: any = null
-            let loadedSettings: any = null
-
-            try {
-              const [profileRes, settingsRes] = await Promise.all([
-                supabase.from('profiles').select('*').eq('id', currentSession.user.id).maybeSingle(),
-                supabase.from('user_settings').select('*').eq('id', currentSession.user.id).maybeSingle()
-              ])
-
-              loadedProfile = profileRes.data
-              loadedSettings = settingsRes.data
-
-              if (!loadedProfile && currentSession.user) {
-                const { data: newProfile } = await supabase.from('profiles').insert([
-                  {
-                    id: currentSession.user.id,
-                    role: 'Admin',
-                    email: currentSession.user.email,
-                    name: currentSession.user.user_metadata?.full_name || 'System Administrator'
-                  }
-                ]).select().maybeSingle()
-                loadedProfile = newProfile
+              if (sessionError || !currentSession) {
+                return { session: null, profile: null, settings: null }
               }
 
-              if (!loadedSettings && currentSession.user) {
-                const { data: newSettings } = await supabase.from('user_settings').insert([
-                  { id: currentSession.user.id }
-                ]).select().maybeSingle()
-                loadedSettings = newSettings
+              // 2. Load profile and workspace settings once
+              let loadedProfile: any = null
+              let loadedSettings: any = null
+
+              try {
+                const [profileRes, settingsRes] = await Promise.all([
+                  supabase.from('profiles').select('*').eq('id', currentSession.user.id).maybeSingle(),
+                  supabase.from('user_settings').select('*').eq('id', currentSession.user.id).maybeSingle()
+                ])
+
+                loadedProfile = profileRes.data
+                loadedSettings = settingsRes.data
+
+                if (!loadedProfile && currentSession.user) {
+                  const { data: newProfile } = await supabase.from('profiles').insert([
+                    {
+                      id: currentSession.user.id,
+                      role: 'Admin',
+                      email: currentSession.user.email,
+                      name: currentSession.user.user_metadata?.full_name || 'System Administrator'
+                    }
+                  ]).select().maybeSingle()
+                  loadedProfile = newProfile
+                }
+
+                if (!loadedSettings && currentSession.user) {
+                  const { data: newSettings } = await supabase.from('user_settings').insert([
+                    { id: currentSession.user.id }
+                  ]).select().maybeSingle()
+                  loadedSettings = newSettings
+                }
+              } catch (fetchErr) {
+                console.warn('Profile/settings fetch error during bootstrap:', fetchErr)
               }
-            } catch (fetchErr) {
-              console.warn('Profile/settings fetch error during bootstrap:', fetchErr)
-            }
 
-            if (loadedProfile?.status === 'Disabled') {
-              await supabase.auth.signOut()
-              return { session: null, profile: null, settings: null }
-            }
+              if (loadedProfile?.status === 'Disabled') {
+                await supabase.auth.signOut()
+                return { session: null, profile: null, settings: null }
+              }
 
-            return {
-              session: currentSession,
-              profile: loadedProfile,
-              settings: loadedSettings
-            }
+              return {
+                session: currentSession,
+                profile: loadedProfile,
+                settings: loadedSettings
+              }
+            })()
+
+            return await Promise.race([bootstrapAction, bootstrapTimeout])
           } catch (err) {
             console.error('Failed to bootstrap workspace data:', err)
             return { session: null, profile: null, settings: null }
@@ -192,40 +223,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     updateProfile,
     updateSettings
   }), [session, user, role, profile, settings, initialized, loadingStep, logout, updateProfile, updateSettings])
-
-  // Only render bootstrap screen on genuine unknown initial startup
-  if (!initialized) {
-    return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#F8FAFC]">
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="flex flex-col items-center max-w-sm w-full text-center"
-        >
-          <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mb-6 relative">
-            <Shield className="w-10 h-10 text-blue-600 relative z-10" />
-            <div className="absolute inset-0 border-2 border-blue-500 rounded-2xl animate-ping opacity-20"></div>
-          </div>
-          
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight mb-2">
-            Loading VisionGuard Workspace
-          </h2>
-          <p className="text-[13px] font-medium text-slate-500 uppercase tracking-wider mb-6 animate-pulse">
-            {loadingStep}
-          </p>
-
-          <div className="w-64 h-1.5 bg-slate-200 rounded-full overflow-hidden">
-            <motion.div 
-              className="h-full bg-blue-600 rounded-full"
-              initial={{ width: "0%" }}
-              animate={{ width: "100%" }}
-              transition={{ duration: 1.5, ease: "easeInOut", repeat: Infinity }}
-            />
-          </div>
-        </motion.div>
-      </div>
-    )
-  }
 
   return (
     <AuthContext.Provider value={contextValue}>

@@ -8,6 +8,10 @@ export class Track {
   public kf: KalmanFilter;
   public frameCount: number = 0;
   public timeSinceUpdate: number = 0;
+  public hitCount: number = 1;
+  public lastBox: BoundingBox;
+  private classScores = new Map<number, number>();
+  private classNames = new Map<number, string>();
   
   // Last known info
   public classId: number;
@@ -21,6 +25,10 @@ export class Track {
     this.classId = box.classId;
     this.className = box.className;
     this.prob = box.prob;
+    this.lastBox = { ...box };
+    this.classScores.set(box.classId, box.prob);
+    this.classNames.set(box.classId, box.className);
+    this.hitCount = 1;
   }
 
   predict() {
@@ -29,16 +37,36 @@ export class Track {
     this.timeSinceUpdate++;
   }
 
-  update(box: BoundingBox) {
+  /** Record a matched detection: kinematics, confidence and a decayed class vote. */
+  private observe(box: BoundingBox) {
     this.kf.update(box.x, box.y, box.w, box.h);
-    this.classId = box.classId;
-    this.className = box.className;
     this.prob = box.prob;
+    this.lastBox = { ...box };
     this.timeSinceUpdate = 0;
-    
-    if (this.state === 'Tentative' && this.frameCount >= 3) {
+    this.hitCount++;
+
+    for (const [id, score] of this.classScores) this.classScores.set(id, score * 0.9);
+    this.classScores.set(box.classId, (this.classScores.get(box.classId) ?? 0) + box.prob);
+    this.classNames.set(box.classId, box.className);
+    let bestId = this.classId;
+    let bestScore = this.classScores.get(bestId) ?? -1;
+    for (const [id, score] of this.classScores) {
+      if (score > bestScore) { bestId = id; bestScore = score; }
+    }
+    this.classId = bestId;
+    this.className = this.classNames.get(bestId) ?? box.className;
+  }
+
+  update(box: BoundingBox) {
+    this.observe(box);
+    if (this.state === 'Tentative' && this.hitCount >= 2) {
       this.state = 'Confirmed';
     }
+  }
+
+  reActivate(box: BoundingBox) {
+    this.observe(box);
+    this.state = 'Confirmed';
   }
 
   markLost() {
@@ -49,7 +77,12 @@ export class Track {
     }
   }
 
+  markRemoved() {
+    this.state = 'Removed';
+  }
+
   getState() {
     return this.kf.getState();
   }
 }
+

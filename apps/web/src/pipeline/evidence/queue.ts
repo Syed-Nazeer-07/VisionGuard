@@ -12,9 +12,22 @@ export interface EvidenceJob {
   capture_timestamp: string;
 }
 
+function isValidUuid(val?: string | null): boolean {
+  return typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+}
+
+function describeError(e: unknown): string {
+  if (e && typeof e === 'object') {
+    const err = e as { message?: unknown; details?: unknown; hint?: unknown };
+    if (typeof err.message === 'string') return err.message;
+  }
+  return String(e);
+}
+
 class EvidenceQueueSystem {
   private queue: EvidenceJob[] = [];
   private isProcessing = false;
+  private errorListeners = new Set<(errorMsg: string) => void>();
   
   // Metrics
   public metrics = {
@@ -24,6 +37,17 @@ class EvidenceQueueSystem {
     totalTimeMs: 0,
     avgTimeMs: 0
   };
+
+  public onError(listener: (errorMsg: string) => void): () => void {
+    this.errorListeners.add(listener);
+    return () => { this.errorListeners.delete(listener); };
+  }
+
+  private notifyError(msg: string) {
+    this.errorListeners.forEach(listener => {
+      try { listener(msg); } catch (e) { console.warn('Evidence error listener failed:', e); }
+    });
+  }
 
   public add(job: EvidenceJob) {
     this.queue.push(job);
@@ -119,13 +143,12 @@ class EvidenceQueueSystem {
       const startTime = performance.now();
       
       try {
-        // Create initial DB record
         const ext = job.base64Data.startsWith('data:image/png') ? 'png' : 'jpg';
         const date = new Date(job.capture_timestamp);
         const year = date.getUTCFullYear();
         const month = String(date.getUTCMonth() + 1).padStart(2, '0');
         
-        const pathPrefix = `evidence/${year}/${month}/${job.camera_id ?? `video-${job.video_id ?? 'unknown'}`}/${job.incident_id}`;
+        const pathPrefix = `${year}/${month}/${job.camera_id ?? `video-${job.video_id ?? 'unknown'}`}/${job.incident_id}`;
         const fileName = `${job.type}_${Date.now()}`;
         const filePath = `${pathPrefix}/${fileName}.${ext}`;
         const thumbPath = `${pathPrefix}/${fileName}_thumb.jpg`;
@@ -134,28 +157,53 @@ class EvidenceQueueSystem {
         const imgBlob = await fetch(job.base64Data).then(r => r.blob());
         const thumbBlob = await this.generateThumbnail(job.base64Data);
 
-        const record = await (supabase as any).from('evidence').insert({
-          camera_id: job.camera_id,
-          incident_id: job.incident_id,
-          video_id: job.video_id || null,
-          analysis_run_id: job.analysis_run_id || null,
-          file_type: job.type,
-          file_url: filePath,
-          file_path: filePath,
-          thumbnail_path: thumbBlob ? thumbPath : null,
-          mime_type: imgBlob.type,
-          file_size: imgBlob.size,
-          status: 'uploading',
-          capture_timestamp: job.capture_timestamp
-        }).select().single();
+        // Resolve authenticated user ID
+        const { data: sessionData } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+        const rawUserId = sessionData?.session?.user?.id;
+        const uploadedBy = isValidUuid(rawUserId) ? rawUserId : null;
 
-        if (record.error) throw record.error;
-        const evidenceId = record.data.id;
+        // Clean foreign key relationships
+        const cameraId = isValidUuid(job.camera_id) ? job.camera_id : null;
+        const videoId = isValidUuid(job.video_id) ? job.video_id : null;
+        const analysisRunId = isValidUuid(job.analysis_run_id) ? job.analysis_run_id : null;
+        const incidentId = isValidUuid(job.incident_id) ? job.incident_id : null;
 
-        // Upload with Retry Strategy
-        // supabase-js reports Storage failures via `error`, not by throwing.
+        let evidenceId: string | null = null;
+        let dbInsertError: string | null = null;
+
+        try {
+          const record = await (supabase as any).from('evidence').insert({
+            camera_id: cameraId,
+            incident_id: incidentId,
+            video_id: videoId,
+            analysis_run_id: analysisRunId,
+            file_type: job.type,
+            file_url: filePath,
+            file_path: filePath,
+            thumbnail_path: thumbBlob ? thumbPath : null,
+            mime_type: imgBlob.type,
+            file_size: imgBlob.size,
+            status: 'uploading',
+            uploaded_by: uploadedBy,
+            capture_timestamp: job.capture_timestamp
+          }).select().single();
+
+          if (record?.error) {
+            dbInsertError = describeError(record.error);
+            console.warn('Evidence database insert error:', record.error);
+            this.notifyError(`Evidence record creation failed: ${dbInsertError}`);
+          } else if (record?.data?.id) {
+            evidenceId = record.data.id;
+          }
+        } catch (insertErr) {
+          dbInsertError = describeError(insertErr);
+          console.warn('Evidence DB insert exception:', insertErr);
+          this.notifyError(`Evidence record creation failed: ${dbInsertError}`);
+        }
+
+        // Upload with Retry Strategy to Supabase Storage
         let attempts = 0;
-        let lastError: string | null = null;
+        let lastStorageError: string | null = null;
         for (let attempt = 1; attempt <= 3; attempt++) {
           attempts = attempt;
           try {
@@ -165,56 +213,83 @@ class EvidenceQueueSystem {
               const { error: thumbErr } = await supabase.storage.from('evidence').upload(thumbPath, thumbBlob, { upsert: true, contentType: 'image/jpeg' });
               if (thumbErr) throw thumbErr;
             }
-            lastError = null;
+            lastStorageError = null;
             break;
           } catch (e) {
-            lastError = e instanceof Error ? e.message : String(e);
+            lastStorageError = describeError(e);
             if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 1000));
           }
         }
 
-        if (lastError) {
-          await (supabase as any).from('evidence').update({
-            status: 'failed',
-            upload_attempts: attempts,
-            last_error: lastError,
-            updated_at: new Date().toISOString()
-          }).eq('id', evidenceId);
-          throw new Error(`Storage upload failed after ${attempts} attempt(s): ${lastError}`);
+        if (lastStorageError) {
+          if (evidenceId) {
+            await (supabase as any).from('evidence').update({
+              status: 'failed',
+              upload_attempts: attempts,
+              last_error: lastStorageError,
+              updated_at: new Date().toISOString()
+            }).eq('id', evidenceId).catch(() => {});
+          }
+          this.metrics.failed++;
+          this.notifyError(`Evidence storage upload failed: ${lastStorageError}`);
+          analysisLogger.log({
+            video_id: job.video_id || null,
+            camera_id: job.camera_id || null,
+            analysis_run_id: job.analysis_run_id || null,
+            category: 'ERROR',
+            message: `Storage upload failed for incident #${job.incident_id.slice(0, 8)}: ${lastStorageError}`
+          });
+        } else if (dbInsertError) {
+          // Storage succeeded but database record failed: do NOT report as completely saved
+          this.metrics.failed++;
+          analysisLogger.log({
+            video_id: job.video_id || null,
+            camera_id: job.camera_id || null,
+            analysis_run_id: job.analysis_run_id || null,
+            category: 'ERROR',
+            message: `Evidence file uploaded to storage, but database record failed: ${dbInsertError}`
+          });
         } else {
-          const { error: statusErr } = await (supabase as any).from('evidence').update({
-            status: 'uploaded',
-            upload_attempts: attempts,
-            updated_at: new Date().toISOString()
-          }).eq('id', evidenceId);
-          if (statusErr) console.warn('Evidence status update failed:', statusErr);
+          // Both DB record and storage upload succeeded
+          if (evidenceId) {
+            const { error: statusErr } = await (supabase as any).from('evidence').update({
+              status: 'uploaded',
+              upload_attempts: attempts,
+              updated_at: new Date().toISOString()
+            }).eq('id', evidenceId);
+            if (statusErr) console.warn('Evidence status update failed:', statusErr);
+          }
           
           this.metrics.uploaded++;
-          db.auditLogs.create({ action: 'EVIDENCE_UPLOADED', metadata: { evidenceId, incidentId: job.incident_id } }).catch(()=>{});
+          if (evidenceId) {
+            db.auditLogs.create({ action: 'EVIDENCE_UPLOADED', metadata: { evidenceId, incidentId: job.incident_id } }).catch(()=>{});
+          }
 
           analysisLogger.log({
             video_id: job.video_id || null,
             camera_id: job.camera_id || null,
             analysis_run_id: job.analysis_run_id || null,
             category: 'EVIDENCE',
-            message: `Evidence uploaded for incident #${job.incident_id.slice(0, 8)} (${job.type})`
+            message: `Evidence saved and uploaded for incident #${job.incident_id.slice(0, 8)} (${job.type})`
           });
         }
 
       } catch (err: any) {
         this.metrics.failed++;
+        const errMsg = describeError(err);
         console.error('Evidence queue error:', err);
+        this.notifyError(`Evidence pipeline error: ${errMsg}`);
         analysisLogger.log({
           video_id: job.video_id || null,
           camera_id: job.camera_id || null,
           analysis_run_id: job.analysis_run_id || null,
           category: 'ERROR',
-          message: `Evidence upload failed: ${err?.message || 'Storage error'}`
+          message: `Evidence upload failed: ${errMsg}`
         });
       } finally {
         const elapsed = performance.now() - startTime;
         this.metrics.totalTimeMs += elapsed;
-        this.metrics.avgTimeMs = this.metrics.totalTimeMs / (this.metrics.uploaded + this.metrics.failed);
+        this.metrics.avgTimeMs = this.metrics.totalTimeMs / (this.metrics.uploaded + this.metrics.failed || 1);
       }
     }
 

@@ -1,358 +1,780 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { 
-  Camera, ShieldAlert, Activity, AlertOctagon,
-  MapPin, Clock, ArrowRight,
-  Loader2, Plus, Bell
+  Film, ShieldAlert, Activity, AlertOctagon,
+  Clock, ArrowRight, ArrowUpRight,
+  Loader2, Upload, Car, Truck, Bike, Bus,
+  CheckCircle2, AlertTriangle, Eye, ChevronRight
 } from 'lucide-react'
 import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 import { cn } from '../lib/utils'
 import { supabase } from '../lib/supabase'
-import { useAuthStore } from '../store/auth'
-import { Link } from 'react-router-dom'
-import { subHours } from 'date-fns'
+import type { VideoAsset, AnalysisRun } from '../services/db'
+import { fallbackVideoNumbers, videoDisplayName } from '../lib/videoAssets'
+import { formatDistanceToNow, format } from 'date-fns'
+
+interface TrackedObjectSummary {
+  id: string
+  video_id: string | null
+  track_id: number
+  object_type: string
+  confidence: number
+  frame_count: number | null
+  analysis_run_id: string | null
+}
+
+interface IncidentItem {
+  id: string
+  video_id: string | null
+  camera_id: string | null
+  incident_type: string
+  severity: string | null
+  description: string | null
+  created_at: string
+  analysis_run_id: string | null
+  track_id: number | null
+  cameras?: { name: string } | null
+  location?: string | null
+}
+
+function getAnalysisSummary(video: VideoAsset) {
+  const meta = (video.metadata && typeof video.metadata === 'object' && !Array.isArray(video.metadata) ? video.metadata : {}) as Record<string, any>;
+  const vehicles = meta.unique_vehicles ?? meta.summary?.unique_vehicles ?? null;
+  const frames = meta.total_frames ?? meta.processed_frames ?? meta.summary?.total_frames ?? video.frame_count ?? null;
+  const incidents = meta.speed_violations_count ?? meta.summary?.speed_violations_count ?? 0;
+  const profile = meta.detection_profile === 'high_recall' ? 'High Recall' : (meta.detection_profile === 'balanced' ? 'Balanced' : null);
+  const speed = meta.processing_speed === 'fast' ? 'Fast (2x)' : (meta.processing_speed === 'full' ? 'Full (1x)' : null);
+  return { vehicles, frames, incidents, profile, speed };
+}
+
+function formatShortDate(dateStr?: string | null): string {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  try {
+    const diffHours = (Date.now() - d.getTime()) / (1000 * 60 * 60);
+    if (diffHours < 24 && diffHours >= 0) {
+      return `${Math.max(1, Math.round(diffHours))}h ago`;
+    }
+    return format(d, 'MMM d');
+  } catch {
+    return '—';
+  }
+}
 
 export function Dashboard() {
-  const { role } = useAuthStore()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
-  
-  // Data states
-  const [cameras, setCameras] = useState<any[]>([])
-  const [incidents, setIncidents] = useState<any[]>([])
-  const [cases, setCases] = useState<any[]>([])
-  const [alerts, setAlerts] = useState<any[]>([])
-  const [logs, setLogs] = useState<any[]>([])
-  
+  const [error, setError] = useState<string | null>(null)
+
+  // Real persisted data states
+  const [videos, setVideos] = useState<VideoAsset[]>([])
+  const [runs, setRuns] = useState<AnalysisRun[]>([])
+  const [trackedObjects, setTrackedObjects] = useState<TrackedObjectSummary[]>([])
+  const [incidents, setIncidents] = useState<IncidentItem[]>([])
+
   useEffect(() => {
     async function loadDashboard() {
       setLoading(true)
-      
-      const [camsRes, incRes, casesRes, alertsRes, logsRes] = await Promise.all([
-        supabase.from('cameras').select('*').eq('is_deleted', false),
-        supabase.from('incidents').select('*, cameras(name)').order('created_at', { ascending: false }).limit(50),
-        supabase.from('cases').select('*, incident:incidents(severity)'),
-        supabase.from('alerts').select('*'),
-        supabase.from('audit_logs').select('*').order('timestamp', { ascending: false }).limit(10)
-      ])
-      
-      if (camsRes.data) setCameras(camsRes.data)
-      if (incRes.data) setIncidents(incRes.data)
-      if (casesRes.data) setCases(casesRes.data)
-      if (alertsRes.data) setAlerts(alertsRes.data)
-      if (logsRes.data) setLogs(logsRes.data)
-        
-      setLoading(false)
+      setError(null)
+      try {
+        const [videosRes, runsRes, tracksRes, incidentsRes] = await Promise.all([
+          supabase.from('video_assets').select('*').order('uploaded_at', { ascending: false }),
+          supabase.from('analysis_runs').select('*').order('started_at', { ascending: false }).limit(20),
+          supabase.from('tracked_objects').select('id, video_id, track_id, object_type, confidence, frame_count, analysis_run_id'),
+          supabase.from('incidents').select('*, cameras(name)').order('created_at', { ascending: false }).limit(20)
+        ])
+
+        if (videosRes.error) console.warn('video_assets load warning:', videosRes.error)
+        if (runsRes.error) console.warn('analysis_runs load warning:', runsRes.error)
+        if (tracksRes.error) console.warn('tracked_objects load warning:', tracksRes.error)
+        if (incidentsRes.error) console.warn('incidents load warning:', incidentsRes.error)
+
+        setVideos((videosRes.data || []) as VideoAsset[])
+        setRuns((runsRes.data || []) as AnalysisRun[])
+        setTrackedObjects((tracksRes.data || []) as TrackedObjectSummary[])
+        setIncidents((incidentsRes.data || []) as IncidentItem[])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setLoading(false)
+      }
     }
-    
+
     loadDashboard()
   }, [])
 
-  // Calculate real database metrics
-  const openCases = useMemo(() => {
-    return cases.filter(c => ['New', 'Investigating', 'Escalated', 'Under Review'].includes(c.status)).length
-  }, [cases])
+  const fallbackNumbers = useMemo(() => fallbackVideoNumbers(videos), [videos])
 
-  const criticalCases = useMemo(() => {
-    return cases.filter(c => c.incident?.severity === 'Critical' && c.status !== 'Closed').length
-  }, [cases])
+  // Distinct videos with completed analysis (avoids double-counting multiple runs of the same video)
+  const analyzedVideos = useMemo(() => {
+    return videos.filter(v => v.processing_status === 'completed' || runs.some(r => r.video_id === v.id && r.status === 'completed'))
+  }, [videos, runs])
 
-  const activeAlertsCount = useMemo(() => {
-    return alerts.filter(a => a.status === 'active').length
-  }, [alerts])
+  // Canonical traffic vehicle classes - strictly excludes person and static objects
+  const TRAFFIC_VEHICLES = useMemo(() => new Set(['car', 'truck', 'bus', 'motorcycle', 'bicycle']), []);
 
-  // Derive 24-hour incident trend from real database records
-  const trafficData = useMemo(() => {
-    const cutoff = subHours(new Date(), 24)
-    const buckets: Record<string, number> = {
-      '00:00': 0, '04:00': 0, '08:00': 0, '12:00': 0, '16:00': 0, '20:00': 0, '23:59': 0
-    }
-    incidents.forEach(inc => {
-      const d = new Date(inc.created_at)
-      if (d >= cutoff) {
-        const h = d.getHours()
-        let slot = '23:59'
-        if (h < 4) slot = '00:00'
-        else if (h < 8) slot = '04:00'
-        else if (h < 12) slot = '08:00'
-        else if (h < 16) slot = '12:00'
-        else if (h < 20) slot = '16:00'
-        else if (h < 24) slot = '20:00'
-        buckets[slot] = (buckets[slot] || 0) + 1
+  // Real unique vehicles count across all analyzed videos (never raw per-frame detections, never people)
+  const uniqueVehiclesCount = useMemo(() => {
+    const distinctTrackKeys = new Set<string>()
+    trackedObjects.forEach(t => {
+      const cls = (t.object_type || '').toLowerCase()
+      if (TRAFFIC_VEHICLES.has(cls) && t.video_id && t.track_id !== null && t.track_id !== undefined) {
+        distinctTrackKeys.add(`${t.video_id}:${t.track_id}`)
       }
     })
-    return Object.entries(buckets).map(([time, volume]) => ({ time, volume }))
+    if (distinctTrackKeys.size > 0) return distinctTrackKeys.size
+
+    // Fallback: sum unique_vehicles from metadata summaries of analyzed videos
+    return analyzedVideos.reduce((acc, v) => {
+      const meta = (v.metadata && typeof v.metadata === 'object' && !Array.isArray(v.metadata) ? v.metadata : {}) as Record<string, any>
+      const count = Number(meta.unique_vehicles ?? meta.summary?.unique_vehicles ?? 0)
+      return acc + count
+    }, 0)
+  }, [trackedObjects, analyzedVideos, TRAFFIC_VEHICLES])
+
+  // Total analyzed frames count
+  const totalFramesAnalyzed = useMemo(() => {
+    return analyzedVideos.reduce((acc, v) => {
+      const meta = (v.metadata && typeof v.metadata === 'object' && !Array.isArray(v.metadata) ? v.metadata : {}) as Record<string, any>
+      const count = Number(meta.total_frames ?? meta.processed_frames ?? meta.summary?.total_frames ?? v.frame_count ?? 0)
+      return acc + count
+    }, 0)
+  }, [analyzedVideos])
+
+  // High/critical priority incidents
+  const criticalIncidentsCount = useMemo(() => {
+    return incidents.filter(i => {
+      const s = (i.severity || '').toLowerCase()
+      return s === 'critical' || s === 'high'
+    }).length
   }, [incidents])
-  
-  // Calculate incident distribution based on actual data
-  const incidentData = useMemo(() => {
-    const types = incidents.reduce((acc, curr) => {
-      const t = curr.incident_type || 'Unclassified'
-      acc[t] = (acc[t] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-    
-    const colors = ['#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#10b981', '#06b6d4']
-    return Object.keys(types).map((type, i) => ({
-      name: type,
-      value: types[type],
-      color: colors[i % colors.length]
+
+  // Real vehicle classification distribution from tracked objects (strictly traffic vehicles)
+  const vehicleClassDistribution = useMemo(() => {
+    const counts: Record<string, number> = {}
+    trackedObjects.forEach(t => {
+      const cls = (t.object_type || '').toLowerCase()
+      if (TRAFFIC_VEHICLES.has(cls)) {
+        counts[cls] = (counts[cls] || 0) + 1
+      }
+    })
+
+    if (Object.keys(counts).length === 0) {
+      analyzedVideos.forEach(v => {
+        const meta = (v.metadata && typeof v.metadata === 'object' && !Array.isArray(v.metadata) ? v.metadata : {}) as Record<string, any>
+        const byClass = meta.summary?.vehicle_counts_by_class
+        if (byClass && typeof byClass === 'object') {
+          Object.entries(byClass).forEach(([k, val]) => {
+            const cls = k.toLowerCase()
+            if (TRAFFIC_VEHICLES.has(cls)) {
+              counts[cls] = (counts[cls] || 0) + Number(val || 0)
+            }
+          })
+        }
+      })
+    }
+
+    const colorMap: Record<string, string> = {
+      car: '#06b6d4',        // cyan
+      truck: '#f59e0b',      // amber
+      bus: '#10b981',        // emerald
+      motorcycle: '#8b5cf6', // purple
+      bicycle: '#ec4899',    // pink
+      vehicle: '#64748b'
+    }
+
+    const total = Object.values(counts).reduce((a, b) => a + b, 0)
+    return Object.entries(counts).map(([name, count]) => ({
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+      count,
+      percent: total > 0 ? Math.round((count / total) * 100) : 0,
+      color: colorMap[name] || '#6366f1'
     }))
-  }, [incidents])
+  }, [trackedObjects, analyzedVideos, TRAFFIC_VEHICLES])
+
+  // Real traffic activity data derived from completed analysis runs
+  const activityData = useMemo(() => {
+    const completedRuns = [...runs]
+      .filter(r => r.status === 'completed')
+      .slice(0, 6)
+      .reverse()
+
+    if (completedRuns.length > 0) {
+      return completedRuns.map((r, i) => {
+        const vid = videos.find(v => v.id === r.video_id)
+        const name = vid ? videoDisplayName(vid, fallbackNumbers) : `Run #${r.id.slice(0, 6)}`
+        const timeStr = r.started_at ? format(new Date(r.started_at), 'MMM d, HH:mm') : `Run ${i + 1}`
+        const vehicles = Number(
+          r.metrics && typeof r.metrics === 'object' && (r.metrics as any).summary?.unique_vehicles
+            ? (r.metrics as any).summary.unique_vehicles
+            : trackedObjects.filter(t => t.analysis_run_id === r.id || t.video_id === r.video_id).length
+        )
+        const incidentsCount = Number(r.incidents_created ?? 0)
+        return {
+          label: name.length > 14 ? `${name.slice(0, 12)}…` : name,
+          fullName: name,
+          time: timeStr,
+          vehicles,
+          incidents: incidentsCount
+        }
+      })
+    }
+
+    return analyzedVideos.slice(0, 6).reverse().map((v, i) => {
+      const meta = (v.metadata && typeof v.metadata === 'object' ? v.metadata : {}) as Record<string, any>
+      const name = videoDisplayName(v, fallbackNumbers)
+      const timeStr = v.uploaded_at ? format(new Date(v.uploaded_at), 'MMM d, HH:mm') : `Video ${i + 1}`
+      const vehicles = Number(meta.unique_vehicles ?? meta.summary?.unique_vehicles ?? 0)
+      const incidentsCount = Number(meta.speed_violations_count ?? meta.summary?.speed_violations_count ?? 0)
+      return {
+        label: name.length > 14 ? `${name.slice(0, 12)}…` : name,
+        fullName: name,
+        time: timeStr,
+        vehicles,
+        incidents: incidentsCount
+      }
+    })
+  }, [runs, videos, analyzedVideos, trackedObjects, fallbackNumbers])
 
   if (loading) {
     return (
       <div className="h-[calc(100vh-136px)] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+        <div className="flex flex-col items-center gap-2 text-slate-500 text-xs">
+          <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+          <span>Loading traffic intelligence…</span>
+        </div>
       </div>
     )
   }
 
-  if (cameras.length === 0) {
+  // Proper first-run onboarding empty state when no videos or incidents exist
+  if (videos.length === 0 && incidents.length === 0) {
     return (
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 flex flex-col items-center justify-center text-center">
-        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-blue-100">
-          <Activity className="w-8 h-8 text-blue-500" />
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 flex flex-col items-center justify-center text-center max-w-3xl mx-auto my-8">
+        <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-indigo-100 shadow-xs">
+          <Activity className="w-8 h-8 text-indigo-600" />
         </div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-3">Welcome to VisionGuard</h2>
-        <p className="text-slate-500 text-[15px] max-w-md mb-8">
-          Your operations dashboard is empty. Add your first traffic camera or connect your VMS system to start analyzing real-time data.
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Welcome to VisionGuard Traffic Intelligence</h2>
+        <p className="text-slate-600 text-sm max-w-lg mb-8 leading-relaxed">
+          Your traffic surveillance platform is online and ready. Follow the 4-step workflow below to analyze footage and generate operational insights.
         </p>
-        {(role === 'Admin' || role === 'Operator') ? (
+
+        {/* 4-Step First-Run Guide Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 text-left w-full mb-8">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">1</span>
+                <span className="font-bold text-xs text-slate-900">Upload Video</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Provide an MP4 or WebM highway/intersection recording in Live Analysis.
+              </p>
+            </div>
+            <span className="text-[10px] text-indigo-600 font-semibold mt-3">Drag & drop or browse</span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">2</span>
+                <span className="font-bold text-xs text-slate-900">Save to History</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Toggle "Save to History" to persist detections, tracks, and evidence artifacts.
+              </p>
+            </div>
+            <span className="text-[10px] text-indigo-600 font-semibold mt-3">Enables cross-session review</span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">3</span>
+                <span className="font-bold text-xs text-slate-900">Configure & Run</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Analyze traffic footage with YOLO11n on WebGPU or Local Backend.
+              </p>
+            </div>
+            <span className="text-[10px] text-indigo-600 font-semibold mt-3">DirectML GPU or CPU</span>
+          </div>
+
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">4</span>
+                <span className="font-bold text-xs text-slate-900">Review & Report</span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Inspect incidents in Video Review, manage cases, and export PDF traffic reports.
+              </p>
+            </div>
+            <span className="text-[10px] text-indigo-600 font-semibold mt-3">Full evidence audit trail</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-center gap-3">
           <Link 
-            to="/app/cameras"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg text-[14px] font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+            to="/app/analyze"
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
           >
-            <Plus className="w-5 h-5" /> Connect Camera Network
+            <Upload className="w-4 h-4" /> Start First Video Analysis
           </Link>
-        ) : (
-          <p className="text-[13px] text-slate-400 font-medium">Please contact your administrator to configure the system.</p>
-        )}
+          <Link 
+            to="/app/videos"
+            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-2xs flex items-center gap-2 cursor-pointer"
+          >
+            <Film className="w-4 h-4 text-slate-500" /> Open Video History
+          </Link>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      
-      {/* KPI Row (All 6 Database Driven Metrics) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {[
-          { label: 'Cameras', value: cameras.length.toString(), icon: Camera, color: 'text-blue-600', bg: 'bg-blue-50' },
-          { label: 'Incidents', value: incidents.length.toString(), icon: AlertOctagon, color: 'text-rose-600', bg: 'bg-rose-50' },
-          { label: 'Cases', value: cases.length.toString(), icon: ShieldAlert, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-          { label: 'Alerts', value: activeAlertsCount.toString(), icon: Bell, color: 'text-amber-600', bg: 'bg-amber-50' },
-          { label: 'Open Cases', value: openCases.toString(), icon: Clock, color: 'text-purple-600', bg: 'bg-purple-50' },
-          { label: 'Critical Cases', value: criticalCases.toString(), icon: AlertOctagon, color: 'text-red-600', bg: 'bg-red-50' },
-        ].map((kpi, i) => (
-          <div key={i} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[13px] font-semibold text-slate-500 uppercase tracking-wide">{kpi.label}</span>
-              <div className={cn("p-2 rounded-lg", kpi.bg)}>
-                <kpi.icon className={cn("w-4 h-4", kpi.color)} />
-              </div>
-            </div>
-            <div className="text-2xl font-bold text-slate-900 mt-auto">{kpi.value}</div>
-          </div>
-        ))}
+    <div className="space-y-6 max-w-7xl mx-auto pb-10 w-full min-w-0">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 min-w-0">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Traffic Intelligence Overview</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Operational summary of analyzed traffic footage, tracked vehicles, and recorded incidents.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Link 
+            to="/app/videos"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+          >
+            <Film className="w-3.5 h-3.5 text-slate-500" /> Video History
+          </Link>
+          <Link 
+            to="/app/analyze"
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+          >
+            <Upload className="w-3.5 h-3.5" /> Start Live Analysis
+          </Link>
+        </div>
       </div>
 
-      {/* Second Section: Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Incident Volume Trend (24h) */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-6">
+      {error && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-700 px-3.5 py-2.5 rounded-lg text-xs flex items-center justify-between">
+          <span>Failed to load some dashboard records: {error}</span>
+          <button onClick={() => setError(null)} className="text-rose-500 hover:text-rose-700 font-bold ml-4">✕</button>
+        </div>
+      )}
+
+      {/* Primary KPI Row — Connected to real persisted data */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 min-w-0">
+        {/* Videos Analyzed */}
+        <div 
+          onClick={() => navigate('/app/videos')}
+          className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs hover:border-indigo-300 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Videos Analyzed</span>
+            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors">
+              <Film className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">{analyzedVideos.length}</div>
+            <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
+              <span>{videos.length} total saved videos</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+            </div>
+          </div>
+        </div>
+
+        {/* Vehicles Tracked */}
+        <div 
+          onClick={() => navigate('/app/analytics')}
+          className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs hover:border-cyan-300 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Vehicles Tracked</span>
+            <div className="p-2 rounded-lg bg-cyan-50 text-cyan-600 group-hover:bg-cyan-100 transition-colors">
+              <Car className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">{uniqueVehiclesCount}</div>
+            <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
+              <span>Unique tracked objects</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-cyan-600 transition-colors" />
+            </div>
+          </div>
+        </div>
+
+        {/* Incidents Recorded */}
+        <div 
+          onClick={() => navigate('/app/incidents')}
+          className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs hover:border-rose-300 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Incidents Recorded</span>
+            <div className="p-2 rounded-lg bg-rose-50 text-rose-600 group-hover:bg-rose-100 transition-colors">
+              <AlertOctagon className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-bold text-rose-600 font-mono tracking-tight">{incidents.length}</div>
+            <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
+              <span>{criticalIncidentsCount} high / critical priority</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-rose-600 transition-colors" />
+            </div>
+          </div>
+        </div>
+
+        {/* Footage Processed */}
+        <div 
+          onClick={() => navigate('/app/analyze')}
+          className="bg-white rounded-xl border border-slate-200 p-4 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Footage Processed</span>
+            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 transition-colors">
+              <Activity className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <div className="text-2xl font-bold text-slate-900 font-mono tracking-tight">{totalFramesAnalyzed.toLocaleString()}</div>
+            <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
+              <span>Evaluated video frames</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-emerald-600 transition-colors" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Middle Section: Traffic Activity & Classification Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 min-w-0">
+        {/* Activity Chart (8 cols) */}
+        <div className="lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-2xs p-5 flex flex-col justify-between min-w-0">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Incident Volume Trend (24h)</h3>
-              <p className="text-[13px] text-slate-500">Hourly infractions detected across monitored feeds.</p>
+              <h3 className="text-sm font-bold text-slate-900">Traffic Analysis Activity</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Tracked vehicles and recorded incidents across recent completed analyses.</p>
             </div>
-            <Link to="/app/analytics" className="text-[13px] font-medium text-blue-600 hover:text-blue-700 flex items-center cursor-pointer">
-              View Detailed Report <ArrowRight className="w-4 h-4 ml-1" />
+            <div className="flex items-center gap-3 text-xs text-slate-500 font-medium">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-indigo-600" /> Vehicles
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-rose-500" /> Incidents
+              </span>
+            </div>
+          </div>
+
+          <div className="h-[240px] w-full min-w-0">
+            {activityData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                No completed analyses to plot yet.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={activityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis 
+                    dataKey="label" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 11, fill: '#64748b' }} 
+                    dy={5}
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 11, fill: '#64748b' }} 
+                    allowDecimals={false} 
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: '#fff', 
+                      borderRadius: '8px', 
+                      border: '1px solid #e2e8f0', 
+                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                      fontSize: '12px'
+                    }}
+                    labelStyle={{ fontWeight: 'bold', color: '#0f172a' }}
+                    formatter={(value: any, name: any) => [
+                      value, 
+                      name === 'vehicles' ? 'Vehicles Tracked' : 'Incidents Flagged'
+                    ]}
+                  />
+                  <Bar dataKey="vehicles" fill="#4f46e5" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  <Bar dataKey="incidents" fill="#f43f5e" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Vehicle Classification Breakdown (4 cols) */}
+        <div className="lg:col-span-4 bg-white rounded-xl border border-slate-200 shadow-2xs p-5 flex flex-col justify-between min-w-0">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-bold text-slate-900">Vehicle Classification</h3>
+              <span className="text-xs font-semibold text-slate-400 font-mono">{uniqueVehiclesCount} Total</span>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">Distribution of unique tracked vehicle types.</p>
+          </div>
+
+          <div className="space-y-3 my-auto">
+            {vehicleClassDistribution.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No tracked vehicles classified yet.
+              </div>
+            ) : (
+              vehicleClassDistribution.map((item) => {
+                const IconComponent = 
+                  item.name.toLowerCase() === 'car' ? Car :
+                  item.name.toLowerCase() === 'truck' ? Truck :
+                  item.name.toLowerCase() === 'bus' ? Bus :
+                  item.name.toLowerCase() === 'motorcycle' ? Bike : Car
+
+                return (
+                  <div key={item.name} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                        <IconComponent className="w-3.5 h-3.5" style={{ color: item.color }} />
+                        {item.name}
+                      </span>
+                      <span className="font-mono text-slate-500 text-[11px]">
+                        {item.count} ({item.percent}%)
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{ width: `${item.percent}%`, backgroundColor: item.color }}
+                      />
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-400 flex items-center justify-between mt-4">
+            <span>Powered by YOLO11n ONNX</span>
+            <Link to="/app/videos" className="text-indigo-600 font-semibold hover:underline flex items-center gap-1">
+              Inspect tracks <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trafficData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorVolume" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15}/>
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} allowDecimals={false} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                  labelStyle={{ fontWeight: 'bold', color: '#0f172a' }}
-                />
-                <Area type="monotone" dataKey="volume" stroke="#3b82f6" strokeWidth={2.5} fillOpacity={1} fill="url(#colorVolume)" name="Incidents" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
         </div>
-
-        {/* Incident Distribution */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col">
-          <h3 className="text-base font-bold text-slate-900 mb-6">Incident Distribution</h3>
-          {incidentData.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400">
-              <Activity className="w-12 h-12 mb-2 text-slate-200" />
-              <p className="text-[13px] font-medium text-slate-500">No incidents recorded</p>
-            </div>
-          ) : (
-            <>
-              <div className="flex-1 min-h-[200px] relative flex items-center justify-center">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={incidentData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={65}
-                      outerRadius={85}
-                      paddingAngle={2}
-                      dataKey="value"
-                      stroke="none"
-                    >
-                      {incidentData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                      itemStyle={{ fontWeight: '500' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="absolute inset-0 flex items-center justify-center flex-col pointer-events-none">
-                  <span className="text-3xl font-bold text-slate-900">{incidents.length}</span>
-                  <span className="text-[12px] font-medium text-slate-500 uppercase tracking-wide">Total</span>
-                </div>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 overflow-y-auto max-h-[80px]">
-                {incidentData.map((item, i) => (
-                  <div key={i} className="flex items-center space-x-2">
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: item.color }}></div>
-                    <span className="text-[13px] text-slate-600 truncate">{item.name}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-
       </div>
 
-      {/* Third Section: Tables & Feeds */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Recent Incidents Table */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-base font-bold text-slate-900">Recent Incidents</h3>
-            <Link to="/app/incidents" className="text-xs font-semibold text-blue-600 hover:text-blue-700">
-              View all
+      {/* Bottom Section: Recent Analyses & Recent Incidents */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-5 items-start min-w-0">
+        {/* Recent Analyses Table */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col min-w-0">
+          <div className="p-3.5 sm:p-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-900 truncate">Recent Video Analyses</h3>
+              <p className="text-xs text-slate-500 mt-0.5 truncate">Recently submitted and completed traffic footage runs.</p>
+            </div>
+            <Link to="/app/videos" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 shrink-0 ml-2">
+              <span>View History</span> <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
-          <div className="overflow-x-auto flex-1">
-            {incidents.length === 0 ? (
-               <div className="flex items-center justify-center h-48 text-slate-500 text-[14px]">
-                 No incidents recorded.
-               </div>
+
+          <div className="w-full min-w-0 overflow-hidden">
+            {videos.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400">
+                No videos recorded in library yet.
+              </div>
             ) : (
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/50">
-                    <th className="px-5 py-3 text-[12px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">Location / Camera</th>
-                    <th className="px-5 py-3 text-[12px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">Type</th>
-                    <th className="px-5 py-3 text-[12px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">Severity</th>
-                    <th className="px-5 py-3 text-[12px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-100">Status</th>
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-3 py-2">Video</th>
+                    <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2 text-center">Vehicles</th>
+                    <th className="px-2 py-2 text-center">Incidents</th>
+                    <th className="px-2 py-2">Date</th>
+                    <th className="px-3 py-2 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {incidents.slice(0, 5).map((incident) => (
-                    <tr key={incident.id} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center space-x-2">
-                          <MapPin className="w-4 h-4 text-slate-400" />
-                          <span className="text-[14px] text-slate-600">{incident.cameras?.name || 'Camera Feed'}</span>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-[14px] text-slate-600">{incident.incident_type}</td>
-                      <td className="px-5 py-3.5">
-                        <span className={cn(
-                          "inline-flex items-center px-2 py-0.5 rounded text-[12px] font-medium",
-                          incident.severity === 'Critical' ? "bg-red-50 text-red-700" :
-                          incident.severity === 'High' ? "bg-orange-50 text-orange-700" :
-                          incident.severity === 'Medium' ? "bg-amber-50 text-amber-700" :
-                          "bg-green-50 text-green-700"
-                        )}>
-                          {incident.severity}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center space-x-1.5">
-                          <div className={cn(
-                            "w-1.5 h-1.5 rounded-full",
-                            incident.status === 'Active' ? "bg-blue-500" : "bg-emerald-500"
-                          )}></div>
-                          <span className="text-[13px] font-medium text-slate-700">{incident.status}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {videos.slice(0, 5).map((v) => {
+                    const name = videoDisplayName(v, fallbackNumbers)
+                    const summary = getAnalysisSummary(v)
+                    const isCompleted = v.processing_status === 'completed'
+
+                    return (
+                      <tr key={v.id} className="hover:bg-slate-50/60 transition-colors">
+                        {/* Video Name and Filename */}
+                        <td className="px-3 py-2 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 rounded bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                              <Film className="w-3 h-3 text-slate-500" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-slate-900 text-xs truncate" title={name}>{name}</p>
+                              <p className="text-[10px] text-slate-400 truncate max-w-[130px] sm:max-w-[180px]" title={v.filename}>{v.filename}</p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-2 py-2 shrink-0 whitespace-nowrap">
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded text-[10px] font-semibold border inline-flex items-center gap-1",
+                            isCompleted 
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : v.processing_status === 'processing' || v.processing_status === 'analyzing'
+                              ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                              : "bg-slate-100 text-slate-600 border-slate-200"
+                          )}>
+                            {isCompleted ? <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 shrink-0" /> : null}
+                            <span>{isCompleted ? 'Done' : (v.processing_status || 'Pending')}</span>
+                          </span>
+                        </td>
+
+                        {/* Vehicle Count */}
+                        <td className="px-2 py-2 text-center font-mono text-slate-700 text-xs shrink-0 whitespace-nowrap">
+                          {summary.vehicles !== null ? summary.vehicles : '—'}
+                        </td>
+
+                        {/* Incident Count */}
+                        <td className="px-2 py-2 text-center font-mono text-xs shrink-0 whitespace-nowrap">
+                          {summary.incidents > 0 ? (
+                            <span className="text-rose-600 font-semibold">{summary.incidents}</span>
+                          ) : (
+                            <span className="text-slate-400">0</span>
+                          )}
+                        </td>
+
+                        {/* Short Date */}
+                        <td className="px-2 py-2 text-slate-500 text-[11px] shrink-0 whitespace-nowrap">
+                          {formatShortDate(v.uploaded_at)}
+                        </td>
+
+                        {/* Compact Action */}
+                        <td className="px-3 py-2 text-right shrink-0 whitespace-nowrap">
+                          {isCompleted ? (
+                            <button
+                              onClick={() => navigate(`/app/videos?video=${encodeURIComponent(v.id)}`)}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 rounded text-[11px] font-semibold transition-colors cursor-pointer shadow-2xs shrink-0"
+                              title="Open in History"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>Review</span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => navigate(`/app/analyze?video=${encodeURIComponent(v.id)}`)}
+                              className="inline-flex items-center px-2 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-[11px] font-medium transition-colors cursor-pointer shadow-2xs shrink-0"
+                            >
+                              Analyze
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )}
           </div>
-          <div className="p-4 border-t border-slate-100 text-center">
-            <Link to="/app/incidents" className="text-[13px] font-medium text-slate-600 hover:text-slate-900">View All Incidents</Link>
-          </div>
         </div>
 
-        {/* Live Operations Feed */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
-          <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-              </div>
-              <h3 className="text-base font-bold text-slate-900">System Logs</h3>
+        {/* Recent Incidents Table */}
+        <div className="bg-white rounded-xl border border-slate-200 shadow-2xs overflow-hidden flex flex-col min-w-0">
+          <div className="p-3.5 sm:p-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-slate-900 truncate">Recent Incidents</h3>
+              <p className="text-xs text-slate-500 mt-0.5 truncate">Recorded traffic events and infractions.</p>
             </div>
-            <Link to="/app/audit" className="text-xs font-semibold text-blue-600 hover:text-blue-700">
-              Audit log
+            <Link to="/app/incidents" className="text-xs font-semibold text-rose-600 hover:text-rose-700 flex items-center gap-1 shrink-0 ml-2">
+              <span>Incident Center</span> <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
-          <div className="p-5 flex-1 overflow-y-auto space-y-5">
-            {logs.length === 0 ? (
-               <div className="flex items-center justify-center h-full text-slate-500 text-[13px]">
-                 No recent activity.
-               </div>
-            ) : logs.map((log) => (
-              <div key={log.id} className="flex space-x-3">
-                <div className="mt-0.5">
-                   <Activity className="w-5 h-5 text-blue-500" /> 
-                </div>
-                <div>
-                  <p className="text-[14px] text-slate-700 leading-snug font-medium">{log.action}</p>
-                  <div className="flex items-center space-x-1.5 mt-1">
-                    <Clock className="w-3 h-3 text-slate-400" />
-                    <span className="text-[12px] text-slate-500">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
+
+          <div className="w-full min-w-0 overflow-hidden">
+            {incidents.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400">
+                No incidents recorded.
               </div>
-            ))}
+            ) : (
+              <table className="w-full text-left border-collapse text-xs">
+                <thead className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-3 py-2">Severity</th>
+                    <th className="px-2 py-2">Incident</th>
+                    <th className="px-2 py-2">Source</th>
+                    <th className="px-3 py-2 text-right">Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {incidents.slice(0, 5).map((inc) => {
+                    const isCritical = inc.severity === 'Critical' || inc.severity === 'high'
+                    const isMedium = inc.severity === 'Medium' || inc.severity === 'medium'
+                    const matchedVideo = inc.video_id ? videos.find(v => v.id === inc.video_id) : null
+                    const locationLabel = matchedVideo 
+                      ? videoDisplayName(matchedVideo, fallbackNumbers) 
+                      : inc.cameras?.name || inc.location || 'Traffic Feed'
+
+                    return (
+                      <tr 
+                        key={inc.id}
+                        onClick={() => {
+                          if (inc.id) {
+                            navigate(`/app/incidents?id=${inc.id}`)
+                          } else if (inc.video_id) {
+                            navigate(`/app/videos?video=${encodeURIComponent(inc.video_id)}`)
+                          } else {
+                            navigate('/app/incidents')
+                          }
+                        }}
+                        className="hover:bg-slate-50/60 transition-colors cursor-pointer group"
+                      >
+                        {/* Severity */}
+                        <td className="px-3 py-2 shrink-0 whitespace-nowrap">
+                          <span className={cn(
+                            "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
+                            isCritical 
+                              ? "bg-rose-50 text-rose-700 border-rose-200"
+                              : isMedium 
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : "bg-blue-50 text-blue-700 border-blue-200"
+                          )}>
+                            {inc.severity || 'Medium'}
+                          </span>
+                        </td>
+
+                        {/* Incident Type */}
+                        <td className="px-2 py-2 font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors min-w-0">
+                          <span className="truncate block max-w-[110px] sm:max-w-[140px]" title={String(inc.incident_type || 'Traffic Violation').replace(/_/g, ' ')}>
+                            {String(inc.incident_type || 'Traffic Violation').replace(/_/g, ' ')}
+                          </span>
+                        </td>
+
+                        {/* Source Video / Camera */}
+                        <td className="px-2 py-2 text-slate-600 font-medium text-[11px] min-w-0">
+                          <span className="truncate block max-w-[90px] sm:max-w-[120px]" title={locationLabel}>
+                            {locationLabel}
+                          </span>
+                        </td>
+
+                        {/* Short Time */}
+                        <td className="px-3 py-2 text-right text-slate-400 text-[11px] shrink-0 whitespace-nowrap">
+                          {formatShortDate(inc.created_at)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
-
       </div>
-
     </div>
   )
 }

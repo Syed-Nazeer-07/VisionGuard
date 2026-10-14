@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
-import { Terminal, ArrowDown, Activity } from 'lucide-react'
+import { Terminal, ArrowDown } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { type AnalysisLogEntry, type LogCategory, analysisLogger, mergeLogs } from '../../services/analysisLogger'
 
@@ -93,14 +93,14 @@ export function AnalysisLogPanel({ videoId, cameraId, className }: AnalysisLogPa
       className
     )}>
       {/* Log Header */}
-      <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
+      <div className="flex items-center justify-between px-3.5 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-emerald-400" />
-          <span className="font-bold text-slate-200 uppercase tracking-wider text-[11px]">
-            Analysis Logs
+          <Terminal className="w-3.5 h-3.5 text-slate-400" />
+          <span className="font-semibold text-slate-300 uppercase tracking-wider text-[11px]">
+            Event Log
           </span>
-          {(videoId || cameraId) && (
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          {videoId && (
+            <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               LIVE
             </span>
@@ -135,7 +135,7 @@ export function AnalysisLogPanel({ videoId, cameraId, className }: AnalysisLogPa
                 }
               }}
               title="Scroll to bottom"
-              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
             >
               <ArrowDown className="w-3.5 h-3.5" />
             </button>
@@ -157,10 +157,10 @@ export function AnalysisLogPanel({ videoId, cameraId, className }: AnalysisLogPa
         className="flex-1 p-3 overflow-y-auto space-y-1.5 scrollbar-thin scrollbar-thumb-slate-800 min-h-[300px] max-h-[560px]"
       >
         {filteredLogs.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
-            <Activity className="w-8 h-8 mb-2 opacity-30 text-slate-400 animate-pulse" />
-            <p className="text-[12px] font-sans">{videoId || cameraId ? 'No events recorded for this source yet.' : 'Select a video or camera to see its events.'}</p>
-            <span className="text-[11px] text-slate-600 font-sans mt-1">Logs will record uploads, model inference, tracks and incident checkpoints.</span>
+          <div className="h-full flex items-center justify-center text-center p-6 text-slate-500">
+            <p className="text-xs font-sans text-slate-500">
+              {videoId ? 'No events recorded for this session yet.' : 'Session activity will appear after a video is opened.'}
+            </p>
           </div>
         ) : (
           filteredLogs.map((entry) => {
