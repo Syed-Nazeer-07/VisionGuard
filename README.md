@@ -2,421 +2,395 @@
 
 ### AI Traffic Intelligence & Video Analytics Platform
 
-VisionGuard is an AI-powered traffic intelligence platform designed to transform roadway video into actionable operational data.
+VisionGuard is a web application for analysing roadway videos, detecting and tracking road users, and organising the resulting information into review, incident, analytics, and reporting workflows.
 
-It combines browser-based computer vision, vehicle tracking, traffic-rule detection, persistent analysis, evidence management, analytics, and large-scale video storage into a unified traffic operations platform.
+The project combines a React-based interface, browser-side computer vision, an optional local Python analysis service, Supabase for authentication and structured data, and Backblaze B2 for video-object storage.
+
+> **Project status:** VisionGuard is under active development. Detection quality, object tracking, fullscreen playback, and real-world speed estimation depend on the model, video conditions, calibration, and the current implementation. A successful build or unit test run does not by itself verify accuracy on real traffic footage.
 
 <p align="center">
   <a href="https://github.com/Syed-Nazeer-07/VisionGuard">
-    <img src="https://img.shields.io/badge/GitHub-VisionGuard-181717?style=for-the-badge&logo=github" alt="GitHub">
+    <img src="https://img.shields.io/badge/GitHub-VisionGuard-181717?style=for-the-badge&logo=github" alt="GitHub repository">
   </a>
   <img src="https://img.shields.io/badge/React-18+-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React">
   <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
   <img src="https://img.shields.io/badge/Vite-7+-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite">
-  <img src="https://img.shields.io/badge/Supabase-Backend-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase">
-  <img src="https://img.shields.io/badge/Backblaze%20B2-Large%20Video%20Storage-EF3B2D?style=for-the-badge" alt="Backblaze B2">
-  <img src="https://img.shields.io/badge/ONNX%20Runtime-Web-5B5BD6?style=for-the-badge" alt="ONNX Runtime Web">
+  <img src="https://img.shields.io/badge/Supabase-Postgres%20%7C%20Auth-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase">
+  <img src="https://img.shields.io/badge/Backblaze-B2-EF3B2D?style=for-the-badge" alt="Backblaze B2">
+  <img src="https://img.shields.io/badge/ONNX%20Runtime-Web-5B5BD6?style=for-the-badge" alt="ONNX Runtime">
 </p>
+
+---
+
+## Contents
+
+- [Overview](#overview)
+- [Key capabilities](#key-capabilities)
+- [Application navigation](#application-navigation)
+- [Architecture](#architecture)
+- [Video-analysis pipeline](#video-analysis-pipeline)
+- [Detection and tracking contract](#detection-and-tracking-contract)
+- [Speed estimation](#speed-estimation)
+- [Backend processing](#backend-processing)
+- [Data storage](#data-storage)
+- [Security](#security)
+- [Technology stack](#technology-stack)
+- [Repository structure](#repository-structure)
+- [Getting started](#getting-started)
+- [Environment configuration](#environment-configuration)
+- [Database and Edge Functions](#database-and-edge-functions)
+- [Run the local analysis backend](#run-the-local-analysis-backend)
+- [Development and testing](#development-and-testing)
+- [Known limitations](#known-limitations)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
 
 ---
 
 ## Overview
 
-VisionGuard provides a unified environment for analyzing traffic footage from uploaded videos and live camera sources.
+VisionGuard is designed to help users turn traffic footage into structured information that can be reviewed later.
 
-The platform is built around a persistent intelligence pipeline:
-
-```text
-Video / Camera Source
-        │
-        ▼
-   AI Inference
-        │
-        ▼
- Object Detection
-        │
-        ▼
- Vehicle Tracking
-        │
-        ▼
- Rule Evaluation
-        │
-        ├───────────────┐
-        ▼               ▼
-   Incidents        Evidence
-        │               │
-        └───────┬───────┘
-                ▼
-        Persistent Analysis
-                │
-        ┌───────┼────────┐
-        ▼       ▼        ▼
-     Review  Analytics  Reports
-```
-
-VisionGuard is designed so that analysis results are not trapped inside a browser session.
-
-Videos, analysis runs, tracked objects, incidents, evidence, and logs are persisted so they can be revisited later.
-
----
-
-## Key Capabilities
-
-### 🎥 Video Intelligence
-
-- Upload traffic videos directly from the application
-- Large-file video ingestion through Backblaze B2
-- Resumable multipart uploads
-- Real upload progress, transfer speed, and ETA
-- Persistent `video_assets` records
-- Persistent video playback
-- Historical video analysis and review
-- Large-video support for traffic footage
-
-### 🚦 Traffic AI
-
-- YOLO-based vehicle detection
-- ONNX Runtime Web inference
-- WebGPU acceleration when available
-- WASM fallback
-- Web Worker inference architecture
-- ByteTrack multi-object tracking
-- Kalman-based tracking state
-- Vehicle track IDs
-- Persistent trajectories
-- Speed estimation
-- Traffic rule evaluation
-- Incident generation
-- Evidence capture
-
-### 📡 Live Camera Analysis
-
-- Live camera source management
-- Camera analysis sessions
-- Persistent `analysis_runs`
-- Camera-specific tracking
-- Persistent incidents and evidence
-- Camera/source switching
-- Uploaded-video and live-camera analysis modes
-- Persistent analysis logs
-
-### 🧠 Persistent Intelligence
-
-VisionGuard persists:
-
-- Analysis runs
-- Tracked objects
-- Trajectories
-- Incidents
-- Evidence
-- Analysis logs
-- Camera metadata
-- Video metadata
-
-This enables historical analysis and operational intelligence beyond a single browser session.
-
-### 📊 Analytics & Reporting
-
-- Incident analytics
-- Severity breakdowns
-- Traffic analysis
-- Historical trends
-- Operational reports
-- Executive intelligence
-- CSV/export workflows
-
-### 🔐 Security
-
-- Supabase Authentication
-- Role-based authorization
-- PostgreSQL Row Level Security
-- Viewer / Operator / Supervisor / Admin roles
-- Protected routes
-- Server-side B2 credentials
-- Signed B2 playback URLs
-- Controlled storage operations through backend functions
-
----
-
-# Architecture
-
-## High-Level Architecture
+At a high level, the system follows this workflow:
 
 ```text
-┌──────────────────────────────────────────────┐
-│                VisionGuard UI                │
-│                                              │
-│ Dashboard │ Cameras │ Analyze │ Review       │
-│ Analytics │ Reports │ Cases │ Settings       │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼
-┌──────────────────────────────────────────────┐
-│           React / Vite Application            │
-│                                              │
-│ AuthProvider                                 │
-│ Routing / AppLayout                          │
-│ Upload Manager                               │
-│ Live Analysis Session                        │
-│ Analysis Logger                              │
-└──────────────────────┬───────────────────────┘
-                       │
-             ┌─────────┴─────────┐
-             ▼                   ▼
-      Browser AI Pipeline    Supabase Backend
-             │                   │
-      ┌──────┼──────┐      ┌─────┼─────────┐
-      ▼      ▼      ▼      ▼     ▼         ▼
-    ONNX  ByteTrack Rules  Auth  DB        RLS
-      │      │      │
-      └──────┴──────┘
-             │
-             ▼
-       Persistent Results
+Traffic video or configured camera
+              |
+              v
+       Video/frame handling
+              |
+              v
+        Object detection
+              |
+              v
+       Vehicle/object tracking
+              |
+              v
+  Movement and rule evaluation
+              |
+      +-------+-------+
+      |               |
+      v               v
+ Incidents         Evidence
+      |               |
+      +-------+-------+
+              |
+              v
+     Persistent records
+              |
+              v
+ History / Cases / Analytics / Reports
 ```
+
+The application separates the user interface, AI processing, structured database records, and large video files. This makes it possible to change parts of the analysis infrastructure without replacing the entire website.
+
+## Key capabilities
+
+### Video management
+
+- Select and preview traffic video in the web application.
+- Upload video files and store them through the configured storage workflow.
+- Track video metadata using persistent database records.
+- Revisit available video assets through History and supported review actions.
+- Maintain source identity while analysis is active in the single-page application.
+
+### Traffic analysis
+
+- YOLO-based object detection using a compatible model.
+- Browser inference through ONNX Runtime Web.
+- WebGPU acceleration when supported by the browser, device, and model.
+- WebAssembly execution fallback when configured and supported.
+- Web Worker execution to move selected inference work off the main UI thread.
+- Multi-object tracking using ByteTrack-style association and Kalman-based motion estimation.
+- Vehicle classes including cars, trucks, buses, bicycles, and motorcycles when supported by the configured model.
+- Detection overlays and tracked-object labels.
+- Traffic-rule evaluation, incident workflows, and evidence handling where configured.
+
+### Hybrid execution
+
+VisionGuard supports two analysis paths:
+
+- **Browser WebGPU:** runs compatible inference in the browser when the required model and runtime are available.
+- **Local Backend:** sends processing work to a locally running Python service.
+
+The two paths should produce compatible result records for the UI. They do not guarantee identical inference speed or identical predictions on all hardware.
+
+### Review and reporting
+
+- Dashboard for an operational overview.
+- History for available video records and review actions.
+- Cases for investigation and incident-related workflows.
+- Analytics for summaries and trends from available persisted data.
+- Reports for supported reporting and export workflows.
+
+### Data persistence
+
+The application can persist structured records for users, cameras, video assets, analysis runs, tracked objects, incidents, evidence references, and reporting workflows, depending on the enabled feature and schema.
 
 ---
 
-# Video Storage Architecture
+## Application navigation
 
-VisionGuard separates application data from large binary video storage.
+The primary user workflow is organised around the following pages:
+
+| Page | Purpose |
+|---|---|
+| **Dashboard** | High-level overview of available application and analysis information. |
+| **Live Analysis** | Select a video or configured source and view analysis overlays. |
+| **History** | Browse available video records and access supported playback/review actions. |
+| **Cases** | Manage investigations and related incident/review workflows available to the user's role. |
+| **Analytics** | Explore summaries and trends derived from available stored data. |
+| **Reports** | Access supported reporting and export features. |
+
+Some installations may also expose camera management, user administration, audit, or configuration routes according to their permissions and setup.
+
+---
+
+## Architecture
+
+### High-level architecture
+
+```text
+                     VisionGuard web UI
+                 React + TypeScript + Vite
+                            |
+              +-------------+-------------+
+              |                           |
+              v                           v
+     Browser analysis path       Supabase services
+              |                   Auth / PostgreSQL
+              v                           |
+       ONNX Runtime Web                   |
+       WebGPU / WASM                      |
+              |                           |
+              v                           |
+       Shared result contract <-----------+
+              ^
+              |
+       Python local backend
+        FastAPI + ONNX Runtime
+              |
+              v
+       Timestamped job artifact
+
+Video objects: Backblaze B2
+```
+
+### Main responsibilities
+
+- **Frontend:** page navigation, video selection and playback, overlays, progress indicators, and access to saved information.
+- **Browser analysis:** runs compatible object-detection inference inside the browser.
+- **Python backend:** provides an alternative local processing path for jobs that should run outside the browser.
+- **Supabase:** handles authentication and structured application data.
+- **Backblaze B2:** stores large uploaded video objects.
+- **Shared rendering:** displays detections and tracks using a consistent source-coordinate and timestamp contract.
+
+---
+
+## Video-analysis pipeline
+
+The intended processing flow is:
+
+1. **Select a source.** The user selects an uploaded video or a configured camera source.
+2. **Read frames.** The application obtains video frames and associates them with media timestamps and source dimensions.
+3. **Preprocess.** The frame is resized and padded to match the loaded model's input requirements.
+4. **Run inference.** The selected engine runs the compatible YOLO model.
+5. **Decode detections.** Model output is decoded into class IDs, confidence values, and bounding boxes.
+6. **Restore coordinates.** Boxes are converted to the original source-video coordinate system.
+7. **Track objects.** Detections are associated across frames to maintain track IDs.
+8. **Estimate movement.** Speed is calculated only when the required measurements and calibration are valid.
+9. **Render results.** The overlay draws valid, time-aligned tracks over the video.
+10. **Persist relevant records.** The application saves supported analysis, incident, and evidence records through its existing data services.
+
+### Playback and rendering principles
+
+- Video playback should remain independent of inference scheduling.
+- Each result should retain a source identifier, frame identifier, timestamp, and source dimensions.
+- Detection boxes should use source-video pixel coordinates as the shared contract.
+- The conversion from source coordinates to displayed canvas coordinates should be applied exactly once.
+- Results from older sources or inappropriate timestamps must not overwrite the current source state.
+- Tracks should survive brief inference gaps only within a bounded validity window; expired tracks should not remain frozen over empty road.
+
+These principles describe the intended contract. Real-video validation is still required to establish accuracy and smoothness for a particular model, clip, browser, and device.
+
+---
+
+## Detection and tracking contract
+
+### Detection record
+
+A normalized detection should contain the following information:
+
+| Field | Meaning |
+|---|---|
+| `cx`, `cy` | Bounding-box centre in source-video pixels. |
+| `w`, `h` | Bounding-box width and height in source-video pixels. |
+| `prob` | Model confidence, represented between `0` and `1`. |
+| `classId` | Class identifier from the configured model. |
+| `className` | Canonical class name associated with that identifier. |
+
+The actual model's class list must be checked. For the standard COCO class mapping, relevant IDs are:
+
+| Class | COCO ID |
+|---|---:|
+| Person | 0 |
+| Bicycle | 1 |
+| Car | 2 |
+| Motorcycle | 3 |
+| Bus | 5 |
+| Truck | 7 |
+
+Do not assume these IDs are valid for a custom or differently exported model without checking its metadata and output decoder.
+
+### Track record
+
+A tracked-object record should preserve at least:
+
+- Stable track ID while the object is continuously trackable.
+- Canonical class and class identifier.
+- Bounding box in source-video coordinates.
+- Detection confidence when available.
+- Track state and age since the last true observation.
+- Media timestamp and source-generation identity.
+- Optional speed only when valid.
+
+### Detection is not tracking
+
+**Detection** predicts objects in an individual frame. **Tracking** associates detections across multiple frames. A tracker cannot reliably follow a vehicle when its input detections are consistently incorrect, and rendering adjustments cannot repair a false model prediction by themselves.
+
+---
+
+## Speed estimation
+
+VisionGuard includes speed-estimation logic, but reliable real-world speed requires valid calibration and reliable tracked positions.
+
+The physical relationship is:
+
+```text
+speed = distance travelled / elapsed time
+```
+
+To display speed in kilometres per hour, image positions must be mapped to real-world distance. Depending on the camera, this may require a ground-plane homography based on known road geometry or another valid calibration method.
+
+The implementation should:
+
+- Use actual media timestamps rather than assume every processed frame has the same interval.
+- Use a suitable road-contact point, commonly the bottom-centre of a vehicle box.
+- Ignore invalid coordinates, non-finite values, and discontinuous track histories.
+- Handle seeking and source changes without creating artificial speed spikes.
+- Reduce small motion estimates caused by bounding-box jitter.
+- Never replace unavailable measurements with random, simulated, or fabricated speeds.
+- Omit numeric speed when valid calibration or sufficient measurements are unavailable.
+- Avoid saving fabricated values into incident records, analytics, or reports.
+
+**A speed value should not be treated as a verified real-world measurement merely because it is displayed in km/h.** Accuracy needs to be validated against a calibrated scene and known motion.
+
+---
+
+## Backend processing
+
+The local Python backend provides an alternative to browser-side analysis. It is intended for controlled video jobs and can use ONNX Runtime with the available execution provider, such as DirectML or CPU, when configured.
+
+A typical backend job is expected to:
+
+1. Accept a processing request for a supported video source.
+2. Validate the request and initialise/reuse the model session.
+3. Decode frames incrementally rather than loading the entire video into memory.
+4. Run inference and tracking while preserving actual media timestamps.
+5. Report job state and meaningful progress.
+6. Write a complete result artifact.
+7. Return the artifact for frontend review and/or persistence.
+
+### Backend reliability requirements
+
+- Reuse model sessions where supported instead of reloading the model for every frame.
+- Keep frame queues and memory consumption bounded.
+- Release video and inference resources after completion or failure.
+- Provide explicit completed, failed, and cancelled states where supported.
+- Ensure a job is not reported as completed before its artifact is written and validated.
+- Avoid downloading or serializing the same artifact unnecessarily.
+- Report failures honestly rather than substituting empty successful results.
+
+The local backend is not automatically a public cloud service. Other users cannot access a service running on a developer's `localhost` unless it is separately and securely deployed or exposed through appropriate infrastructure.
+
+---
+
+## Data storage
+
+VisionGuard separates structured application data from large video files.
 
 ### Supabase
 
-Supabase is responsible for:
+Supabase is used for authentication and PostgreSQL-backed application data. Depending on the configured schema and enabled workflows, records can include:
 
-- Authentication
-- PostgreSQL
-- User profiles
-- Cameras
-- Video metadata
-- Analysis runs
-- Tracked objects
-- Incidents
-- Evidence metadata
-- Logs
-- Analytics
-- Reports
-- Security policies
+- User profiles and roles.
+- Camera metadata and source configuration.
+- Video asset metadata and storage references.
+- Analysis runs and job information.
+- Tracked-object records and trajectories.
+- Incident and case records.
+- Evidence metadata and references.
+- Audit, reporting, or scheduled-report records.
+
+Actual table names and feature availability are defined by the migrations and application code in the repository.
 
 ### Backblaze B2
 
-Backblaze B2 stores the actual large video objects.
+Backblaze B2 stores the actual uploaded video objects. Supabase generally stores metadata and references rather than the entire video binary.
+
+The storage flow is designed around a server-side Edge Function:
 
 ```text
 Browser
-   │
-   ▼
-VisionGuard Upload Manager
-   │
-   ▼
+   |
+   v
+VisionGuard upload service
+   |
+   v
 Supabase Edge Function
-   │
-   ▼
+   |
+   v
 Backblaze B2
-   │
-   ▼
-videos/<video_id>/original.mp4
+   |
+   v
+Video object + database metadata/reference
 ```
 
-Large files are uploaded using multipart/resumable transfer so the browser does not need to send multi-gigabyte files as one request.
+Large uploads may use multipart/resumable transfer according to the implemented upload workflow. Exact limits depend on the configured storage service and application settings.
 
----
-
-# AI Pipeline
-
-VisionGuard performs computer vision inference through ONNX Runtime Web.
+### Suggested object layout
 
 ```text
-Video Frame
-    │
-    ▼
-Preprocessing
-    │
-    ▼
-YOLO Inference
-    │
-    ▼
-Coordinate Restoration
-    │
-    ▼
-Detection Objects
-    │
-    ▼
-ByteTrack
-    │
-    ▼
-Tracked Vehicles
-    │
-    ├──────────────┐
-    ▼              ▼
-Speed Estimation  RuleEngine
-    │              │
-    │              ▼
-    │          Incidents
-    │              │
-    └──────┬───────┘
-           ▼
-        Evidence
-           │
-           ▼
-      Persistence
+videos/
+└── <video_id>/
+    └── original.mp4
 ```
 
-Inference runs through a Web Worker to keep the main UI responsive.
+The actual key format is determined by the storage service implementation and should not be changed independently of its metadata references.
 
 ---
 
-# Application Modules
+## Security
 
-| Module | Purpose |
-|---|---|
-| Dashboard | Operational overview and high-level metrics |
-| Camera Assets | Manage registered camera sources |
-| Live Monitoring | Monitor live camera feeds |
-| Live Analysis | Analyze uploaded videos and live cameras |
-| Video Library | Manage persistent uploaded video assets |
-| Video Review | Replay historical analysis |
-| Incidents | Review detected traffic incidents |
-| Cases | Manage operational cases |
-| Review Queue | Review AI-generated events |
-| Analytics | Analyze traffic and incident trends |
-| Reports | Generate operational reports |
-| Executive Intelligence | High-level organizational insights |
-| Users | User and role administration |
-| Config | System configuration |
-| Audit Logs | Security and operational auditing |
-| Settings | User/application preferences |
+VisionGuard uses Supabase Auth and database access policies to protect user data.
+
+Security principles include:
+
+- Authenticate users through the configured authentication provider.
+- Apply role-based access checks in the application and enforce database permissions through Row Level Security where configured.
+- Keep Backblaze B2 application credentials on the server side.
+- Do not expose storage secrets through client-side `VITE_*` environment variables.
+- Use protected server-side functions for privileged storage operations.
+- Keep sensitive configuration out of source control.
+- Apply database schema changes through versioned migrations.
+
+Never commit `.env` files, service-role keys, B2 application keys, access tokens, or other credentials.
 
 ---
 
-# Live Analysis
+## Technology stack
 
-Live Analysis supports two source modes:
-
-### Uploaded Video
-
-```text
-Upload MP4
-   ↓
-Create video asset
-   ↓
-Backblaze B2 multipart upload
-   ↓
-Persistent video
-   ↓
-Start inference
-```
-
-### Live Camera
-
-```text
-Select Camera
-   ↓
-Camera Source
-   ↓
-Start Analysis
-   ↓
-Persistent Analysis Run
-```
-
-The active Live Analysis source is intentionally maintained in application memory while navigating through the SPA.
-
-A browser refresh clears the temporary active Live Analysis source, while the underlying video asset remains persisted.
-
----
-
-# Persistent Analysis Model
-
-VisionGuard persists the relationship between source, analysis session, detections, incidents, evidence, and logs.
-
-```text
-video_assets / cameras
-          │
-          ▼
-     analysis_runs
-          │
-          ▼
-    tracked_objects
-          │
-          ├──────────────┐
-          ▼              ▼
-       incidents      trajectories
-          │
-          ▼
-       evidence
-          │
-          ▼
-    analysis_logs
-```
-
-This allows historical analysis to be reconstructed without unnecessarily rerunning inference.
-
----
-
-# Video Workflow
-
-A typical uploaded-video workflow looks like:
-
-```text
-1. Select MP4
-        ↓
-2. Create video_assets record
-        ↓
-3. Generate video_id
-        ↓
-4. Navigate to /app/analyze?video=<id>
-        ↓
-5. Start B2 multipart upload
-        ↓
-6. Save persistent storage_path
-        ↓
-7. Start AI inference
-        ↓
-8. Detect vehicles
-        ↓
-9. Track vehicles
-        ↓
-10. Evaluate traffic rules
-        ↓
-11. Persist incidents
-        ↓
-12. Capture evidence
-        ↓
-13. Persist logs and metrics
-        ↓
-14. Review historical results
-```
-
----
-
-# Security Model
-
-VisionGuard uses Supabase Auth and PostgreSQL Row Level Security.
-
-### Roles
-
-- **Viewer**
-- **Operator**
-- **Supervisor**
-- **Admin**
-
-Authorization is enforced through application-level guards and database security policies.
-
-B2 credentials are never exposed to the browser.
-
-The Backblaze integration uses server-side Supabase Edge Functions to:
-
-- manage multipart uploads
-- create signed upload URLs
-- resolve signed playback URLs
-- perform protected storage operations
-
----
-
-# Tech Stack
-
-## Frontend
+### Frontend
 
 - React
 - TypeScript
@@ -424,34 +398,48 @@ The Backblaze integration uses server-side Supabase Edge Functions to:
 - React Router
 - Tailwind CSS
 - HTML5 Video APIs
+- Canvas-based overlay rendering
 
-## Backend & Database
+### Browser AI and tracking
 
-- Supabase
-- PostgreSQL
+- YOLO-based object-detection model compatible with the configured export
+- ONNX Runtime Web
+- WebGPU when available
+- WebAssembly where configured and supported
+- Web Workers
+- ByteTrack-style multi-object association
+- Kalman-filter-based motion estimation
+
+### Local backend
+
+- Python
+- FastAPI
+- ONNX Runtime
+- OpenCV or the configured video-decoding implementation
+- DirectML or CPU execution when supported by the environment
+
+### Backend services and storage
+
 - Supabase Auth
+- PostgreSQL
 - Supabase Edge Functions
 - PostgreSQL Row Level Security
+- Backblaze B2 object storage
 
-## AI & Computer Vision
+### Development tools
 
-- ONNX Runtime Web
-- YOLO
-- Web Workers
-- WebGPU
-- WebAssembly
-- ByteTrack
-- Kalman tracking
-- Traffic RuleEngine
+- Git and GitHub
+- npm workspaces
+- Vitest for frontend tests
+- pytest for backend tests
 
-## Storage
-
-- Backblaze B2
-- Supabase Storage for legacy/smaller assets
+The effective model, Python execution provider, dependency versions, and available test commands are determined by the checked-out repository and environment.
 
 ---
 
-# Project Structure
+## Repository structure
+
+The project is organised as a web workspace with Supabase resources and local backend processing components. The following is a representative structure; use the files present in your checkout as the source of truth.
 
 ```text
 VisionGuard/
@@ -468,280 +456,315 @@ VisionGuard/
 │       │   └── types/
 │       ├── public/
 │       └── vite.config.ts
-│
+├── backend/
+│   ├── app/
+│   │   ├── pipeline/
+│   │   └── storage/
+│   └── tests/
+├── scripts/
+│   ├── Start-VisionGuard.ps1
+│   └── Stop-VisionGuard.ps1
 ├── supabase/
 │   ├── functions/
 │   │   └── video-storage/
 │   └── migrations/
-│
-├── assets/
+├── assets/                  # Local assets; do not commit private videos
 ├── package.json
 └── README.md
 ```
 
+Some directories or script names may vary between revisions. Do not create empty directories simply to match this diagram.
+
 ---
 
-# Getting Started
+## Getting started
 
-## Prerequisites
+### Prerequisites
 
-Install:
+Install the tools needed for the parts you intend to run:
 
-- Node.js 20+
-- npm
 - Git
-- Supabase CLI
+- Node.js and npm (use the version supported by the repository's package configuration; Node.js 20+ is a reasonable baseline if no stricter version is specified)
+- Python for the local backend
+- Supabase project credentials for database/auth-backed functionality
+- Supabase CLI for applying migrations or managing Edge Functions
+- A compatible browser for browser-based inference
 
-Clone the repository:
+Browser WebGPU support depends on the operating system, GPU, browser version, and model/runtime combination. The WASM path may be used when configured and supported.
+
+### Clone the repository
 
 ```bash
 git clone https://github.com/Syed-Nazeer-07/VisionGuard.git
 cd VisionGuard
 ```
 
-Install dependencies:
+### Install frontend dependencies
+
+From the repository root:
 
 ```bash
 npm install
 ```
 
-Start the development environment:
+### Configure environment variables
+
+Review the example environment files in the repository. Create the appropriate local environment files and fill in the credentials for your own Supabase project and other enabled services.
+
+Do not commit secrets. Do not copy production credentials into a public repository.
+
+### Start the frontend
+
+From the repository root, use the configured development command:
 
 ```bash
 npm run dev
 ```
 
-The web application normally runs at:
+The Vite development server may print its actual local URL in the terminal. Open that URL in your browser; do not assume the port if Vite reports a different one.
 
-```text
-http://localhost:3000
+### Start the Python backend
+
+The local backend is a separate service. Use the repository's startup script if it is present and configured for your environment:
+
+```powershell
+.\scripts\Start-VisionGuard.ps1
 ```
+
+If you prefer to start services separately, inspect the backend README, dependency file, and FastAPI entry point in your checkout for the authoritative commands. The backend has previously been configured to listen locally on port `8000`, but its host and port must match the frontend's backend URL configuration.
+
+If the frontend reports that it cannot connect to `localhost` or `127.0.0.1`, ensure the backend is running, the configured URL uses the correct host and port, and CORS allows the frontend's development origin.
 
 ---
 
-# Environment Configuration
+## Environment configuration
 
-Configure the required Supabase variables in the appropriate environment file.
+### Frontend
 
-For the B2 storage Edge Function:
+Use the variable names documented in the repository's frontend environment example. Supabase-based frontends commonly use values such as:
+
+```env
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your-public-anon-key>
+```
+
+Confirm the actual variable names in the checked-out source before configuring them. Only values intended for browser use should use the `VITE_` prefix.
+
+### Backblaze B2 Edge Function
+
+The storage integration may use server-side values similar to:
 
 ```env
 B2_ENDPOINT=https://s3.<region>.backblazeb2.com
 B2_REGION=<region>
-B2_BUCKET=visionguard-videos
+B2_BUCKET=<private-bucket-name>
 B2_KEY_ID=<application-key-id>
 B2_APPLICATION_KEY=<application-key>
 ```
 
-### Security
+Set secrets using the Edge Function's documented deployment process. These values must not be bundled into the frontend.
 
-Never expose:
+### Backend URL
 
-```text
-B2_KEY_ID
-B2_APPLICATION_KEY
-```
+Configure the frontend with the URL expected by the current backend client. For local development, this may be a loopback address such as `http://127.0.0.1:8000`, but the actual variable name and path must match the current source.
 
-through client-side `VITE_*` variables.
-
-These secrets must remain server-side.
+**Important:** A public website cannot use the developer's `127.0.0.1` address as its shared processing backend. Each visitor's loopback address points to their own device. Public backend processing requires a reachable deployed service with appropriate access controls, CORS, and resource limits.
 
 ---
 
-# Backblaze B2 Setup
+## Database and Edge Functions
 
-Create a private B2 bucket such as:
+VisionGuard uses Supabase migrations to manage database schema changes.
 
-```text
-visionguard-videos
-```
+Before applying migrations:
 
-Recommended object structure:
+1. Review the migration files and understand the changes.
+2. Confirm the Supabase project is the intended development or production project.
+3. Back up important data before applying risky schema changes.
+4. Do not delete migration history or edit previously applied migrations casually.
 
-```text
-videos/
-└── <video_id>/
-    └── original.mp4
-```
-
-For local development, configure bucket CORS for:
-
-```text
-http://localhost:3000
-```
-
-Production domains should be added separately.
-
----
-
-# Database Setup
-
-VisionGuard uses Supabase migrations for schema management.
-
-Apply migrations:
+Where the Supabase CLI is configured and linked to the correct project, the repository may use:
 
 ```bash
 npx supabase db push
 ```
 
-Configure Edge Function secrets:
+Deploy or configure Edge Functions using the instructions and scripts present in the repository. Configure the required secrets on the server side.
 
-```bash
-npx supabase secrets set --env-file supabase/functions/.env
-```
+Do not run database changes against production without reviewing the migration and confirming the target project.
 
 ---
 
-# Development
+## Run the local analysis backend
 
-Start the application:
+The Python service provides local video-processing capability. Its exact install and start commands depend on the backend dependency file and FastAPI entry point in the checked-out revision.
 
-```bash
-npm run dev
-```
+A typical local setup is:
 
-Build and type-check:
+1. Install the Python version required by the backend.
+2. Create and activate a virtual environment.
+3. Install packages from the backend's checked-in requirements or project configuration.
+4. Configure model paths, execution provider, backend URL, and other required environment variables.
+5. Start the service using the project's startup script or documented FastAPI command.
+6. Confirm the health endpoint, if configured, reports that the service is ready.
+7. Select **Local Backend** in VisionGuard and process a short sample video before trying longer footage.
 
-```bash
-npm run build
-```
+On Windows, DirectML may be available depending on hardware and installed dependencies. CPU execution may be slower. The application should report unavailable providers honestly rather than claiming GPU acceleration when it is not active.
 
-Strict TypeScript validation is intentionally retained.
+The local service must remain running while it is processing. Local processing is suitable for development and testing, but it is not a substitute for a deployed, always-available cloud service.
 
 ---
 
-# Testing
+## Development and testing
 
-Run the repository's configured test suite.
+### Build the frontend
 
-Tests cover areas such as:
-
-- Live Analysis source state
-- storage behavior
-- analysis services
-- application logic
-
-Before committing substantial changes:
+From the repository root:
 
 ```bash
 npm run build
 ```
 
-and run the project's configured tests.
+If working specifically in the web workspace, use the scripts defined by that workspace's `package.json`. A common command for this repository is:
+
+```bash
+npm run build -w web
+```
+
+### Run frontend tests
+
+```bash
+npm exec -w web -- vitest run
+```
+
+### Run backend tests
+
+From the backend directory, if pytest and the backend test suite are configured there:
+
+```bash
+python -m pytest
+```
+
+Use the commands documented in the current package configuration if they differ. Test counts change as the project evolves; consult the actual output rather than relying on historical numbers in this README.
+
+### Test video analysis with real footage
+
+Unit tests are necessary but do not prove detection quality on real videos. Before considering a change to detection, tracking, rendering, or speed complete, check a short real traffic clip for:
+
+- Boxes aligned to the corresponding vehicles.
+- No boxes stuck over empty road after the object has left.
+- Stable IDs while an object remains trackable.
+- No multi-second overlay disappearance during continuous playback.
+- Correct alignment after pause, seek, fullscreen, resize, and source changes.
+- No fabricated speed values.
+- No numeric speed without valid calibration and measurements.
+- No unverified detections presented as confirmed traffic incidents.
+
+Record which checks were actually executed and which remain unverified.
 
 ---
 
-# Design Principles
+## Known limitations
 
-### Persistent by Default
+- **Detection quality:** model predictions can produce false positives or miss distant, partially occluded, or small vehicles. Model configuration and real-video evaluation matter.
+- **Tracking quality:** IDs may fragment during occlusion or poor detections. A tracker cannot fully correct an incorrect detector output.
+- **Speed estimation:** physically meaningful km/h requires valid camera/road calibration and reliable timestamps and tracking. Speed should be omitted when these requirements are not satisfied.
+- **Browser performance:** inference speed depends on device capability, browser support, model size, and execution provider.
+- **Local backend availability:** the Python service must be running and reachable. A localhost service is not publicly available by default.
+- **External camera feeds:** some stream types may require additional ingestion, proxy, or gateway infrastructure.
+- **Production scaling:** large numbers of concurrent long-running jobs may require a deployed worker service, queueing, monitoring, and additional compute resources.
 
-Important analysis data should not disappear when a React page unmounts.
-
-### Source-of-Truth Driven
-
-Every video and camera has a canonical identity.
-
-### Real Events Only
-
-Logs and analytics should represent actual system events.
-
-### Secure by Design
-
-Secrets remain server-side and database access is governed by RLS.
-
-### Browser-Native AI
-
-Where practical, inference runs close to the user through WebGPU/WASM.
-
-### Modular Storage
-
-Large-video storage is abstracted from the rest of the application so the storage provider can evolve independently.
+These limitations should be re-evaluated as the implementation changes. Do not describe a feature as production-ready solely because its page or API exists.
 
 ---
 
-# Roadmap
+## Design principles
 
-## AI & Vision
+### Truthful results
 
-- Improved multi-object tracking
-- Advanced traffic violation models
-- License plate recognition workflows
-- Improved speed estimation
-- Scene-specific detection profiles
-- Model management
+Only real detector outputs and valid derived measurements should enter the analysis workflow. Missing or invalid data must not be replaced with fabricated results.
 
-## Video Intelligence
+### One source of truth
 
-- Multi-camera correlation
-- Long-duration video ingestion
-- Automated video summarization
-- Event-based video clipping
-- Advanced historical video search
+Video identity, source generation, frame timestamps, coordinate conventions, and analysis-job states must be explicit and consistent.
 
-## Operations
+### Separate playback from inference
 
-- Alert escalation
-- Case automation
-- Multi-site deployments
-- Advanced audit workflows
-- Scheduled intelligence reports
+The video player should remain responsive even when inference is slower than playback. Rendering must use valid timestamp-aligned results rather than blocking the video on every inference request.
 
-## Infrastructure
+### Persistent by design
 
-- Distributed video processing
-- Background processing workers
-- Scalable inference infrastructure
-- Advanced streaming integrations
-- Camera gateway services
+Save important records through the existing application services so users can revisit them after navigation or a page refresh where persistence is supported.
+
+### Secure by default
+
+Keep service secrets server-side, use database access controls, and avoid destructive changes to stored user data.
+
+### Modular storage
+
+Keep large video-object storage separate from structured database records and avoid coupling application pages directly to provider-specific credentials.
 
 ---
 
-# Current Scope
+## Roadmap
 
-VisionGuard currently focuses on:
+Potential future improvements include:
 
-- Traffic video intelligence
-- Uploaded video analysis
-- Live camera analysis
-- Vehicle detection
-- Vehicle tracking
-- Speed estimation
-- Traffic incident detection
-- Evidence management
-- Persistent analysis
-- Operational analytics
-- Historical review workflows
+### AI and tracking
 
-Additional infrastructure may be required for certain external camera sources such as RTSP or YouTube Live proxying.
+- Improve real-video detection precision and recall.
+- Improve stable multi-object tracking under occlusion.
+- Validate bicycle and motorcycle detection against representative clips.
+- Reduce false positives on road markings and roadside infrastructure.
+- Add repeatable model evaluation against annotated frames.
+
+### Video playback
+
+- Improve stable overlays during continuous playback.
+- Keep playback controls available in fullscreen.
+- Improve source switching and seeking behaviour.
+- Ensure both processing engines use the same detection/track schema.
+
+### Speed and traffic analysis
+
+- Validate calibration workflows and calibrated speed against measured road distances.
+- Improve stationary-vehicle handling and timestamp discontinuity detection.
+- Distinguish measured values from unavailable values throughout persistence and reporting.
+- Improve incident validation and evidence review.
+
+### Infrastructure
+
+- Improve local backend throughput and job cancellation.
+- Add scalable background workers for larger deployments.
+- Improve monitoring and error reporting for long-running jobs.
+- Add robust streaming gateways for additional camera protocols where needed.
 
 ---
 
-# Contributing
+## Contributing
 
-Contributions should preserve the existing architecture and security model.
+Contributions should preserve existing application behaviour and the security model.
 
 Before submitting changes:
 
-1. Keep TypeScript strict.
-2. Preserve Supabase RLS.
-3. Do not expose storage credentials.
-4. Avoid mock persistence in production workflows.
-5. Keep storage-provider logic isolated.
-6. Preserve analysis lifecycle integrity.
-7. Test changes affecting video, tracking, and persistence carefully.
+1. Keep TypeScript and Python code consistent with repository conventions.
+2. Preserve Supabase Row Level Security and authentication safeguards.
+3. Never expose storage credentials in browser code.
+4. Keep fabricated data out of production analysis paths.
+5. Preserve the shared source-coordinate and timestamp contract.
+6. Test changes affecting video, tracking, and persistence against real footage when possible.
+7. Avoid destructive cleanup of user assets, database migrations, and untracked work.
+8. Report what was actually changed and verified.
 
 ---
 
-# Repository
+## Repository
 
-GitHub:
-
-https://github.com/Syed-Nazeer-07/VisionGuard
+GitHub: <https://github.com/Syed-Nazeer-07/VisionGuard>
 
 ---
 
-## VisionGuard
-
-**Turn traffic video into operational intelligence.**
-
-Built for modern traffic monitoring, AI-assisted analysis, incident response, and data-driven transportation operations.
+<p align="center">
+  <strong>VisionGuard</strong><br>
+  Turn traffic video into operational intelligence.
+</p>
