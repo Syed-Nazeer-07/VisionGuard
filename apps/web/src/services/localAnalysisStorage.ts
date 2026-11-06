@@ -86,10 +86,33 @@ async function remove(store: string): Promise<void> {
 }
 
 export interface SavedLocalVideo { file: Blob; name: string }
+interface SavedVideoHandle {
+  kind: 'file-handle';
+  name: string;
+  handle: FileSystemFileHandle;
+}
+
+/**
+ * On Chromium/Edge, save a small File System Access handle instead of copying
+ * possibly gigabytes of video into IndexedDB. The browser may ask the user
+ * to re-grant access after restarting, which is surfaced to the caller.
+ * Older blob records remain readable for backwards compatibility.
+ */
+export async function readSavedVideo(): Promise<SavedLocalVideo | undefined> {
+  const stored = await read<SavedLocalVideo | SavedVideoHandle>('video');
+  if (!stored) return undefined;
+  if ('kind' in stored && stored.kind === 'file-handle') {
+    const file = await stored.handle.getFile();
+    return { file, name: stored.name };
+  }
+  return stored;
+}
 
 export const localAnalysisStorage = {
-  loadVideo: () => read<SavedLocalVideo>('video'),
+  loadVideo: readSavedVideo,
   saveVideo: (file: Blob, name: string) => write('video', { file, name }),
+  saveVideoHandle: (handle: FileSystemFileHandle, name: string) =>
+    write('video', { kind: 'file-handle', handle, name } satisfies SavedVideoHandle),
   loadAnalysis: () => read<LocalAnalysis>('analysis'),
   saveAnalysis: (analysis: LocalAnalysis) => write('analysis', analysis),
   clearAnalysis: () => remove('analysis'),
