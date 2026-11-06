@@ -106,8 +106,12 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
       message.sourceWidth, message.sourceHeight,
       processed.ratio, processed.padW, processed.padH
     );
+    // With slow WASM inference vehicles often move too far between detections
+    // for 2-hit confirmation. Display high-confidence NEW detections directly;
+    // continue assigning stable IDs once matching succeeds.
     const observedTracks = tracker.update(boxes)
-      .filter(track => track.state === 'Confirmed' && track.timeSinceUpdate === 0 && track.prob >= 0.43);
+      .filter(track => track.timeSinceUpdate === 0 &&
+        (track.state === 'Confirmed' || track.hitCount >= 2 || track.prob >= 0.58));
     const tracks: LiveTrack[] = observedTracks.map(track => {
       const previous = observations.get(track.trackId);
       const velocity = calculateMotion(previous, track, message.mediaTime);
@@ -128,7 +132,8 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
     }
     self.postMessage({
       type: 'result', requestId: message.requestId, generation: message.generation,
-      mediaTime: message.mediaTime, tracks, provider: executionProvider,
+      mediaTime: message.mediaTime, tracks, detectionCount: boxes.length,
+      provider: executionProvider,
       inferenceMs: performance.now() - start
     });
   } catch (e) {
