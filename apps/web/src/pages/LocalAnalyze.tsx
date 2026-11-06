@@ -84,6 +84,8 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const loadTimeoutRef = useRef<number | null>(null);
   const selectedFileVersionRef = useRef(0);
   const storageQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const previewReadyResolveRef = useRef<(() => void) | null>(null);
+  const previewDecodedRef = useRef(false);
   const replyRef = useRef<((reply: WorkerReply) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const urlRef = useRef<string | null>(null);
@@ -112,6 +114,8 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     loadTimeoutRef.current = window.setTimeout(() => {
       setVideoLoadStatus(current => current === 'loading' ? 'error' : current);
       setError(current => current || 'Video could not become ready within 10 seconds. Try an H.264 MP4 file or a smaller clip.');
+      previewReadyResolveRef.current?.();
+      previewReadyResolveRef.current = null;
       loadTimeoutRef.current = null;
     }, VIDEO_LOAD_TIMEOUT_MS);
   }, []);
@@ -120,6 +124,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     const url = URL.createObjectURL(blob);
     urlRef.current = url;
+    previewDecodedRef.current = false;
     setVideoUrl(url);
     setName(label);
     setDuration(0);
@@ -150,7 +155,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
           setStatus('completed');
         }
       } catch (e) {
-        if (alive) setError('Local video restore failed: ' + String(e));
+        if (alive) setError('Could not restore the saved video. If Edge requests file access again, use Choose video to reselect it. ' + String(e));
       }
     })();
     return () => {
@@ -238,7 +243,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     return workerInitializationRef.current;
   };
 
-  const onUpload = async (file?: File) => {
+  const onUpload = async (file?: File, handle?: FileSystemFileHandle) => {
     if (!file || status === 'processing') return;
     if (!VIDEO_TYPES.includes(file.type) && !/\.(mp4|webm|mov|mkv)$/i.test(file.name)) {
       setError('Choose an MP4, WebM, MOV, or MKV video supported by your browser.');
@@ -253,16 +258,32 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     setProgress(0);
     setPosition(0);
     loadedPositionRef.current = 0;
+    // The video itself uses a local blob URL immediately. No upload, copy,
+    // model initialization, or persistence operation gates the first frame.
+    const firstFrame = new Promise<void>(resolve => {
+      previewReadyResolveRef.current?.();
+      previewReadyResolveRef.current = resolve;
+    });
     attachVideo(file, file.name);
     setStatus('ready');
     setStorageStatus('saving');
     const generation = selectedFileVersionRef.current;
-    // Give the video element a head start decoding its first frame before the
-    // potentially large IndexedDB blob-copy starts. Never await this to open.
     storageQueueRef.current = storageQueueRef.current.catch(() => {}).then(async () => {
-      await new Promise<void>(resolve => window.setTimeout(resolve, 750));
-      if (generation !== selectedFileVersionRef.current) return;
-      await localAnalysisStorage.saveVideo(file, file.name);
+      if (handle) {
+        // A native Edge/Chrome picker gives us a durable handle with zero
+        // large-file duplication. Saving this handle is a tiny IDB transaction.
+        await localAnalysisStorage.saveVideoHandle(handle, file.name);
+      } else {
+        // Legacy file-input fallback: only duplicate the large blob AFTER the
+        // browser has decoded the first frame. Avoids I/O competing with decode.
+        await firstFrame;
+        if (generation !== selectedFileVersionRef.current) return;
+        if (!previewDecodedRef.current) {
+          setStorageStatus('error');
+          return;
+        }
+        await localAnalysisStorage.saveVideo(file, file.name);
+      }
       if (generation !== selectedFileVersionRef.current) return;
       await localAnalysisStorage.clearAnalysis();
       await localAnalysisStorage.savePosition(0);
@@ -273,6 +294,26 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
       setStorageStatus('error');
       setError('Local storage failed (possibly insufficient disk quota): ' + String(e));
     });
+  };
+
+  const chooseVideo = async () => {
+    // File System Access is supported by Edge/Chrome on localhost. Unlike a
+    // standard <input>, it can persist a file reference without copying GBs.
+    const picker = (window as Window & {
+      showOpenFilePicker?: (options?: { multiple?: boolean }) => Promise<FileSystemFileHandle[]>
+    }).showOpenFilePicker;
+    if (!picker) {
+      fileRef.current?.click();
+      return;
+    }
+    try {
+      const [handle] = await picker.call(window, { multiple: false });
+      if (handle) await onUpload(await handle.getFile(), handle);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      // Fallback for browsers that advertise the API but disallow the call.
+      fileRef.current?.click();
+    }
   };
 
   const infer = (bitmap: ImageBitmap, time: number): Promise<LocalTrack[]> => {
@@ -421,6 +462,9 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     setStatus('empty');
     setVideoLoadStatus('idle');
     setStorageStatus('idle');
+    previewDecodedRef.current = false;
+    previewReadyResolveRef.current?.();
+    previewReadyResolveRef.current = null;
     if (loadTimeoutRef.current !== null) window.clearTimeout(loadTimeoutRef.current);
     setAnalysis(null);
     analysisRef.current = null;
@@ -446,7 +490,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
             <input ref={fileRef} type="file" accept="video/*,.mkv" className="hidden" onChange={e => {
               void onUpload(e.target.files?.[0]); e.target.value = '';
             }} />
-            <button type="button" disabled={status === 'processing'} onClick={() => fileRef.current?.click()}
+            <button type="button" disabled={status === 'processing'} onClick={() => void chooseVideo()}
               className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-40">
               <Upload size={16} /> Upload video
             </button>
@@ -471,6 +515,10 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
                     setDuration(event.currentTarget.duration);
                   }}
                   onLoadedData={event => {
+                    if (event.currentTarget.currentSrc !== urlRef.current) return;
+                    previewDecodedRef.current = true;
+                    previewReadyResolveRef.current?.();
+                    previewReadyResolveRef.current = null;
                     if (loadTimeoutRef.current !== null) {
                       window.clearTimeout(loadTimeoutRef.current);
                       loadTimeoutRef.current = null;
@@ -491,6 +539,8 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
                   onPause={() => { setPlaying(false); playbackRef.current = false; }}
                   onEnded={() => setPlaying(false)}
                   onError={() => {
+                    previewReadyResolveRef.current?.();
+                    previewReadyResolveRef.current = null;
                     if (loadTimeoutRef.current !== null) window.clearTimeout(loadTimeoutRef.current);
                     setVideoLoadStatus('error');
                     setError('Video could not be decoded by the browser. Try an H.264 MP4.');
@@ -531,7 +581,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
                 <Film size={44} className="text-indigo-300" />
                 <strong className="text-lg text-white">Your footage stays on this device</strong>
                 <p className="max-w-md text-sm">Upload a traffic video to analyze it locally. The original and completed results are saved in this browser.</p>
-                <button type="button" className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900" onClick={() => fileRef.current?.click()}>Choose video</button>
+                <button type="button" className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900" onClick={() => void chooseVideo()}>Choose video</button>
               </div>
             )}
           </div>
