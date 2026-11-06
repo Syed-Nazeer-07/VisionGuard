@@ -51,15 +51,31 @@ describe('TrackStateStore', () => {
     expect(rendered[0].trackId).toBe(1);
   });
 
-  it('projects motion along velocity vector during playback gaps', () => {
-    // Car at x=100 with dx=100 px/sec
-    store.updateFromInference([mockTrack(1, 100, 200, 100, 0)], 1.0, 1, 1000);
+  it('projects motion using consecutive measured boxes rather than frame-based Kalman velocity', () => {
+    store.updateFromInference([mockTrack(1, 100, 200, 9000, 0)], 1.0, 1, 1000);
+    store.updateFromInference([mockTrack(1, 110, 200, 9000, 0)], 1.1, 1, 1100);
+    // Raw displacement is 10px per 0.1s = 100px/s. Kalman dx=9000 is
+    // deliberately nonsense; extrapolation must be bounded to observed speed.
+    const last = store.getTracksToRender(1.1, false, 1100)[0];
+    const predicted = store.getTracksToRender(1.2, false, 1200)[0];
+    expect(predicted.x).toBeGreaterThan(last.x);
+    expect(predicted.x).toBeLessThan(120);
+    expect(predicted.observationType).toBe('predicted');
+  });
 
-    // At 1.1s (0.10s after last inference update), position should project by ~10px
-    const rendered = store.getTracksToRender(1.1, false, 1100);
-    expect(rendered.length).toBe(1);
-    expect(rendered[0].x).toBeCloseTo(110, 1);
-    expect(rendered[0].observationType).toBe('predicted');
+
+  it('does not extrapolate boxes before obtaining two actual detections', () => {
+    store.updateFromInference([mockTrack(12, 100, 200, 800, 0)], 1.0, 1, 1000);
+    expect(store.getTracksToRender(1.12, false, 1120)[0].x).toBe(100);
+  });
+
+  it('snaps to the actual box rather than carrying a stale velocity after a large tracking jump', () => {
+    store.updateFromInference([mockTrack(9, 100, 200, 0, 0)], 1.0, 1, 1000);
+    store.updateFromInference([mockTrack(9, 110, 200, 0, 0)], 1.1, 1, 1100);
+    store.updateFromInference([mockTrack(9, 450, 200, 0, 0)], 1.2, 1, 1200);
+    const current = store.getTracksToRender(1.2, false, 1200)[0];
+    expect(current.x).toBe(450);
+    expect(store.getTracksToRender(1.3, false, 1300)[0].x).toBe(450);
   });
 
   it('disables velocity projection while video is paused', () => {
