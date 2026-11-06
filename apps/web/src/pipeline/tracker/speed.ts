@@ -13,7 +13,8 @@ export interface SpeedResult {
 export class SpeedEstimator {
   private history = new Map<number, {
     lastWorldPt: Point; lastTime: number; speeds: number[];
-    overspeedCount: number; isStationary: boolean; lastResult: SpeedResult | null
+    overspeedCount: number; isStationary: boolean; lastResult: SpeedResult | null;
+    pendingWorldPts: Point[]
   }>();
   // Avoid treating a 1–2 pixel bounding-box wobble between 30 FPS frames
   // as large real-world acceleration. Measure over >= 120ms of video time.
@@ -65,7 +66,7 @@ export class SpeedEstimator {
     const state = this.history.get(trackId);
 
     if (!state) {
-      this.history.set(trackId, { lastWorldPt: worldPt, lastTime: mediaTime, speeds: [], overspeedCount: 0, isStationary: true, lastResult: null });
+      this.history.set(trackId, { lastWorldPt: worldPt, lastTime: mediaTime, speeds: [], overspeedCount: 0, isStationary: true, lastResult: null, pendingWorldPts: [] });
       return null;
     }
 
@@ -79,16 +80,34 @@ export class SpeedEstimator {
       state.isStationary = true;
       state.overspeedCount = 0;
       state.lastResult = null;
+      state.pendingWorldPts = [];
       return null;
     }
 
     // Hold the previous *measured* speed during sub-120ms frames instead
     // of deriving implausible km/h from detector bounding-box jitter.
     // No result is emitted until a valid observed displacement is measured.
-    if (dt < this.minMeasurementIntervalSeconds) return state.lastResult;
+    if (dt < this.minMeasurementIntervalSeconds) {
+      // Accumulate real ground-contact observations instead of repeatedly
+      // updating the speed baseline from a single noisy frame.
+      state.pendingWorldPts.push(worldPt);
+      if (state.pendingWorldPts.length > 4) state.pendingWorldPts.shift();
+      return state.lastResult;
+    }
 
-    const dx = worldPt.x - state.lastWorldPt.x;
-    const dy = worldPt.y - state.lastWorldPt.y;
+    // Median of the final short observation window resists ±pixel jitter
+    // without flattening sustained motion over the measurement interval.
+    // A single observation (slow inference) still uses its exact coordinate.
+    const samples = [...state.pendingWorldPts.slice(-2), worldPt];
+    const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+    const robustWorldPt = {
+      x: median(samples.map(p => p.x)),
+      y: median(samples.map(p => p.y))
+    };
+    state.pendingWorldPts = [];
+
+    const dx = robustWorldPt.x - state.lastWorldPt.x;
+    const dy = robustWorldPt.y - state.lastWorldPt.y;
 
     // Velocity components in m/s
     const vxMps = dx / dt;
@@ -143,7 +162,7 @@ export class SpeedEstimator {
       state.overspeedCount = 0;
     }
 
-    state.lastWorldPt = worldPt;
+    state.lastWorldPt = robustWorldPt;
     state.lastTime = mediaTime;
 
     state.lastResult = {
