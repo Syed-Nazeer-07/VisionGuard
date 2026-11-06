@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = ""
+    [string]$ProjectRoot = "",
+    [switch]$SkipBackend
 )
 
 $ErrorActionPreference = "Continue"
@@ -58,50 +59,30 @@ if (-not (Test-Path $webNodeModules) -and -not (Test-Path $rootNodeModules)) {
 Write-Host " [OK]" -ForegroundColor Green
 
 # -----------------------------------------------------------------------------
-# 3. Check Python and Backend Virtual Environment
+# 3. Optional Python local backend
+# Browser inference uses ONNX Runtime Web and does NOT need local FastAPI.
+# On Windows ARM, native Python ML wheels may be missing; never block the UI.
 # -----------------------------------------------------------------------------
-Write-Host "[3/5] Checking Python backend environment..." -NoNewline
+Write-Host "[3/5] Checking optional Python backend..." -NoNewline
 $backendDir = Join-Path $ProjectRoot "backend"
 $venvPython = Join-Path $backendDir ".venv\Scripts\python.exe"
 $altVenvPython = Join-Path $backendDir "venv\Scripts\python.exe"
-
-$pythonExe = ""
-if (Test-Path $venvPython) {
-    $pythonExe = $venvPython
-} elseif (Test-Path $altVenvPython) {
-    $pythonExe = $altVenvPython
-} else {
-    $sysPython = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $sysPython) {
-        Write-Host " [PYTHON MISSING]" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "------------------------------------------------------------------------" -ForegroundColor Red
-        Write-Host "[ERROR] Python is not installed or not available in PATH." -ForegroundColor Red
-        Write-Host "Action Required:" -ForegroundColor Yellow
-        Write-Host "  1. Download Python 3.10 or 3.11 from: https://www.python.org/downloads/" -ForegroundColor White
-        Write-Host "  2. Ensure 'Add python.exe to PATH' is checked during installation." -ForegroundColor White
-        Write-Host "  3. Re-run Start-VisionGuard.bat." -ForegroundColor White
-        Write-Host "------------------------------------------------------------------------" -ForegroundColor Red
-        Read-Host "Press Enter to exit..."
-        exit 1
+$pythonExe = $null
+if (-not $SkipBackend) {
+    if (Test-Path $venvPython) { $pythonExe = $venvPython }
+    elseif (Test-Path $altVenvPython) { $pythonExe = $altVenvPython }
+    else {
+        $SkipBackend = $true
+        Write-Host " [NOT CONFIGURED - browser mode available]" -ForegroundColor Yellow
+        Write-Host "  Optional local backend is not installed. Use Browser WebGPU/WASM mode." -ForegroundColor Gray
+        Write-Host "  To enable later: cd backend; python -m venv .venv; .\.venv\Scripts\pip install -r requirements.txt" -ForegroundColor Gray
     }
-
-    Write-Host " [VENV MISSING]" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host "------------------------------------------------------------------------" -ForegroundColor Yellow
-    Write-Host "[WARNING] Backend virtual environment not found in backend\.venv" -ForegroundColor Yellow
-    Write-Host "Action Required:" -ForegroundColor Yellow
-    Write-Host "  To configure the backend virtual environment, run:" -ForegroundColor White
-    Write-Host "    cd `"$backendDir`"" -ForegroundColor White
-    Write-Host "    python -m venv .venv" -ForegroundColor White
-    Write-Host "    .\.venv\Scripts\pip install -r requirements.txt" -ForegroundColor White
-    Write-Host "------------------------------------------------------------------------" -ForegroundColor Yellow
-    Read-Host "Press Enter to exit..."
-    exit 1
 }
-
-$pyVersion = (& $pythonExe --version 2>&1).Trim()
-Write-Host " [OK] ($pyVersion)" -ForegroundColor Green
+if ($SkipBackend -and $pythonExe -eq $null) {
+    Write-Host "  * Starting the web application only." -ForegroundColor Gray
+} elseif ($pythonExe) {
+    Write-Host " [OK] $(& $pythonExe --version 2>&1)" -ForegroundColor Green
+}
 
 # -----------------------------------------------------------------------------
 # 4. Check for already running VisionGuard services
@@ -158,7 +139,7 @@ $pidFile = Join-Path $ProjectRoot ".visionguard.pids"
 Write-Host "[5/5] Launching VisionGuard Backend & Frontend..." -ForegroundColor Cyan
 
 $backendProcess = $null
-if (-not $backendAlreadyRunning) {
+if (-not $backendAlreadyRunning -and -not $SkipBackend) {
     Write-Host "  -> Starting FastAPI Backend on http://127.0.0.1:8000..." -ForegroundColor Gray
     $backendCmd = "`"$pythonExe`" -m uvicorn app.main:app --host 127.0.0.1 --port 8000"
     $backendProcess = Start-Process -FilePath "cmd.exe" `
@@ -191,7 +172,7 @@ $pidsObj | ConvertTo-Json | Set-Content -Path $pidFile -Encoding UTF8
 # 6. Wait / Health-Check Loop
 # -----------------------------------------------------------------------------
 Write-Host ""
-$backendHealthy = $backendAlreadyRunning
+$backendHealthy = $backendAlreadyRunning -or $SkipBackend
 $frontendReady = $frontendAlreadyRunning
 $maxSeconds = 30
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
@@ -243,7 +224,7 @@ if ($frontendReady) {
     Write-Host "Inspect the '[VisionGuard] Frontend (Vite :3000)' window for compile or port errors." -ForegroundColor Yellow
 }
 
-if (-not $backendHealthy) {
+if (-not $backendHealthy -and -not $SkipBackend) {
     Write-Host "[NOTICE] Local AI Backend did not respond within $maxSeconds seconds." -ForegroundColor Yellow
     Write-Host "Inspect the '[VisionGuard] Backend (FastAPI :8000)' window for startup errors." -ForegroundColor Yellow
     Write-Host "Note: Browser WebGPU mode remains available even if the backend is offline." -ForegroundColor Gray
@@ -254,9 +235,13 @@ Write-Host "====================================================================
 Write-Host "                  VISIONGUARD IS RUNNING SUCCESSFULLY                   " -ForegroundColor Green
 Write-Host "========================================================================" -ForegroundColor Green
 Write-Host "  * Web Application:  http://localhost:3000" -ForegroundColor White
-Write-Host "  * Local AI Backend: http://127.0.0.1:8000  (Health: /api/v1/health)" -ForegroundColor White
-Write-Host "  * Acceleration:     $backendProvider" -ForegroundColor White
-Write-Host "  * Separate console windows are running for Backend and Frontend." -ForegroundColor Gray
+if ($SkipBackend) {
+    Write-Host "  * Local AI Backend: SKIPPED (optional; browser inference is available)" -ForegroundColor Yellow
+} else {
+    Write-Host "  * Local AI Backend: http://127.0.0.1:8000  (Health: /api/v1/health)" -ForegroundColor White
+    Write-Host "  * Acceleration:     $backendProvider" -ForegroundColor White
+}
+Write-Host "  * The web application runs independently of Python ML packages." -ForegroundColor Gray
 Write-Host ""
 Write-Host "To STOP all VisionGuard services cleanly:" -ForegroundColor Yellow
 Write-Host "  - Run Stop-VisionGuard.bat from Windows Explorer, OR" -ForegroundColor Yellow
