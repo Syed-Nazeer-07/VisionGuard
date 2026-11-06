@@ -252,6 +252,7 @@ export default function LocalAnalyze() {
   useEffect(() => {
     let animation = 0;
     let lastSaved = 0;
+    let lastUpdated = 0;
     const paint = (stamp: number) => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -297,7 +298,10 @@ export default function LocalAnalyze() {
             ctx.restore();
           }
         }
-        if (result && Math.abs(video.currentTime - position) > .1) setPosition(video.currentTime);
+        if (result && stamp - lastUpdated > 250) {
+          lastUpdated = stamp;
+          setPosition(video.currentTime);
+        }
         if (result && stamp - lastSaved > 1500 && Number.isFinite(video.currentTime)) {
           lastSaved = stamp;
           void localAnalysisStorage.savePosition(video.currentTime).catch(() => {});
@@ -307,7 +311,7 @@ export default function LocalAnalyze() {
     };
     animation = requestAnimationFrame(paint);
     return () => cancelAnimationFrame(animation);
-  }, [position]);
+  }, []);
 
   const removeVideo = async () => {
     if (status === 'processing') return;
