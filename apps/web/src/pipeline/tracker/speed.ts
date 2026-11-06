@@ -11,7 +11,14 @@ export interface SpeedResult {
 }
 
 export class SpeedEstimator {
-  private history = new Map<number, { lastWorldPt: Point, lastTime: number, speeds: number[], overspeedCount: number, isStationary: boolean }>();
+  private history = new Map<number, {
+    lastWorldPt: Point; lastTime: number; speeds: number[];
+    overspeedCount: number; isStationary: boolean; lastResult: SpeedResult | null;
+    pendingWorldPts: Point[]
+  }>();
+  // Avoid treating a 1–2 pixel bounding-box wobble between 30 FPS frames
+  // as large real-world acceleration. Measure over >= 120ms of video time.
+  private readonly minMeasurementIntervalSeconds = 0.12;
   private speedLimit: number;
   private tolerance: number;
   private hMatrix: number[] | null = null;
@@ -31,10 +38,19 @@ export class SpeedEstimator {
   }
 
   setHomography(hMatrix: number[] | null) {
-    this.hMatrix = hMatrix;
+    // World coordinates from two different road-plane calibrations are NOT
+    // comparable. Never carry a vehicle's old km/h, displacement or overspeed
+    // streak across a camera/reference change.
+    this.reset();
+    this.hMatrix = hMatrix && hMatrix.length === 9 && hMatrix.every(Number.isFinite)
+      ? [...hMatrix]
+      : null;
   }
 
   update(trackId: number, baseBox: {x: number, y: number, w: number, h: number}, mediaTime: number): SpeedResult | null {
+    if (!Number.isFinite(mediaTime) || !Number.isFinite(baseBox.x) || !Number.isFinite(baseBox.y) ||
+        !Number.isFinite(baseBox.w) || !Number.isFinite(baseBox.h) ||
+        baseBox.w <= 0 || baseBox.h <= 0) return null;
     if (!this.hMatrix || this.hMatrix.length !== 9) {
       // Without ground-plane calibration homography, physical speed cannot be calculated.
       // Never fabricate speed or convert raw pixel displacement directly into km/h.
@@ -55,11 +71,14 @@ export class SpeedEstimator {
     } catch {
       return null;
     }
+    if (!Number.isFinite(worldPt.x) || !Number.isFinite(worldPt.y)) {
+      return null; // invalid projective horizon / near-singular mapping
+    }
 
     const state = this.history.get(trackId);
 
     if (!state) {
-      this.history.set(trackId, { lastWorldPt: worldPt, lastTime: mediaTime, speeds: [], overspeedCount: 0, isStationary: true });
+      this.history.set(trackId, { lastWorldPt: worldPt, lastTime: mediaTime, speeds: [], overspeedCount: 0, isStationary: true, lastResult: null, pendingWorldPts: [] });
       return null;
     }
 
@@ -72,14 +91,35 @@ export class SpeedEstimator {
       state.speeds = [];
       state.isStationary = true;
       state.overspeedCount = 0;
+      state.lastResult = null;
+      state.pendingWorldPts = [];
       return null;
     }
 
-    // Identical frame or negligible advance
-    if (dt <= 0.001) return null;
+    // Hold the previous *measured* speed during sub-120ms frames instead
+    // of deriving implausible km/h from detector bounding-box jitter.
+    // No result is emitted until a valid observed displacement is measured.
+    if (dt < this.minMeasurementIntervalSeconds) {
+      // Accumulate real ground-contact observations instead of repeatedly
+      // updating the speed baseline from a single noisy frame.
+      state.pendingWorldPts.push(worldPt);
+      if (state.pendingWorldPts.length > 4) state.pendingWorldPts.shift();
+      return state.lastResult;
+    }
 
-    const dx = worldPt.x - state.lastWorldPt.x;
-    const dy = worldPt.y - state.lastWorldPt.y;
+    // Median of the final short observation window resists ±pixel jitter
+    // without flattening sustained motion over the measurement interval.
+    // A single observation (slow inference) still uses its exact coordinate.
+    const samples = [...state.pendingWorldPts.slice(-2), worldPt];
+    const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+    const robustWorldPt = {
+      x: median(samples.map(p => p.x)),
+      y: median(samples.map(p => p.y))
+    };
+    state.pendingWorldPts = [];
+
+    const dx = robustWorldPt.x - state.lastWorldPt.x;
+    const dy = robustWorldPt.y - state.lastWorldPt.y;
 
     // Velocity components in m/s
     const vxMps = dx / dt;
@@ -89,9 +129,17 @@ export class SpeedEstimator {
     const speedMagnitudeMps = Math.hypot(vxMps, vyMps);
 
     // Limit extreme jumps (e.g. > 60 m/s = 216 km/h)
-    if (speedMagnitudeMps > 60) {
+    if (!Number.isFinite(speedMagnitudeMps) || speedMagnitudeMps > 60) {
+      // Teleportation usually means an ID switch or an invalid ground point.
+      // Establish a new baseline but NEVER keep the prior speed/overspeed
+      // result alive on the next frame.
       state.lastWorldPt = worldPt;
       state.lastTime = mediaTime;
+      state.pendingWorldPts = [];
+      state.speeds = [];
+      state.isStationary = true;
+      state.overspeedCount = 0;
+      state.lastResult = null;
       return null;
     }
 
@@ -134,10 +182,10 @@ export class SpeedEstimator {
       state.overspeedCount = 0;
     }
 
-    state.lastWorldPt = worldPt;
+    state.lastWorldPt = robustWorldPt;
     state.lastTime = mediaTime;
 
-    return {
+    state.lastResult = {
       speed: medianSpeed,
       velocity: directionalVelocityKmh,
       vx: vxKmh,
@@ -145,6 +193,7 @@ export class SpeedEstimator {
       isOverspeed: state.overspeedCount >= 3,
       isEstimated: true
     };
+    return state.lastResult;
   }
 
   remove(trackId: number) {

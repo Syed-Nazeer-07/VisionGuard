@@ -78,15 +78,15 @@ describe('findFrameAtMediaTime binary search', () => {
 });
 
 describe('Detection Quality Profiles configuration', () => {
-  it('defines Balanced profile with 0.35 confidence and 0.45 IoU', async () => {
+  it('defines precision-first Balanced profile with 0.40 confidence and 0.45 IoU', async () => {
     const { DETECTION_PROFILES } = await import('./backendAnalysis');
     expect(DETECTION_PROFILES.balanced).toBeDefined();
-    expect(DETECTION_PROFILES.balanced.confidenceThreshold).toBe(0.35);
+    expect(DETECTION_PROFILES.balanced.confidenceThreshold).toBe(0.40);
     expect(DETECTION_PROFILES.balanced.iouThreshold).toBe(0.45);
     expect(DETECTION_PROFILES.balanced.label).toBe('Balanced');
   });
 
-  it('defines High Recall profile with 0.25 confidence and 0.45 IoU', async () => {
+  it('defines experimental High Recall profile with 0.25 confidence and 0.45 IoU', async () => {
     const { DETECTION_PROFILES } = await import('./backendAnalysis');
     expect(DETECTION_PROFILES.high_recall).toBeDefined();
     expect(DETECTION_PROFILES.high_recall.confidenceThreshold).toBe(0.25);

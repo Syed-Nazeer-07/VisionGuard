@@ -167,7 +167,7 @@ const B2_PART_CONCURRENCY = 3
 const B2_PART_ATTEMPTS = 6
 const B2_SIGN_BATCH = 20
 
-async function callVideoStorage<T>(body: Record<string, unknown>): Promise<T> {
+export async function callVideoStorage<T>(body: Record<string, unknown>): Promise<T> {
   if (supabaseConfig.isMock || !supabase.functions) throw new Error('B2 video storage is unavailable in demo mode (no Supabase project configured)')
   const { data, error } = await supabase.functions.invoke('video-storage', { body })
   if (error) {
@@ -334,23 +334,54 @@ export function uploadStorageProvider(): VideoStorageProvider {
 }
 
 /**
- * Deletes a video asset with cascade cleanup of its durable analysis artifacts.
+ * Delete artifact objects attached to every analysis run, including historical
+ * Supabase Storage artifacts, BEFORE the metadata row is cascaded away.
+ * The B2 Edge delete-video endpoint additionally purges all object versions
+ * under both the video and artifact prefixes for B2-native assets.
  */
 export async function deleteVideoWithArtifacts(video: Pick<VideoAsset, 'id' | 'storage_path' | 'storage_provider' | 'metadata'>): Promise<void> {
-  const meta = (video.metadata && typeof video.metadata === 'object' && !Array.isArray(video.metadata) ? video.metadata : {}) as Record<string, any>;
-  const artifactPath = meta.artifact_storage_path;
-  const artifactBucket = meta.artifact_bucket || 'videos';
-  if (artifactPath && typeof artifactPath === 'string') {
+  const references = new Map<string, { bucket: string; path: string }>()
+  const remember = (meta: unknown) => {
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return
+    const record = meta as Record<string, unknown>
+    const path = record.artifact_storage_path
+    if (typeof path !== 'string' || !path) return
+    const bucket = typeof record.artifact_bucket === 'string' ? record.artifact_bucket : 'videos'
+    references.set(`${bucket}/${path}`, { bucket, path })
+  }
+
+  remember(video.metadata)
+  const { data: runs, error: runsError } = await supabase.from('analysis_runs')
+    .select('id, metrics').eq('video_id', video.id)
+  if (runsError) console.warn('Could not list analysis artifacts for cleanup:', runsError.message)
+  for (const run of runs ?? []) remember(run.metrics)
+
+  for (const { bucket, path } of references.values()) {
     try {
-      await supabase.storage.from(artifactBucket).remove([artifactPath]);
+      if (bucket === 'b2-artifacts') {
+        // For B2 footage, the server cleans the entire artifacts/{videoId}/
+        // prefix when deleting the video. For legacy footage, remove each
+        // B2 artifact individually with the signed-in user's privileges.
+        if (video.storage_provider !== 'b2') {
+          const match = /^artifacts\/([0-9a-f-]{36})\/([0-9a-f-]{36})\.json\.gz$/i.exec(path)
+          if (!match || match[1] !== video.id) throw new Error('Invalid B2 artifact reference')
+          await callVideoStorage({ action: 'delete-artifact', videoId: video.id, runId: match[2] })
+        }
+      } else {
+        const { error } = await supabase.storage.from(bucket).remove([path])
+        if (error) throw error
+      }
     } catch (e) {
-      console.warn('Failed to remove artifact from storage:', e);
+      console.warn('Could not clean up stored analysis artifact:', bucket, path, e)
     }
   }
-  try {
-    await supabase.storage.from('videos').remove([`artifacts/${video.id}/results.json.gz`]);
-  } catch {}
 
-  // Delete via provider (which deletes video file + deletes video_assets row cascading everything)
-  await storageProviderFor(video).deleteVideo(video);
+  // Legacy unversioned paths from older builds, if present.
+  const oldPath = `artifacts/${video.id}/results.json.gz`
+  if (![...references.values()].some(v => v.bucket === 'videos' && v.path === oldPath)) {
+    const { error } = await supabase.storage.from('videos').remove([oldPath])
+    if (error) console.warn('Could not remove legacy analysis artifact:', error.message)
+  }
+
+  await storageProviderFor(video).deleteVideo(video)
 }

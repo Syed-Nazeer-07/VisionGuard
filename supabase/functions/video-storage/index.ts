@@ -30,6 +30,8 @@ const PLAYBACK_URL_TTL_SECONDS = 6 * 60 * 60 // 6 h
 const MIN_PART_SIZE = 10 * 1024 * 1024 // B2/S3 minimum is 5 MiB; 10 MiB keeps retries cheap on slow links
 const MAX_PARTS = 10_000
 const MAX_FILE_SIZE = 50 * 1024 * 1024 * 1024 // 50 GiB application ceiling
+const MAX_ARTIFACT_FILE_SIZE = 1024 * 1024 * 1024 // 1 GiB compressed analysis artifact cap
+const ARTIFACT_URL_TTL_SECONDS = 15 * 60 // 15 min; request a fresh playback URL as needed
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -93,6 +95,45 @@ function partSizeFor(fileSize: number): number {
   return Math.max(MIN_PART_SIZE, Math.ceil(needed / (1024 * 1024)) * 1024 * 1024)
 }
 
+/**
+ * Backblaze B2 is versioned. A bare S3 DELETE can create a delete marker
+ * while old versions continue to consume capacity. Delete every listed
+ * object version for the exact video/run prefix, walking paginated results.
+ */
+async function purgeObjectVersions(cfg: B2Config, prefix: string): Promise<number> {
+  let removed = 0
+  let keyMarker = ''
+  let versionMarker = ''
+  for (let page = 0; page < 200; page++) {
+    const listUrl = new URL(`${cfg.endpoint}/${encodeURIComponent(cfg.bucket)}`)
+    listUrl.searchParams.set('versions', '')
+    listUrl.searchParams.set('prefix', prefix)
+    if (keyMarker) listUrl.searchParams.set('key-marker', keyMarker)
+    if (versionMarker) listUrl.searchParams.set('version-id-marker', versionMarker)
+    const response = await s3(cfg, 'GET', listUrl)
+    if (response.status === 404) return removed
+    const listing = await response.text()
+    const versions = [...listing.matchAll(/<(?:Version|DeleteMarker)>([\s\S]*?)<\/(?:Version|DeleteMarker)>/g)]
+      .map(match => ({ key: xmlValue(match[1], 'Key'), versionId: xmlValue(match[1], 'VersionId') }))
+      .filter(v => typeof v.key === 'string' && v.key.startsWith(prefix) && !!v.versionId)
+    for (const version of versions) {
+      const url = objectUrl(cfg, version.key!)
+      url.searchParams.set('versionId', version.versionId!)
+      await s3(cfg, 'DELETE', url)
+      removed++
+    }
+    if (xmlValue(listing, 'IsTruncated') !== 'true') return removed
+    const nextKey = xmlValue(listing, 'NextKeyMarker')
+    const nextVersion = xmlValue(listing, 'NextVersionIdMarker') ?? ''
+    if (!nextKey || (nextKey === keyMarker && nextVersion === versionMarker)) {
+      throw new HttpError(502, 'B2 object version listing did not advance while cleaning up')
+    }
+    keyMarker = nextKey
+    versionMarker = nextVersion
+  }
+  throw new HttpError(502, 'B2 object version cleanup exceeded the pagination safety limit')
+}
+
 function extensionOf(fileName: string): string {
   const ext = (fileName.split('.').pop() ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
   return ext && ext.length <= 8 ? ext : 'mp4'
@@ -117,6 +158,44 @@ async function loadAsset(db: SupabaseClient, videoId: string): Promise<AssetRow>
   if (error) throw new HttpError(500, `video_assets lookup failed: ${error.message}`)
   if (!data) throw new HttpError(404, `Video asset ${videoId} not found or not accessible`)
   return data as AssetRow
+}
+
+function requireAssetOwner(asset: AssetRow, userId: string) {
+  if (asset.uploaded_by !== userId) throw new HttpError(403, 'Only the uploader may modify artifacts for this video')
+}
+
+// The artifact key is DERIVED FROM UUIDs, never an arbitrary client path.
+async function loadArtifactRun(db: SupabaseClient, videoId: string, runId: unknown): Promise<string> {
+  if (typeof runId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(runId)) {
+    throw new HttpError(400, 'Invalid analysis run ID')
+  }
+  const { data: run, error } = await db
+    .from('analysis_runs')
+    .select('id, video_id')
+    .eq('id', runId)
+    .eq('video_id', videoId)
+    .maybeSingle()
+  if (error) throw new HttpError(500, `analysis_runs lookup failed: ${error.message}`)
+  if (!run) throw new HttpError(404, 'No accessible analysis run exists for this video')
+  return `artifacts/${videoId}/${runId}.json.gz`
+}
+
+async function requireArtifactReader(db: SupabaseClient, asset: AssetRow, userId: string) {
+  if (asset.uploaded_by === userId) return
+  const { data, error } = await db.rpc('auth_user_role')
+  // Operators review saved runs, but may not DELETE the original footage
+  // or an analysis artifact owned by someone else.
+  if (error || !['Operator', 'Supervisor', 'Admin'].includes(data)) {
+    throw new HttpError(403, 'Only the video uploader or authorized staff can read this artifact')
+  }
+}
+
+async function requireArtifactDeletion(db: SupabaseClient, asset: AssetRow, userId: string) {
+  if (asset.uploaded_by === userId) return
+  const { data, error } = await db.rpc('auth_user_role')
+  if (error || (data !== 'Supervisor' && data !== 'Admin')) {
+    throw new HttpError(403, 'Only the uploader or a Supervisor/Admin can delete this artifact')
+  }
 }
 
 function requireUploader(asset: AssetRow, userId: string) {
@@ -156,6 +235,60 @@ Deno.serve(async (req) => {
     const videoId = String(body.videoId ?? '')
 
     switch (action) {
+      // Analysis artifacts also live in B2. Supabase is used for the
+      // analysis_runs row and authorization, NOT its quota-limited object bucket.
+      case 'create-artifact-upload': {
+        const asset = await loadAsset(db, videoId)
+        requireAssetOwner(asset, userId)
+        const key = await loadArtifactRun(db, videoId, body.runId)
+        const fileSize = Number(body.fileSize)
+        if (!Number.isSafeInteger(fileSize) || fileSize < 1 || fileSize > MAX_ARTIFACT_FILE_SIZE) {
+          throw new HttpError(400, 'Invalid compressed artifact size')
+        }
+        const cfg = b2Config()
+        const url = await presign(cfg, 'PUT', objectUrl(cfg, key), ARTIFACT_URL_TTL_SECONDS)
+        return json({ key, url, expiresIn: ARTIFACT_URL_TTL_SECONDS })
+      }
+
+      case 'verify-artifact-upload': {
+        const asset = await loadAsset(db, videoId)
+        requireAssetOwner(asset, userId)
+        const key = await loadArtifactRun(db, videoId, body.runId)
+        const expectedSize = Number(body.fileSize)
+        if (!Number.isSafeInteger(expectedSize) || expectedSize < 1 || expectedSize > MAX_ARTIFACT_FILE_SIZE) {
+          throw new HttpError(400, 'Invalid compressed artifact size')
+        }
+        const cfg = b2Config()
+        const head = await s3(cfg, 'HEAD', objectUrl(cfg, key))
+        if (head.status === 404) throw new HttpError(502, 'Artifact upload was not found in B2')
+        const storedSize = Number(head.headers.get('Content-Length') ?? '-1')
+        if (storedSize !== expectedSize) {
+          throw new HttpError(502, `B2 artifact size mismatch (expected ${expectedSize}, got ${storedSize})`)
+        }
+        return json({ key, size: storedSize, exists: true })
+      }
+
+      case 'artifact-playback-url': {
+        const asset = await loadAsset(db, videoId)
+        await requireArtifactReader(db, asset, userId)
+        const key = await loadArtifactRun(db, videoId, body.runId)
+        const cfg = b2Config()
+        const head = await s3(cfg, 'HEAD', objectUrl(cfg, key))
+        if (head.status === 404) throw new HttpError(404, 'Analysis artifact was not found in B2')
+        const url = await presign(cfg, 'GET', objectUrl(cfg, key), ARTIFACT_URL_TTL_SECONDS)
+        return json({ key, url, size: Number(head.headers.get('Content-Length') ?? '0') })
+      }
+
+      case 'delete-artifact': {
+        const asset = await loadAsset(db, videoId)
+        // Operators may review but never delete another user's evidence.
+        await requireArtifactDeletion(db, asset, userId)
+        const key = await loadArtifactRun(db, videoId, body.runId)
+        const cfg = b2Config()
+        const removed = await purgeObjectVersions(cfg, key)
+        return json({ deleted: true, versionsRemoved: removed })
+      }
+
       case 'create-upload': {
         const asset = await loadAsset(db, videoId)
         requireUploader(asset, userId)
@@ -270,44 +403,49 @@ Deno.serve(async (req) => {
 
       case 'delete-video': {
         const asset = await loadAsset(db, videoId)
-        // RLS decides: only the uploader or a Supervisor/Admin can delete the row.
-        const { data: deleted, error: delErr } = await db.from('video_assets').delete().eq('id', asset.id).select('id')
-        if (delErr) throw new HttpError(500, `Delete failed: ${delErr.message}`)
-        if (!deleted || deleted.length === 0) throw new HttpError(403, 'Not permitted to delete this video (only the uploader or a Supervisor/Admin can)')
-
-        if (asset.storage_provider !== 'b2') return json({ deleted: true, objectsRemoved: 0 })
-        const cfg = b2Config()
-        const meta = asset.metadata ?? {}
-        let removed = 0
-        const warnings: string[] = []
-        // Unfinished multipart upload: abort it so its parts stop consuming storage.
-        if (!asset.storage_path && typeof meta.b2_upload_id === 'string' && typeof meta.b2_object_key === 'string') {
-          const url = objectUrl(cfg, meta.b2_object_key)
-          url.searchParams.set('uploadId', meta.b2_upload_id)
-          await s3(cfg, 'DELETE', url).catch(e => warnings.push(String(e instanceof Error ? e.message : e)))
-        }
-        // Remove every stored version (B2 buckets keep versions; a plain DELETE only hides the file).
-        const key = asset.storage_path || (typeof meta.b2_object_key === 'string' ? meta.b2_object_key : '')
-        if (key) {
-          const listUrl = new URL(`${cfg.endpoint}/${encodeURIComponent(cfg.bucket)}`)
-          listUrl.searchParams.set('versions', '')
-          listUrl.searchParams.set('prefix', key)
-          const listing = await (await s3(cfg, 'GET', listUrl)).text()
-          const versions = [...listing.matchAll(/<(?:Version|DeleteMarker)>([\s\S]*?)<\/(?:Version|DeleteMarker)>/g)]
-            .map(m => ({ key: xmlValue(m[1], 'Key'), versionId: xmlValue(m[1], 'VersionId') }))
-            .filter(v => v.key === key && v.versionId)
-          for (const v of versions) {
-            const url = objectUrl(cfg, key)
-            url.searchParams.set('versionId', v.versionId!)
-            try {
-              await s3(cfg, 'DELETE', url)
-              removed++
-            } catch (e) {
-              warnings.push(String(e instanceof Error ? e.message : e))
-            }
+        // Authorization must occur BEFORE making any irreversible B2 call.
+        // Merely being able to SELECT a video doesn't grant permission to
+        // delete it: Operators can review videos but not remove originals.
+        if (asset.uploaded_by !== userId) {
+          const { data: role, error: roleError } = await db.rpc('auth_user_role')
+          if (roleError || (role !== 'Admin' && role !== 'Supervisor')) {
+            throw new HttpError(403, 'Only the uploader or a Supervisor/Admin can delete this video')
           }
         }
-        return json({ deleted: true, objectsRemoved: removed, warnings })
+
+        let removed = 0
+        if (asset.storage_provider === 'b2') {
+          const cfg = b2Config()
+          const meta = asset.metadata ?? {}
+
+          // Keep video_assets row intact while cleaning bytes. If Backblaze
+          // is unavailable, return an error and retain a retriable DB record
+          // instead of silently orphaning potentially billable objects.
+          if (!asset.storage_path && typeof meta.b2_upload_id === 'string' && typeof meta.b2_object_key === 'string') {
+            const uploadPath = `videos/${asset.id}/`
+            if (!meta.b2_object_key.startsWith(uploadPath)) {
+              throw new HttpError(409, 'Multipart session object path is inconsistent with the video')
+            }
+            const url = objectUrl(cfg, meta.b2_object_key)
+            url.searchParams.set('uploadId', meta.b2_upload_id)
+            await s3(cfg, 'DELETE', url)
+          }
+
+          // Backblaze keeps historical object versions. Purge both original
+          // media and per-run gzip artifacts before cascading metadata.
+          removed += await purgeObjectVersions(cfg, `videos/${asset.id}/`)
+          removed += await purgeObjectVersions(cfg, `artifacts/${asset.id}/`)
+        }
+
+        // RLS is still authoritative: if policy forbids deletion, return
+        // explicit denial rather than pretending cleanup was successful.
+        const { data: deleted, error: delErr } = await db.from('video_assets')
+          .delete().eq('id', asset.id).select('id')
+        if (delErr) throw new HttpError(500, `Delete failed: ${delErr.message}`)
+        if (!deleted || deleted.length === 0) {
+          throw new HttpError(403, 'Video deletion was denied by database policy')
+        }
+        return json({ deleted: true, objectsRemoved: removed, warnings: [] })
       }
 
       default:

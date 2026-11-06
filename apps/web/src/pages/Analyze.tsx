@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import {
   Upload, CheckCircle2, Loader2,
   AlertTriangle, Film, Play, Pause, Square, RotateCcw, X,
-  Maximize2, Minimize2, Clock, Eye
+  Maximize2, Minimize2, Clock, Eye, Activity
 } from 'lucide-react';
 import Hls from 'hls.js';
 import { cn } from '../lib/utils';
@@ -18,7 +18,10 @@ import {
   diagnosePipeline
 } from '../pipeline/worker/frameSync';
 import { InferenceCoordinator } from '../pipeline/worker/inferenceCoordinator';
-import type { ResultMessage, WorkerOutputMessage, CalibrationData } from '../pipeline/types';
+import { recommendedPlaybackRate, estimateVideoFrameRate } from '../pipeline/worker/syncedPlayback';
+import type { ResultMessage, WorkerOutputMessage, CalibrationData, Point } from '../pipeline/types';
+import { validateVideoCalibration } from '../pipeline/tracker/calibrationValidation';
+import { VideoCalibrationOverlay } from '../components/analysis/VideoCalibrationOverlay';
 import type { ViolationCandidate, ViolationMetadata } from '../pipeline/violations/types';
 import { db, type VideoAsset } from '../services/db';
 import { requestOcr } from '../pipeline/plate/service';
@@ -177,8 +180,13 @@ interface SavedSummary {
 }
 
 const EMPTY_METRICS: LiveMetrics = { fps: 0, latency: 0, frames: 0, droppedFrames: 0, detections: 0, created: 0, suppressed: 0, saved: 0, tracked: 0, queue: 0, resultAge: 0, renderedTracks: 0, staleDropped: 0, staleRejected: 0, workerErrors: 0, workerBusy: false };
-const MODEL_PATH = '/models/yolo11n.onnx';
-const MODEL_NAME = 'YOLO11n';
+// Explicit same-origin model selection. YOLO11s gives a higher general COCO
+// detection score but can be slower; the user must install its ONNX asset.
+// Do not fetch model URLs from arbitrary untrusted origins.
+const selectedModelPath = import.meta.env.VITE_YOLO_MODEL_PATH?.trim() || '/models/yolo11n.onnx';
+const MODEL_PATH = /^\/models\/yolo11[nsm]\.onnx$/.test(selectedModelPath)
+  ? selectedModelPath : '/models/yolo11n.onnx';
+const MODEL_NAME = MODEL_PATH.match(/yolo11([nsm])\.onnx$/)?.[0]?.replace('.onnx', '').toUpperCase() ?? 'YOLO11n';
 
 function describeError(e: unknown): string {
   if (e && typeof e === 'object') {
@@ -245,7 +253,10 @@ export default function Analyze() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [live, setLive] = useState<LiveMetrics>(EMPTY_METRICS);
   const [saved, setSaved] = useState<SavedSummary | null>(null);
-  const [saveToHistory, setSaveToHistory] = useState<boolean>(true);
+  // Temporary browser analysis must work even when object storage quota is
+  // exhausted or the B2 Edge Function has not yet been configured.
+  // Persisting footage is an explicit opt-in, never a hidden prerequisite.
+  const [saveToHistory, setSaveToHistory] = useState<boolean>(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [stagedFile, setStagedFile] = useState<File | null>(null);
   const [playbackTime, setPlaybackTime] = useState<{ current: number; duration: number }>({ current: 0, duration: 0 });
@@ -261,10 +272,35 @@ export default function Analyze() {
 
   // Local Python backend vs In-Browser WebGPU mode
   const [analysisEngine, setAnalysisEngine] = useState<'backend' | 'browser'>(() => {
-    return (localStorage.getItem('visionguard_analysis_engine') as 'backend' | 'browser') || 'backend';
+    // Browser inference is self-contained; the Python service is optional.
+    return (localStorage.getItem('visionguard_analysis_engine') as 'backend' | 'browser') || 'browser';
   });
   const analysisEngineRef = useRef(analysisEngine);
   analysisEngineRef.current = analysisEngine;
+  const [syncPlayback, setSyncPlayback] = useState<boolean>(
+    () => localStorage.getItem('visionguard_sync_playback_user_opt_in_v2') === 'true'
+  );
+  const [showDetectionScores, setShowDetectionScores] = useState(false);
+  const syncPlaybackRef = useRef(syncPlayback);
+  syncPlaybackRef.current = syncPlayback;
+  const [effectivePlaybackRate, setEffectivePlaybackRate] = useState(1);
+  const sourceFrameRateRef = useRef(30);
+  const lastPresentedFrameCountRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // The old version automatically wrote "true" into localStorage. Use a
+    // new explicit opt-in key so previously slowed videos return to 1×.
+    localStorage.setItem('visionguard_sync_playback_user_opt_in_v2', String(syncPlayback));
+    if (videoRef.current && !syncPlayback) {
+      videoRef.current.playbackRate = 1;
+      setEffectivePlaybackRate(1);
+    }
+  }, [syncPlayback]);
+  // A previous build turned slowdown ON by default. Restore regular 1×
+  // playback on every fresh source, including previously saved sessions.
+  useEffect(() => {
+    if (videoRef.current && !syncPlayback) videoRef.current.playbackRate = 1;
+  }, [sourceInfo?.id, syncPlayback]);
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
   const [backendAvailable, setBackendAvailable] = useState<boolean>(false);
   const [backendJob, setBackendJob] = useState<BackendJobStatus | null>(null);
@@ -281,6 +317,71 @@ export default function Analyze() {
 
   // Speed estimation ground-plane calibration state (loaded from surveyed video assets if available)
   const [calibration, setCalibration] = useState<CalibrationData | null>(null);
+  // The video-frame callback can outlive a render. Always read the current
+  // calibration instead of a stale closure captured before the editor saved.
+  const calibrationRef = useRef<CalibrationData | null>(null);
+  calibrationRef.current = calibration;
+  const [calibrationOpen, setCalibrationOpen] = useState(false);
+  const [calibrationPoints, setCalibrationPoints] = useState<Point[]>([]);
+  const [calibrationForm, setCalibrationForm] = useState({
+    referenceWidth: '', referenceHeight: '', speedLimit: '60', tolerance: '5'
+  });
+  const [calibrationSaving, setCalibrationSaving] = useState(false);
+  const [calibrationIssue, setCalibrationIssue] = useState<string | null>(null);
+
+  const openVideoCalibration = () => {
+    if (!sourceInfo || runStateRef.current === 'ANALYZING' || runStateRef.current === 'STARTING') return;
+    videoRef.current?.pause();
+    setCalibrationPoints(calibration?.calibrationArea?.map(p => ({ ...p })) ?? []);
+    setCalibrationForm({
+      referenceWidth: calibration?.referenceWidth?.toString() ?? '',
+      referenceHeight: calibration?.referenceHeight?.toString() ?? '',
+      speedLimit: calibration?.speedLimit?.toString() ?? '60',
+      tolerance: calibration?.tolerance?.toString() ?? '5'
+    });
+    setCalibrationIssue(null);
+    setCalibrationOpen(true);
+  };
+
+  const saveVideoCalibration = async () => {
+    if (!sourceInfo || calibrationSaving) return;
+    const data: CalibrationData = {
+      referenceWidth: Number(calibrationForm.referenceWidth),
+      referenceHeight: Number(calibrationForm.referenceHeight),
+      speedLimit: Number(calibrationForm.speedLimit),
+      tolerance: Number(calibrationForm.tolerance),
+      calibrationArea: calibrationPoints.map(point => ({ ...point }))
+    };
+    if (!calibrationForm.referenceWidth.trim() || !calibrationForm.referenceHeight.trim()) {
+      setCalibrationIssue('Enter actual surveyed reference dimensions in metres.');
+      return;
+    }
+    const issue = validateVideoCalibration(data);
+    if (issue) { setCalibrationIssue(issue); return; }
+    setCalibrationSaving(true);
+    setCalibrationIssue(null);
+    try {
+      if (!sourceInfo.isLocalOnly && sourceInfo.id) {
+        const { data: record, error: readError } = await supabase.from('video_assets')
+          .select('metadata').eq('id', sourceInfo.id).maybeSingle();
+        if (readError || !record) throw new Error(readError?.message || 'Video asset is unavailable');
+        const previous = record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
+          ? record.metadata : {};
+        const { data: updated, error: writeError } = await supabase.from('video_assets')
+          .update({ metadata: { ...previous, calibration: data } })
+          .eq('id', sourceInfo.id).select('id').maybeSingle();
+        if (writeError || !updated) throw new Error(writeError?.message || 'Camera calibration was not saved');
+      }
+      setCalibration(data);
+      calibrationRef.current = data;
+      setCalibrationOpen(false);
+      setContentNote('Measured reference saved. Restart analysis to compute estimated km/h. Validate measured speeds against ground truth before use.');
+    } catch (error) {
+      setCalibrationIssue(`Could not save calibration: ${describeError(error)}`);
+    } finally {
+      setCalibrationSaving(false);
+    }
+  };
 
   // Helper to change engine explicitly (persisted to storage)
   const selectAnalysisEngine = (engine: 'backend' | 'browser') => {
@@ -290,6 +391,10 @@ export default function Analyze() {
     analysisEngineRef.current = engine;
     setAnalysisEngine(engine);
     localStorage.setItem('visionguard_analysis_engine', engine);
+    if (videoRef.current && engine !== 'browser') {
+      videoRef.current.playbackRate = 1;
+      setEffectivePlaybackRate(1);
+    }
 
     // Cleanly clear overlays and incompatible cached results without resetting the loaded source or preview player
     clearOverlayCanvas();
@@ -360,6 +465,13 @@ export default function Analyze() {
       if (!cancelled) {
         setBackendAvailable(res.isAvailable);
         setBackendHealth(res.health || null);
+        if (!res.isAvailable && analysisEngineRef.current === 'backend') {
+          // Previous sessions may have persisted backend as the default.
+          // Don't strand users in an unavailable engine when browser AI works.
+          analysisEngineRef.current = 'browser';
+          setAnalysisEngine('browser');
+          localStorage.setItem('visionguard_analysis_engine', 'browser');
+        }
       }
     };
     void check();
@@ -683,7 +795,7 @@ export default function Analyze() {
       const srcH = video.videoHeight;
       const stats = drawBoundingBoxes(
         ctx, tracksToRender, canvas.width, canvas.height,
-        srcW, srcH, isCover, 0
+        srcW, srcH, isCover, 0, { showConfidence: showDetectionScores }
       );
       latestOverlayStatsRef.current = stats;
 
@@ -792,7 +904,17 @@ export default function Analyze() {
   const scheduleNext = (video: HTMLVideoElement) => {
     if (typeof video.requestVideoFrameCallback === 'function') {
       video.requestVideoFrameCallback((_now, metadata) => {
+        const previousMedia = lastPresentedMediaTimeRef.current;
+        const previousFrame = lastPresentedFrameCountRef.current;
+        if (previousMedia !== null && previousFrame !== null) {
+          sourceFrameRateRef.current = estimateVideoFrameRate(
+            sourceFrameRateRef.current,
+            metadata.presentedFrames - previousFrame,
+            metadata.mediaTime - previousMedia
+          );
+        }
         lastPresentedMediaTimeRef.current = metadata.mediaTime;
+        lastPresentedFrameCountRef.current = metadata.presentedFrames;
         processFrame(metadata.mediaTime);
       });
     } else {
@@ -864,8 +986,8 @@ export default function Analyze() {
           sourceHeight: bitmap.height,
           confidenceThreshold: confTh,
           iouThreshold: iouTh,
-          calibration: (calibration && calibration.calibrationArea?.length === 4)
-            ? calibration
+          calibration: (calibrationRef.current && calibrationRef.current.calibrationArea?.length === 4)
+            ? calibrationRef.current
             : {
                 referenceWidth: 2,
                 referenceHeight: 2,
@@ -1207,6 +1329,20 @@ export default function Analyze() {
     drawOverlay(); // redraw immediately; do not wait for the next presented frame
 
     const video = videoRef.current;
+    if (video && !video.paused && analysisEngineRef.current === 'browser' && syncPlaybackRef.current) {
+      const elapsedMs = outcome.request
+        ? Math.max(msg.inferenceTime, performance.now() - outcome.request.startedAt)
+        : msg.inferenceTime;
+      const target = recommendedPlaybackRate(elapsedMs, sourceFrameRateRef.current);
+      // Low-pass the playback rate to avoid oscillation between fast/slow
+      // frames on WebGPU and WASM. Lower video speed is explicit in the UI.
+      const current = video.playbackRate || 1;
+      const next = Math.max(0.2, Math.min(1, 0.65 * current + 0.35 * target));
+      if (Math.abs(current - next) > 0.012) {
+        video.playbackRate = next;
+        setEffectivePlaybackRate(Math.round(next * 100) / 100);
+      }
+    }
     if (video && !video.paused && runStateRef.current === 'ANALYZING' && !loopActiveRef.current) {
       startLoop();
     }
@@ -1357,6 +1493,10 @@ export default function Analyze() {
     const video = videoRef.current;
     if (video) {
       video.pause();
+      video.playbackRate = 1;
+      setEffectivePlaybackRate(1);
+      sourceFrameRateRef.current = 30;
+      lastPresentedFrameCountRef.current = null;
       if (video.getAttribute('src')) {
         video.removeAttribute('src');
         video.load(); // aborts the previous resource; its pending events are dropped
@@ -2909,6 +3049,25 @@ export default function Analyze() {
                 Local Backend
               </button>
             </div>
+            {analysisEngine === 'browser' && (
+              <>
+              <label title="Adapt video playback to the real inference throughput so bounding boxes stay aligned. Disable for normal 1× video playback."
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-700 select-none cursor-pointer shrink-0">
+                <input type="checkbox" checked={syncPlayback}
+                  onChange={event => setSyncPlayback(event.target.checked)}
+                  className="accent-indigo-600 w-3.5 h-3.5" />
+                Slow playback to AI FPS (optional)
+                <span className="font-mono text-indigo-700">{effectivePlaybackRate.toFixed(2)}×</span>
+              </label>
+              <label title="Append YOLO confidence to each box to diagnose incorrect classifications."
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-700 select-none cursor-pointer shrink-0">
+                <input type="checkbox" checked={showDetectionScores}
+                  onChange={event => setShowDetectionScores(event.target.checked)}
+                  className="accent-indigo-600 w-3.5 h-3.5" />
+                Show detection confidence
+              </label>
+              </>
+            )}
           </div>
 
           <input
@@ -2971,15 +3130,22 @@ export default function Analyze() {
           </div>
         )}
 
+        {analysisEngine === 'browser' && (!calibration || calibration.calibrationArea?.length !== 4) && (
+          <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-900 flex items-center gap-2">
+            <Activity className="w-4 h-4 shrink-0" />
+            <span><strong>Speed: calibration required.</strong> Vehicles can still be detected and tracked, but no trustworthy km/h value is available until a measured road-plane reference is configured.</span>
+          </div>
+        )}
+
         {/* Actionable Local Backend Offline Banner */}
         {analysisEngine === 'backend' && !backendAvailable && (
           <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs" id="analyze-backend-offline-banner">
             <div className="flex items-start sm:items-center gap-2.5">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
               <div>
-                <span className="font-semibold text-amber-950">Local AI Backend is Offline (http://127.0.0.1:8000).</span>
+                <span className="font-semibold text-amber-950">Optional Python engine isn't running.</span>
                 <span className="text-amber-800 ml-1">
-                  Run <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono text-[11px]">Start-VisionGuard.bat</code> to launch local DirectML/CPU acceleration, or switch to{' '}
+                  On Windows on ARM this backend may require compatible Python packages. Browser AI does not need it. Start the Python service only if you deliberately need offline batch processing, or switch to{' '}
                   <button
                     type="button"
                     onClick={() => selectAnalysisEngine('browser')}
@@ -3012,6 +3178,64 @@ export default function Analyze() {
               </button>
             </div>
           </div>
+        )}
+
+        {sourceInfo && (
+          <section aria-label="Vehicle speed calibration" className="border border-slate-200 bg-white rounded-xl p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Speed reference</h2>
+                <p className="text-xs text-slate-600 mt-1">
+                  {calibration ? 'Reference configured · estimated km/h requires independent validation'
+                    : 'No surveyed ground-plane reference · km/h unavailable'}
+                </p>
+              </div>
+              <button type="button" disabled={runState === 'ANALYZING' || runState === 'STARTING'}
+                onClick={calibrationOpen ? () => setCalibrationOpen(false) : openVideoCalibration}
+                className="px-3 py-2 border border-indigo-200 bg-indigo-50 text-indigo-800 text-xs rounded-lg font-semibold disabled:opacity-50">
+                {calibrationOpen ? 'Close calibration' : calibration ? 'Edit reference' : 'Calibrate speed'}
+              </button>
+            </div>
+            {calibrationOpen && (
+              <div className="border-t border-slate-100 pt-3 space-y-3">
+                <p className="text-xs leading-relaxed text-slate-600">
+                  Pause on a clear frame and select the four corners of a measured road-plane rectangle:
+                  top-left, top-right, bottom-right, bottom-left. Enter its real width and length in metres.
+                  Do not estimate these dimensions from the image alone.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {([
+                    ['referenceWidth', 'Road width (m)'],
+                    ['referenceHeight', 'Road length (m)'],
+                    ['speedLimit', 'Speed limit (km/h)'],
+                    ['tolerance', 'Tolerance (km/h)']
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="block text-xs text-slate-600">
+                      <span className="font-semibold">{label}</span>
+                      <input type="number" min={key === 'tolerance' ? 0 : 0.01} step="any"
+                        value={calibrationForm[key]}
+                        onChange={event => setCalibrationForm(prev => ({ ...prev, [key]: event.target.value }))}
+                        className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                    </label>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-slate-500">{calibrationPoints.length} of 4 corners selected</span>
+                  <button type="button" onClick={() => { setCalibrationPoints([]); setCalibrationIssue(null); }}
+                    className="text-xs text-slate-600 hover:text-indigo-700 underline">Reset points</button>
+                  <button type="button" onClick={() => setCalibrationPoints(prev => prev.slice(0, -1))}
+                    disabled={calibrationPoints.length === 0}
+                    className="text-xs text-slate-600 hover:text-indigo-700 underline disabled:opacity-50">Undo point</button>
+                  <button type="button" onClick={() => void saveVideoCalibration()} disabled={calibrationSaving}
+                    className="ml-auto px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold disabled:opacity-50">
+                    {calibrationSaving ? 'Saving…' : 'Save measured reference'}
+                  </button>
+                </div>
+                {calibrationIssue && <p role="alert" className="text-xs text-rose-700">{calibrationIssue}</p>}
+                <p className="text-[11px] text-amber-800">Speed estimates are not certified measurements and must not be used for enforcement.</p>
+              </div>
+            )}
+          </section>
         )}
 
         {/* Main Analysis Workspace: Video Viewport and Playback Controls */}
@@ -3065,6 +3289,11 @@ export default function Analyze() {
                   ref={canvasRef}
                   className="absolute inset-0 w-full h-full pointer-events-none z-20"
                 />
+                {calibrationOpen && (
+                  <VideoCalibrationOverlay videoRef={videoRef} points={calibrationPoints}
+                    onPoint={point => { setCalibrationPoints(prev => [...prev, point]); setCalibrationIssue(null); }}
+                    fit={isFullscreen ? 'cover' : 'contain'} />
+                )}
               </div>
 
               {sourceInfo && (

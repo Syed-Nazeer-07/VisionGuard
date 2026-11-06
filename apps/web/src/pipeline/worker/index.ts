@@ -3,6 +3,7 @@ import { processOutput } from '../detector/postprocess';
 import { ByteTracker } from '../tracker/bytetrack';
 import { SpeedEstimator } from '../tracker/speed';
 import { computeHomography } from '../tracker/homography';
+import { validateVideoCalibration } from '../tracker/calibrationValidation';
 import { RuleEngine } from '../violations/RuleEngine';
 import { OverspeedRule } from '../violations/rules/OverspeedRule';
 import { RedLightRule } from '../violations/rules/RedLightRule';
@@ -230,23 +231,28 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       const dt = lastMediaTime !== null ? mediaTime - lastMediaTime : 0;
       lastMediaTime = mediaTime;
 
-      if (calibration) {
-        const hash = JSON.stringify(calibration);
+      // A stale calibrated homography must never survive a video/run
+      // switch or a newly invalid calibration. Speed is optional, never
+      // something inferred from arbitrary uncalibrated pixel motion.
+      const safeCalibration = calibration && validateVideoCalibration(calibration) === null
+        ? calibration : null;
+      if (safeCalibration) {
+        const hash = JSON.stringify(safeCalibration);
         if (hash !== currentCalibrationHash) {
           currentCalibrationHash = hash;
-          speedEstimator = new SpeedEstimator(calibration.speedLimit, calibration.tolerance);
-
-          if (calibration.calibrationArea && calibration.calibrationArea.length === 4) {
-            const dst: Point[] = [
-              { x: 0, y: 0 },
-              { x: calibration.referenceWidth, y: 0 },
-              { x: calibration.referenceWidth, y: calibration.referenceHeight },
-              { x: 0, y: calibration.referenceHeight }
-            ];
-            const H = computeHomography(calibration.calibrationArea, dst);
-            speedEstimator.setHomography(H);
-          }
+          const dst: Point[] = [
+            { x: 0, y: 0 },
+            { x: safeCalibration.referenceWidth, y: 0 },
+            { x: safeCalibration.referenceWidth, y: safeCalibration.referenceHeight },
+            { x: 0, y: safeCalibration.referenceHeight }
+          ];
+          const H = computeHomography(safeCalibration.calibrationArea, dst);
+          speedEstimator = H ? new SpeedEstimator(safeCalibration.speedLimit, safeCalibration.tolerance) : null;
+          speedEstimator?.setHomography(H);
         }
+      } else if (currentCalibrationHash || speedEstimator) {
+        currentCalibrationHash = '';
+        speedEstimator = null;
       }
 
       const start = performance.now();
@@ -265,7 +271,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       const confidenceThreshold = typeof msg.confidenceThreshold === 'number' ? msg.confidenceThreshold : 0.35;
       const iouThreshold = typeof msg.iouThreshold === 'number' ? msg.iouThreshold : 0.45;
-      tracker.trackThreshold = Math.max(0.45, confidenceThreshold);
+      // Keep the "high" ByteTrack association threshold aligned to the
+      // benchmark-tuned profiles (0.20 balanced, 0.15 high recall). Small
+      // motorcycles often score under the former hardcoded 0.45 floor.
+      // Low-confidence candidates still need repeated detections to confirm.
+      tracker.trackThreshold = Math.max(0.20, confidenceThreshold);
       const boxes = processOutput(
         output.data as Float32Array,
         confidenceThreshold,
@@ -297,7 +307,10 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (track.dh !== undefined) track.dh = track.dh / safeDt;
 
         const isVehicle = track.className === 'car' || track.className === 'truck' || track.className === 'bus' || track.className === 'motorcycle' || track.className === 'bicycle';
-        if (speedEstimator && isVehicle) {
+        if (speedEstimator && isVehicle && track.observationType === 'detection') {
+          // Predicted tracker boxes are not independent road-plane speed
+          // observations. Measuring them as ground truth creates phantom
+          // acceleration, especially on slower WebGPU/WASM machines.
           // Homography uses 0-1 normalized coordinates
           const normalizedBox = {
             x: track.x / width,
@@ -340,8 +353,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       const violations = ruleEngine.evaluate(tracks, {
         mediaTime,
-        fps: 30, // Passed or fixed for now
-        calibration
+        fps: 30, // Frame-rate-independent speed uses mediaTime instead.
+        calibration: safeCalibration ?? undefined
       });
 
       // Handle plate detection for violations

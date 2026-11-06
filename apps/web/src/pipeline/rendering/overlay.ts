@@ -20,6 +20,8 @@ function checkCollision(r1: LabelRect, r2: LabelRect): boolean {
 
 export interface OverlayOptions {
   demoSpeed?: boolean;
+  /** Show raw detector confidence for verifying bad boxes on real footage. */
+  showConfidence?: boolean;
 }
 
 export function drawBoundingBoxes(
@@ -31,7 +33,7 @@ export function drawBoundingBoxes(
   videoHeight: number,
   isCover: boolean = false,
   timeDelta: number = 0,
-  _options?: OverlayOptions
+  options?: OverlayOptions
 ): { rendered: number, stale: number } {
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
   let rendered = 0;
@@ -77,32 +79,12 @@ export function drawBoundingBoxes(
     if (track.w < 6 || track.h < 6) {
       continue;
     }
-    // Reject implausibly large bounding boxes covering majority of the frame
-    if (track.w > videoWidth * 0.85 || track.h > videoHeight * 0.85) {
-      continue;
-    }
-
+    // Display exactly the geometrically valid tracks accepted by the detector.
+    // Hardcoded assumptions about box aspect ratio or its position on the road
+    // made small motorcycles disappear as they moved through the picture.
     const rawClass = (track.className || 'vehicle').toLowerCase();
     const isPerson = rawClass === 'person' || rawClass === 'pedestrian';
     const vehicleType = (track.className || 'vehicle').toUpperCase();
-
-    // Geometric plausibility filter: discard road markings, stripes, and pole artifacts
-    if (isPerson) {
-      const pAspect = track.h / Math.max(1, track.w);
-      if (pAspect > 3.4 || pAspect < 1.1) {
-        continue;
-      }
-    } else {
-      const vAspect = track.w / Math.max(1, track.h);
-      if (vAspect > 4.0 || vAspect < 0.22) {
-        continue;
-      }
-      // Perspective road artifact rejection:
-      // Road markings and circular manhole covers in the lower foreground road cannot be smaller than 65px
-      if (track.y > videoHeight * 0.60 && track.h < 65 && (track.y + track.h * 0.5 < videoHeight - 15)) {
-        continue;
-      }
-    }
 
     const { x, y, w, h } = sourceCenterBoxToDisplay(
       { x: track.x, y: track.y, w: track.w, h: track.h },
@@ -147,7 +129,8 @@ export function drawBoundingBoxes(
     // Format label:
     // Supported vehicles: `#<id> <VEHICLE> · <speed> km/h` when genuinely calibrated, or cleanly `#<id> <VEHICLE>`
     // People/Pedestrians: `#<id> PERSON` (NEVER display speed labels for people/pedestrians)
-    const hasCalibratedSpeed = !isPerson && track.speed !== undefined && track.speed !== null;
+    const hasCalibratedSpeed = !isPerson && typeof track.speed === 'number' &&
+      Number.isFinite(track.speed) && track.speed >= 0;
 
     let label: string;
     if (isPerson) {
@@ -157,6 +140,12 @@ export function drawBoundingBoxes(
       label = `#${track.trackId} ${vehicleType} · ${displaySpeed} km/h`;
     } else {
       label = `#${track.trackId} ${vehicleType}`;
+    }
+
+    // Optional scores make it possible to distinguish weak false positives
+    // from confident, repeatable model mistakes on the user's traffic clip.
+    if (options?.showConfidence && Number.isFinite(track.prob)) {
+      label += ` · ${Math.round(track.prob * 100)}%`;
     }
 
     ctx.font = isConfirmed ? 'bold 12px sans-serif' : '11px sans-serif';

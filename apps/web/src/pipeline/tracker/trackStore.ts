@@ -8,6 +8,11 @@ export interface StoredTrackRecord {
   sourceGeneration: number;
   consecutiveMisses: number;
   timeSinceUpdate: number;
+  /** Last display position and observed velocity in source pixels per second. */
+  displayX: number;
+  displayY: number;
+  observedVx: number;
+  observedVy: number;
 }
 
 /**
@@ -22,7 +27,7 @@ export class TrackStateStore {
   private lastInferenceMediaTime: number = 0;
 
   // Maximum time to hold an active track during continuous playback without an update (in media seconds)
-  public maxActiveRetentionMediaSec: number = 0.85;
+  public maxActiveRetentionMediaSec: number = 0.45;
   // Maximum consecutive inference misses before removing an unconfirmed or lost track
   public maxConsecutiveMisses: number = 5;
 
@@ -71,13 +76,45 @@ export class TrackStateStore {
     this.lastInferenceMediaTime = mediaTime;
     const incomingIds = new Set<number>();
 
-    // 1. Ingest fresh incoming tracks
+    // 1. Ingest only genuine detector measurements. Some tracker/backends
+    // send interpolated/predicted boxes on frames with no detector match.
+    // Those must NOT reset the freshness clock, update display velocity,
+    // or create a new visible track: doing so produces boxes that drift
+    // across the road and survive after their actual vehicle disappeared.
     for (const t of incomingTracks) {
+      const isObserved = (t.observationType === undefined || t.observationType === 'detection')
+        && (t.timeSinceUpdate ?? 0) === 0;
+      if (!isObserved) continue;
+
       incomingIds.add(t.trackId);
       const existing = this.tracks.get(t.trackId);
 
       if (existing) {
-        // Update existing track with fresh observation
+        // Estimate movement from actual consecutive detector coordinates,
+        // not Kalman velocity in "pixels per inference step". Video frames
+        // may arrive at 5–60 FPS while the model runs at a different cadence.
+        const dt = mediaTime - existing.lastUpdatedMediaTime;
+        const maxMove = Math.max(t.w, t.h, existing.track.w, existing.track.h) * 2;
+        const move = Math.hypot(t.x - existing.track.x, t.y - existing.track.y);
+        const continuous = dt >= 0.025 && dt <= 0.8 && move <= maxMove;
+        if (continuous) {
+          const measuredVx = (t.x - existing.track.x) / dt;
+          const measuredVy = (t.y - existing.track.y) / dt;
+          existing.observedVx = 0.35 * existing.observedVx + 0.65 * measuredVx;
+          existing.observedVy = 0.35 * existing.observedVy + 0.65 * measuredVy;
+          // The detector is the latest ground-truth *box estimate*: start
+          // presentation from its actual coordinates. Smoothing this point
+          // behind the detection created visible lag on moving cars.
+          existing.displayX = t.x;
+          existing.displayY = t.y;
+        } else {
+          // Reacquisition or implausible jump: snap to the actual detection
+          // and reset velocity so stale predictions cannot drift across lanes.
+          existing.displayX = t.x;
+          existing.displayY = t.y;
+          existing.observedVx = 0;
+          existing.observedVy = 0;
+        }
         existing.track = { ...t };
         existing.lastUpdatedMediaTime = mediaTime;
         existing.lastUpdatedWallTime = nowWall;
@@ -92,7 +129,11 @@ export class TrackStateStore {
           lastUpdatedWallTime: nowWall,
           sourceGeneration,
           consecutiveMisses: 0,
-          timeSinceUpdate: t.timeSinceUpdate ?? 0
+          timeSinceUpdate: t.timeSinceUpdate ?? 0,
+          displayX: t.x,
+          displayY: t.y,
+          observedVx: 0,
+          observedVy: 0
         });
       }
     }
@@ -148,30 +189,29 @@ export class TrackStateStore {
       // While playing, accept up to maxActiveRetentionMediaSec (0.85s) or wall-clock 1800ms
       const isFresh = isPaused
         ? Math.abs(mediaAge) <= 0.50
-        : (mediaAge >= -0.10 && mediaAge <= this.maxActiveRetentionMediaSec && wallAgeMs <= 1800);
+        : (mediaAge >= -0.08 && mediaAge <= this.maxActiveRetentionMediaSec && wallAgeMs <= 1100);
 
       if (!isFresh) {
-        if (mediaAge > this.maxActiveRetentionMediaSec || wallAgeMs > 1800) {
+        if (mediaAge > this.maxActiveRetentionMediaSec || wallAgeMs > 1100) {
           idsToDelete.push(id);
         }
         continue;
       }
 
-      // If active track has velocity and video is playing, project its position smoothly:
+      // Project a short distance using measured observations, not a Kalman
+      // state whose velocity is denominated in inference frames. Prediction
+      // is capped by the size of the tracked object and time since observation.
       const t = rec.track;
-      let renderedX = t.x;
-      let renderedY = t.y;
+      let renderedX = rec.displayX;
+      let renderedY = rec.displayY;
       let obsType = t.observationType;
 
-      if (!isPaused && mediaAge > 0.02 && (t.dx || t.dy)) {
-        // Bounded velocity projection (prevent extrapolation runaway)
-        const dt = Math.min(0.40, mediaAge);
-        const maxDelta = 120; // max 120 pixels projection
-        const deltaX = Math.max(-maxDelta, Math.min(maxDelta, (t.dx ?? 0) * dt));
-        const deltaY = Math.max(-maxDelta, Math.min(maxDelta, (t.dy ?? 0) * dt));
-        renderedX += deltaX;
-        renderedY += deltaY;
-        obsType = 'predicted';
+      if (!isPaused && mediaAge > 0.02 && mediaAge <= 0.18) {
+        const dt = Math.min(0.18, mediaAge);
+        const maxDelta = Math.max(t.w, t.h) * 0.35;
+        renderedX += Math.max(-maxDelta, Math.min(maxDelta, rec.observedVx * dt));
+        renderedY += Math.max(-maxDelta, Math.min(maxDelta, rec.observedVy * dt));
+        if (rec.observedVx !== 0 || rec.observedVy !== 0) obsType = 'predicted';
       }
 
       results.push({

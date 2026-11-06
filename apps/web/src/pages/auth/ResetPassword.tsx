@@ -1,122 +1,131 @@
-import { useState, useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
-import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
-import { cn } from '../../lib/utils'
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+import { Link, useNavigate } from 'react-router-dom';
+import { AlertCircle, CheckCircle2, Eye, EyeOff, KeyRound, Loader2 } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { AuthRecoveryLayout, recoveryButton, recoveryInput } from './AuthRecoveryLayout';
 
 const resetSchema = z.object({
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(8, 'Use at least 8 characters for your new password'),
   confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
-})
-
-type ResetForm = z.infer<typeof resetSchema>
+}).refine(data => data.password === data.confirmPassword, {
+  message: 'Passwords do not match', path: ['confirmPassword']
+});
+type ResetForm = z.infer<typeof resetSchema>;
 
 export function ResetPassword() {
-  const navigate = useNavigate()
-  const [error, setError] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
+  const navigate = useNavigate();
+  const [ready, setReady] = useState(false);
+  const [verifying, setVerifying] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const { register, handleSubmit, formState: { errors } } = useForm<ResetForm>({
+    resolver: zodResolver(resetSchema)
+  });
 
-  // Wait until we have a session to reset the password for
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }: any) => {
-      if (!session) {
-        // If they visit this URL directly without the hash, redirect to login
-        // Sometimes the hash is consumed by Supabase and a session is created automatically.
-        // It's a best effort check.
+    let active = true;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event: string, session: unknown) => {
+        if (!active) return;
+        if (session) { setReady(true); setVerifying(false); }
       }
-    })
-  }, [])
-
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<ResetForm>({
-    resolver: zodResolver(resetSchema),
-  })
-
-  const onSubmit = async (data: ResetForm) => {
-    setIsLoading(true)
-    setError(null)
-    
-    const { data: { user }, error: authError } = await supabase.auth.updateUser({
-      password: data.password,
-    })
-
-    if (authError) {
-      setError(authError.message)
-      setIsLoading(false)
-      return
-    }
-
-    if (user) {
-      // Check if this was a first-time activation (Pending status)
-      const { data: profile } = await supabase.from('profiles').select('status').eq('id', user.id).single()
-      if (profile && profile.status === 'Pending') {
-        await supabase.from('profiles').update({ 
-          status: 'Active',
-          accepted_at: new Date().toISOString()
-        }).eq('id', user.id)
-        await supabase.from('audit_logs').insert([{ user_id: user.id, action: 'USER_ACTIVATED' }])
+    );
+    void supabase.auth.getSession().then(({ data: { session } }: any) => {
+      if (!active) return;
+      if (session) { setReady(true); setVerifying(false); }
+      else {
+        // Allow the Auth client to finish exchanging the recovery URL code.
+        window.setTimeout(() => {
+          if (active) setVerifying(false);
+        }, 1600);
       }
-    }
+    }).catch(() => { if (active) setVerifying(false); });
+    return () => { active = false; subscription?.unsubscribe(); };
+  }, []);
 
-    setIsLoading(false)
-    navigate('/app')
-  }
+  const save = async (data: ResetForm) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const { data: result, error: authError } = await supabase.auth.updateUser({ password: data.password });
+      if (authError) throw authError;
+      if (result?.user) {
+        // Preserve the original first-time account activation workflow.
+        const { data: profile } = await supabase.from('profiles')
+          .select('status').eq('id', result.user.id).maybeSingle();
+        if (profile?.status === 'Pending') {
+          const { error: activateError } = await supabase.from('profiles')
+            .update({ status: 'Active', accepted_at: new Date().toISOString() }).eq('id', result.user.id);
+          if (activateError) console.warn('Profile activation requires review:', activateError);
+        }
+      }
+      navigate('/app', { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Password could not be changed. Please request a new link.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 text-white p-4">
-      <div className="w-full max-w-md p-8 bg-gray-900 border border-gray-800 rounded-lg shadow-xl">
-        <h2 className="text-2xl font-bold mb-6 text-center">Set New Password</h2>
-        
-        {error && (
-          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 text-red-400 rounded text-sm">
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <AuthRecoveryLayout
+      eyebrow="Secure account recovery"
+      title="Set a new password"
+      description="Choose a strong password to restore access to your VisionGuard workspace."
+    >
+      {verifying ? (
+        <div role="status" className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl text-sm text-slate-600">
+          <Loader2 className="w-5 h-5 animate-spin text-indigo-600" /> Verifying your recovery link…
+        </div>
+      ) : !ready ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+          <AlertCircle className="w-6 h-6 text-amber-600 mb-3" />
+          <h2 className="text-base font-semibold text-slate-900">This link is invalid or has expired</h2>
+          <p className="text-sm text-slate-600 mt-2">Open the latest recovery email or request a fresh link.</p>
+          <Link to="/forgot-password" className="inline-flex mt-4 text-sm font-semibold text-indigo-700 hover:underline">
+            Request another reset link
+          </Link>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit(save)} noValidate className="space-y-5">
           <div>
-            <label className="block text-sm font-medium mb-1">New Password</label>
-            <input
-              type="password"
-              {...register('password')}
-              className={cn(
-                "w-full px-3 py-2 bg-gray-950 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors",
-                errors.password ? "border-red-500" : "border-gray-800"
-              )}
-            />
-            {errors.password && <p className="mt-1 text-xs text-red-400">{errors.password.message}</p>}
+            <label htmlFor="new-password" className="block mb-2 text-sm font-semibold text-slate-700">New password</label>
+            <div className="relative">
+              <KeyRound className="absolute top-3.5 left-3.5 w-4 h-4 text-slate-400" />
+              <input id="new-password" type={showPassword ? 'text' : 'password'} autoComplete="new-password"
+                {...register('password')} aria-invalid={!!errors.password} placeholder="At least 8 characters"
+                className={`${recoveryInput} pl-10 pr-12`} />
+              <button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3.5 text-slate-500 hover:text-indigo-700">
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+            {errors.password && <p role="alert" className="text-xs text-rose-600 mt-2">{errors.password.message}</p>}
           </div>
-
           <div>
-            <label className="block text-sm font-medium mb-1">Confirm New Password</label>
-            <input
-              type="password"
-              {...register('confirmPassword')}
-              className={cn(
-                "w-full px-3 py-2 bg-gray-950 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors",
-                errors.confirmPassword ? "border-red-500" : "border-gray-800"
-              )}
-            />
-            {errors.confirmPassword && <p className="mt-1 text-xs text-red-400">{errors.confirmPassword.message}</p>}
+            <label htmlFor="confirm-new-password" className="block mb-2 text-sm font-semibold text-slate-700">Confirm new password</label>
+            <input id="confirm-new-password" type={showPassword ? 'text' : 'password'}
+              autoComplete="new-password" {...register('confirmPassword')} aria-invalid={!!errors.confirmPassword}
+              placeholder="Repeat your new password" className={recoveryInput} />
+            {errors.confirmPassword && <p role="alert" className="text-xs text-rose-600 mt-2">{errors.confirmPassword.message}</p>}
           </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md font-medium transition-colors"
-          >
-            {isLoading ? 'Updating...' : 'Update Password'}
+          {error && <div role="alert" className="flex items-start gap-2 border border-rose-200 bg-rose-50 rounded-xl p-3 text-sm text-rose-700">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" /> {error}
+          </div>}
+          <button type="submit" disabled={saving} className={recoveryButton}>
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+            {saving ? 'Updating password…' : 'Update password'}
           </button>
+          <p className="text-center text-xs text-slate-500">
+            Need a new link? <Link to="/forgot-password" className="font-semibold text-indigo-700 hover:underline">Request one</Link>
+          </p>
         </form>
-      </div>
-    </div>
-  )
+      )}
+    </AuthRecoveryLayout>
+  );
 }

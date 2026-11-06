@@ -15,7 +15,7 @@ new isolated Supabase project and were **not** deployed to production.
 - Cost quoted by Supabase at project creation: **$0/month**
 - Branch under test: `integration/staging-all-phases`
 - Default new video upload provider: set
-  `VITE_VIDEO_STORAGE_PROVIDER=supabase` in local `.env`
+  `VITE_VIDEO_STORAGE_PROVIDER=b2` in local `.env`
   (this staging project has no B2 secrets or Edge Function deployment).
 
 ## Database applied and verified

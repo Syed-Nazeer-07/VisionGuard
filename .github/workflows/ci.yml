@@ -34,6 +34,22 @@ jobs:
       - run: npm run test -w web
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
 
+  b2-edge:
+    name: B2 Edge Function TypeScript check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      # Type-check the *actual* deployed Deno entrypoint in CI.
+      # No B2 secrets, real uploads or external database are needed.
+      - name: Verify video-storage function compiles for Deno
+        # The root package.json makes Deno default to manual node_modules.
+        # Edge Function npm: imports must resolve independently of the
+        # frontend workspace, using Deno's global dependency cache.
+        run: deno check --node-modules-dir=none supabase/functions/video-storage/index.ts
+
   backend-source:
     name: Backend syntax and deterministic analysis tests
     runs-on: ubuntu-latest

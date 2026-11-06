@@ -14,7 +14,7 @@ export function iou(box1: BoundingBox, box2: BoundingBox): number {
   const area1 = box1.w * box1.h;
   const area2 = box2.w * box2.h;
 
-  return intersection / (area1 + area2 - intersection);
+  return intersection / Math.max(1e-6, area1 + area2 - intersection);
 }
 
 export function iom(box1: BoundingBox, box2: BoundingBox): number {
@@ -30,48 +30,27 @@ export function iom(box1: BoundingBox, box2: BoundingBox): number {
   return minArea > 0 ? intersection / minArea : 0;
 }
 
+/**
+ * Score-sorted, vehicle-aware NMS. Suppress same-class duplicates.
+ * Also suppress near-identical four-wheeler boxes (car/truck/bus class
+ * instability), but preserve bicycle vs motorcycle and rider vs bike.
+ * Never use broad sub-box containment that suppresses true road users.
+ */
 export function nonMaxSuppression(boxes: BoundingBox[], iouThreshold: number): BoundingBox[] {
-  boxes.sort((a, b) => b.prob - a.prob);
-
+  const ordered = [...boxes].sort((a, b) => b.prob - a.prob);
   const selected: BoundingBox[] = [];
-
-  for (const box of boxes) {
-    let shouldSelect = true;
-    for (const selectedBox of selected) {
-      // 1. Same class or 4-wheeler vehicle group (car, bus, truck) or 2-wheeler group (bicycle, motorcycle)
-      const sameGroup = box.classId === selectedBox.classId ||
-        ((box.classId === 2 || box.classId === 5 || box.classId === 7) &&
-         (selectedBox.classId === 2 || selectedBox.classId === 5 || selectedBox.classId === 7)) ||
-        ((box.classId === 1 || box.classId === 3) &&
-         (selectedBox.classId === 1 || selectedBox.classId === 3));
-
-      if (sameGroup) {
-        // Standard IoU suppression
-        if (iou(box, selectedBox) > iouThreshold) {
-          shouldSelect = false;
-          break;
-        }
-        // Sub-box containment suppression: if smaller box is largely inside larger vehicle (IoM >= 0.55),
-        // suppress the redundant sub-box (e.g. windshield, cab, roof, trailer)
-        if (iom(box, selectedBox) >= 0.55) {
-          shouldSelect = false;
-          break;
-        }
-      } else if (box.classId === 0 && (selectedBox.classId === 1 || selectedBox.classId === 3)) {
-        // Person rider overlapping two-wheeler (motorcycle or bicycle):
-        // If person heavily overlaps two-wheeler (IoM >= 0.40 or IoU >= 0.20),
-        // suppress the redundant person box so the two-wheeler entity represents vehicle+rider
-        if (iom(box, selectedBox) >= 0.40 || iou(box, selectedBox) >= 0.20) {
-          shouldSelect = false;
-          break;
-        }
-      }
-    }
-    if (shouldSelect) {
-      selected.push(box);
-    }
+  const fourWheeler = (id: number) => id === 2 || id === 5 || id === 7;
+  for (const box of ordered) {
+    const duplicate = selected.some(other => {
+      const overlap = iou(box, other);
+      if (other.classId === box.classId) return overlap > iouThreshold;
+      // Strong overlap between 4-wheel vehicle classes is usually the same
+      // object classified differently; a much stricter gate avoids erasing
+      // partially overlapping neighboring cars.
+      return fourWheeler(other.classId) && fourWheeler(box.classId) && overlap > Math.max(0.68, iouThreshold);
+    });
+    if (!duplicate) selected.push(box);
   }
-
   return selected;
 }
 
@@ -87,6 +66,10 @@ export function processOutput(
 ): BoundingBox[] {
   const numClasses = 80;
   const numAnchors = 8400;
+  if (!Number.isFinite(ratio) || ratio <= 0 || !Number.isFinite(origW) || !Number.isFinite(origH) ||
+      origW <= 0 || origH <= 0 || outputData.length < (4 + numClasses) * numAnchors) {
+    return [];
+  }
   const allowedClasses = [0, 1, 2, 3, 5, 7];
   const boxes: BoundingBox[] = [];
 
@@ -102,8 +85,16 @@ export function processOutput(
       }
     }
 
-    // Class-specific confidence: person requires at least 0.38 (rejects roadside bollards, signposts, and shadows)
-    const minConf = (maxClassId === 0) ? Math.max(confidenceThreshold, 0.38) : confidenceThreshold;
+    // On road footage a 0.15–0.20 universal threshold made manholes,
+    // bollards and lane paint appear as CAR/PERSON boxes. Apply stronger
+    // minimum evidence for those classes while preserving a lower threshold
+    // for small motorcycles and bicycles, which have much poorer recall.
+    // These thresholds are heuristics, NOT proof of scene understanding.
+    const minConf = maxClassId === 0
+      ? Math.max(0.58, confidenceThreshold)
+      : maxClassId === 1 || maxClassId === 3
+        ? Math.max(0.25, confidenceThreshold - 0.10)
+        : confidenceThreshold;
     if (maxProb >= minConf && allowedClasses.includes(maxClassId)) {
       const cx = outputData[0 * numAnchors + i];
       const cy = outputData[1 * numAnchors + i];
@@ -115,51 +106,26 @@ export function processOutput(
         continue;
       }
 
-      // Convert once from model space to source video pixel coordinates
-      const srcCx = Math.max(0, Math.min(origW, (cx - padW) / ratio));
-      const srcCy = Math.max(0, Math.min(origH, (cy - padH) / ratio));
-      const srcW = Math.max(1, Math.min(origW, w / ratio));
-      const srcH = Math.max(1, Math.min(origH, h / ratio));
+      // Unletterbox the *corners*, then clip the rectangle to the visible
+      // video. Clamping only the centre independently from width/height
+      // caused boxes to extend outside the source frame near the edges.
+      const left = Math.max(0, Math.min(origW, ((cx - w / 2) - padW) / ratio));
+      const top = Math.max(0, Math.min(origH, ((cy - h / 2) - padH) / ratio));
+      const right = Math.max(0, Math.min(origW, ((cx + w / 2) - padW) / ratio));
+      const bottom = Math.max(0, Math.min(origH, ((cy + h / 2) - padH) / ratio));
 
-      // Discard implausibly large bounding boxes covering majority of the frame
-      if (srcW > origW * 0.85 || srcH > origH * 0.85) {
+      // Keep small/distant motorcycles; reject only invalid or degenerate
+      // geometry, not arbitrary road position, class, or aspect-ratio rules.
+      if (![left, top, right, bottom].every(Number.isFinite) ||
+          right - left < 3 || bottom - top < 3) {
         continue;
-      }
-
-      // Discard tiny noise artifacts
-      if (srcW < 8 || srcH < 8) {
-        continue;
-      }
-
-      // Conservative geometric plausibility check:
-      if (maxClassId === 0) {
-        // Pedestrians: reject stationary vertical roadside poles, bollards, and signposts
-        const aspect = srcH / Math.max(1, srcW);
-        if (aspect > 3.2 || aspect < 1.1 || (srcW < 14 && aspect > 2.5) || (aspect > 2.8 && maxProb < 0.50)) {
-          continue;
-        }
-        if (srcH < 18) {
-          continue;
-        }
-      } else {
-        // Vehicles: reject road markings, crosswalk stripes, guardrail lines, and lane dividers
-        const aspect = srcW / Math.max(1, srcH);
-        if (aspect > 4.0 || aspect < 0.25 || srcW < 12 || srcH < 12) {
-          continue;
-        }
-        // Perspective road artifact rejection:
-        // Road markings, lane dashes, and circular manhole covers in the lower road foreground (cy > 0.60 * origH)
-        // cannot be smaller than 65px tall in perspective unless clipped at the image edge.
-        if (srcCy > origH * 0.60 && srcH < 65 && (srcCy + srcH * 0.5 < origH - 15)) {
-          continue;
-        }
       }
 
       boxes.push({
-        x: srcCx,
-        y: srcCy,
-        w: srcW,
-        h: srcH,
+        x: (left + right) / 2,
+        y: (top + bottom) / 2,
+        w: right - left,
+        h: bottom - top,
         prob: maxProb,
         classId: maxClassId,
         className: LABELS[maxClassId],
