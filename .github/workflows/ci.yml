@@ -59,3 +59,33 @@ jobs:
           assert counter.count == 2, counter.count
           print("Speeding episode count: OK")
           PY
+
+  run-history-schema:
+    name: Run-scoped tracking migration integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: visionguard_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d visionguard_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify migration preserves independent runs and legacy data
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGDATABASE: visionguard_ci
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
+          psql -X -v ON_ERROR_STOP=1 -f supabase/tests/run_track_history_integration.sql
