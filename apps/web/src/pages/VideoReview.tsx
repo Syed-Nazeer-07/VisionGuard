@@ -268,6 +268,16 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
     return () => { cancelled = true; };
   }, [videoId]);
 
+  // When opened from Incident Center, choose the recorded analysis run so
+  // historical events never display a different run's model artifact.
+  useEffect(() => {
+    if (!data || !incidentParam) return;
+    const incidentRunId = data.incidents.find(item => item.id === incidentParam)?.analysis_run_id;
+    if (incidentRunId && data.runs.some(run => run.id === incidentRunId)) {
+      setSelectedRunId(incidentRunId);
+    }
+  }, [data, incidentParam]);
+
   const tracks = useMemo(() => (data ? inRun(data.tracks, selectedRunId) : []), [data, selectedRunId]);
   const incidents = useMemo(() => (data ? inRun(data.incidents, selectedRunId) : []), [data, selectedRunId]);
   const evidence = useMemo(() => (data ? inRun(data.evidence, selectedRunId) : []), [data, selectedRunId]);
