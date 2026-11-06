@@ -95,6 +95,45 @@ function partSizeFor(fileSize: number): number {
   return Math.max(MIN_PART_SIZE, Math.ceil(needed / (1024 * 1024)) * 1024 * 1024)
 }
 
+/**
+ * Backblaze B2 is versioned. A bare S3 DELETE can create a delete marker
+ * while old versions continue to consume capacity. Delete every listed
+ * object version for the exact video/run prefix, walking paginated results.
+ */
+async function purgeObjectVersions(cfg: B2Config, prefix: string): Promise<number> {
+  let removed = 0
+  let keyMarker = ''
+  let versionMarker = ''
+  for (let page = 0; page < 200; page++) {
+    const listUrl = new URL(`${cfg.endpoint}/${encodeURIComponent(cfg.bucket)}`)
+    listUrl.searchParams.set('versions', '')
+    listUrl.searchParams.set('prefix', prefix)
+    if (keyMarker) listUrl.searchParams.set('key-marker', keyMarker)
+    if (versionMarker) listUrl.searchParams.set('version-id-marker', versionMarker)
+    const response = await s3(cfg, 'GET', listUrl)
+    if (response.status === 404) return removed
+    const listing = await response.text()
+    const versions = [...listing.matchAll(/<(?:Version|DeleteMarker)>([\s\S]*?)<\/(?:Version|DeleteMarker)>/g)]
+      .map(match => ({ key: xmlValue(match[1], 'Key'), versionId: xmlValue(match[1], 'VersionId') }))
+      .filter(v => typeof v.key === 'string' && v.key.startsWith(prefix) && !!v.versionId)
+    for (const version of versions) {
+      const url = objectUrl(cfg, version.key!)
+      url.searchParams.set('versionId', version.versionId!)
+      await s3(cfg, 'DELETE', url)
+      removed++
+    }
+    if (xmlValue(listing, 'IsTruncated') !== 'true') return removed
+    const nextKey = xmlValue(listing, 'NextKeyMarker')
+    const nextVersion = xmlValue(listing, 'NextVersionIdMarker') ?? ''
+    if (!nextKey || (nextKey === keyMarker && nextVersion === versionMarker)) {
+      throw new HttpError(502, 'B2 object version listing did not advance while cleaning up')
+    }
+    keyMarker = nextKey
+    versionMarker = nextVersion
+  }
+  throw new HttpError(502, 'B2 object version cleanup exceeded the pagination safety limit')
+}
+
 function extensionOf(fileName: string): string {
   const ext = (fileName.split('.').pop() ?? '').toLowerCase().replace(/[^a-z0-9]/g, '')
   return ext && ext.length <= 8 ? ext : 'mp4'
@@ -235,8 +274,8 @@ Deno.serve(async (req) => {
         requireAssetOwner(asset, userId)
         const key = await loadArtifactRun(db, videoId, body.runId)
         const cfg = b2Config()
-        await s3(cfg, 'DELETE', objectUrl(cfg, key))
-        return json({ deleted: true })
+        const removed = await purgeObjectVersions(cfg, key)
+        return json({ deleted: true, versionsRemoved: removed })
       }
 
       case 'create-upload': {
@@ -369,25 +408,14 @@ Deno.serve(async (req) => {
           url.searchParams.set('uploadId', meta.b2_upload_id)
           await s3(cfg, 'DELETE', url).catch(e => warnings.push(String(e instanceof Error ? e.message : e)))
         }
-        // Remove every stored version (B2 buckets keep versions; a plain DELETE only hides the file).
-        const key = asset.storage_path || (typeof meta.b2_object_key === 'string' ? meta.b2_object_key : '')
-        if (key) {
-          const listUrl = new URL(`${cfg.endpoint}/${encodeURIComponent(cfg.bucket)}`)
-          listUrl.searchParams.set('versions', '')
-          listUrl.searchParams.set('prefix', key)
-          const listing = await (await s3(cfg, 'GET', listUrl)).text()
-          const versions = [...listing.matchAll(/<(?:Version|DeleteMarker)>([\s\S]*?)<\/(?:Version|DeleteMarker)>/g)]
-            .map(m => ({ key: xmlValue(m[1], 'Key'), versionId: xmlValue(m[1], 'VersionId') }))
-            .filter(v => v.key === key && v.versionId)
-          for (const v of versions) {
-            const url = objectUrl(cfg, key)
-            url.searchParams.set('versionId', v.versionId!)
-            try {
-              await s3(cfg, 'DELETE', url)
-              removed++
-            } catch (e) {
-              warnings.push(String(e instanceof Error ? e.message : e))
-            }
+        // Original footage and every per-run analysis artifact are both in
+        // this private versioned B2 bucket. Remove ALL versions, not only
+        // the latest object, to avoid accumulating B2 storage charges.
+        for (const prefix of [`videos/${asset.id}/`, `artifacts/${asset.id}/`]) {
+          try {
+            removed += await purgeObjectVersions(cfg, prefix)
+          } catch (e) {
+            warnings.push(String(e instanceof Error ? e.message : e))
           }
         }
         return json({ deleted: true, objectsRemoved: removed, warnings })
