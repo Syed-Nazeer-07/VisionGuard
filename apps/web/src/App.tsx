@@ -21,6 +21,7 @@ import Analyze from './pages/Analyze'
 import { Cameras } from './pages/Cameras'
 import { Monitor } from './pages/Monitor'
 import SceneSetup from './pages/SceneSetup'
+import CameraInference from './pages/CameraInference'
 import Settings from './pages/Settings'
 import { VideoLibrary } from './pages/VideoLibrary'
 import { evidenceQueue } from './pipeline/evidence/queue'
@@ -78,6 +79,7 @@ function App() {
               <Route index element={<AppHome />} />
               <Route path="cameras" element={<Cameras />} />
               <Route path="monitor" element={<Monitor />} />
+              <Route path="camera-inference/:id" element={<CameraInference />} />
               <Route path="scene-setup/:id" element={<SceneSetup />} />
               <Route path="scene-setup" element={<Navigate to="/app/cameras" replace />} />
               <Route path="analytics" element={<Analytics />} />
