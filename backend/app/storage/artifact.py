@@ -29,7 +29,7 @@ class ArtifactManager:
     ) -> Path:
         artifact_path = self.get_artifact_path(job_id)
         payload = {
-            "version": "1.0",
+            "version": "1.1",
             "job_id": job_id,
             "detection_profile": summary.get("detection_profile", "balanced"),
             "confidence_threshold": summary.get("confidence_threshold", 0.20),
