@@ -167,7 +167,7 @@ const B2_PART_CONCURRENCY = 3
 const B2_PART_ATTEMPTS = 6
 const B2_SIGN_BATCH = 20
 
-async function callVideoStorage<T>(body: Record<string, unknown>): Promise<T> {
+export async function callVideoStorage<T>(body: Record<string, unknown>): Promise<T> {
   if (supabaseConfig.isMock || !supabase.functions) throw new Error('B2 video storage is unavailable in demo mode (no Supabase project configured)')
   const { data, error } = await supabase.functions.invoke('video-storage', { body })
   if (error) {
