@@ -38,10 +38,19 @@ export class SpeedEstimator {
   }
 
   setHomography(hMatrix: number[] | null) {
-    this.hMatrix = hMatrix;
+    // World coordinates from two different road-plane calibrations are NOT
+    // comparable. Never carry a vehicle's old km/h, displacement or overspeed
+    // streak across a camera/reference change.
+    this.reset();
+    this.hMatrix = hMatrix && hMatrix.length === 9 && hMatrix.every(Number.isFinite)
+      ? [...hMatrix]
+      : null;
   }
 
   update(trackId: number, baseBox: {x: number, y: number, w: number, h: number}, mediaTime: number): SpeedResult | null {
+    if (!Number.isFinite(mediaTime) || !Number.isFinite(baseBox.x) || !Number.isFinite(baseBox.y) ||
+        !Number.isFinite(baseBox.w) || !Number.isFinite(baseBox.h) ||
+        baseBox.w <= 0 || baseBox.h <= 0) return null;
     if (!this.hMatrix || this.hMatrix.length !== 9) {
       // Without ground-plane calibration homography, physical speed cannot be calculated.
       // Never fabricate speed or convert raw pixel displacement directly into km/h.
@@ -61,6 +70,9 @@ export class SpeedEstimator {
       worldPt = projectPoint(this.hMatrix, imagePt);
     } catch {
       return null;
+    }
+    if (!Number.isFinite(worldPt.x) || !Number.isFinite(worldPt.y)) {
+      return null; // invalid projective horizon / near-singular mapping
     }
 
     const state = this.history.get(trackId);
@@ -117,9 +129,17 @@ export class SpeedEstimator {
     const speedMagnitudeMps = Math.hypot(vxMps, vyMps);
 
     // Limit extreme jumps (e.g. > 60 m/s = 216 km/h)
-    if (speedMagnitudeMps > 60) {
+    if (!Number.isFinite(speedMagnitudeMps) || speedMagnitudeMps > 60) {
+      // Teleportation usually means an ID switch or an invalid ground point.
+      // Establish a new baseline but NEVER keep the prior speed/overspeed
+      // result alive on the next frame.
       state.lastWorldPt = worldPt;
       state.lastTime = mediaTime;
+      state.pendingWorldPts = [];
+      state.speeds = [];
+      state.isStationary = true;
+      state.overspeedCount = 0;
+      state.lastResult = null;
       return null;
     }
 
