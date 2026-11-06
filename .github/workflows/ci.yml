@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend lint, typecheck, build, and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test -w web
+
+  backend-source:
+    name: Backend syntax and pure event-counter smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m compileall -q backend/app backend/tests
+      # No YOLO model weights are stored in Git. This check deliberately
+      # avoids claiming to run the real-video inference test suite.
+      - name: Check overspeed counter behavior
+        run: |
+          PYTHONPATH=backend python - <<'PY'
+          from app.pipeline.overspeed_events import OverspeedEventCounter
+          counter = OverspeedEventCounter()
+          for flag in [True] * 8 + [False] * 3 + [True] * 3:
+              counter.observe(1, flag)
+          assert counter.count == 2, counter.count
+          print("Speeding episode count: OK")
+          PY
