@@ -81,7 +81,7 @@ async def ensure_cors_headers_middleware(request: Request, call_next):
         cors_headers = get_cors_headers_for_origin(origin)
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"detail": f"Internal server error: {str(exc)}"},
+            content={"detail": "Internal server error. Review the local backend logs."},
             headers=cors_headers
         )
 
@@ -112,7 +112,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     cors_headers = get_cors_headers_for_origin(origin)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": f"Internal server error: {str(exc)}"},
+        content={"detail": "Internal server error. Review the local backend logs."},
         headers=cors_headers
     )
 

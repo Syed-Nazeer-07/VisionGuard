@@ -16,6 +16,9 @@ from app.services.job_manager import job_manager
 from app.storage.artifact import artifact_manager
 from app.config import settings
 from app.core.logging import logger
+from app.security.video_sources import (
+    VideoSourceError, local_video_path, download_trusted_video, ALLOWED_VIDEO_EXTENSIONS
+)
 
 router = APIRouter()
 
@@ -85,47 +88,51 @@ async def create_analysis_job(
             logger.error(f"Failed to save uploaded video: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to process video upload: {str(e)}"
+                detail="Could not process the uploaded video"
             )
     else:
-        import urllib.request
+        # The local FastAPI backend is not authenticated. Do not permit
+        # arbitrary filesystem reads or URL fetches; use dedicated media roots
+        # and an explicit HTTPS storage-host allowlist (empty by default).
+        from urllib.parse import urlsplit
         clean_url = (video_url or "").strip()
-        local_candidates = [
-            Path(clean_url),
-            Path(clean_url.lstrip("/")),
-            settings.BASE_DIR / clean_url.lstrip("/"),
-            settings.BASE_DIR.parent / clean_url.lstrip("/"),
-            settings.BASE_DIR.parent / "apps" / "web" / "public" / clean_url.lstrip("/"),
-            settings.BASE_DIR.parent / "assets" / clean_url.lstrip("/")
-        ]
-        found_local = None
-        for candidate in local_candidates:
-            if candidate.is_file():
-                found_local = candidate
-                break
-
-        if found_local:
-            suffix = found_local.suffix.lower() or ".mp4"
-            temp_path = settings.UPLOAD_DIR / f"{temp_upload_id}{suffix}"
-            shutil.copyfile(str(found_local), str(temp_path))
-        elif clean_url.startswith("http://") or clean_url.startswith("https://"):
-            suffix = Path(clean_url.split("?")[0]).suffix.lower() or ".mp4"
-            if suffix not in ALLOWED_EXTENSIONS:
-                suffix = ".mp4"
+        if clean_url.lower().startswith(("https://", "http://")):
+            suffix = Path(urlsplit(clean_url).path).suffix.lower()
+            if suffix not in ALLOWED_VIDEO_EXTENSIONS:
+                suffix = ".mp4"  # signed object URLs may have no extension
             temp_path = settings.UPLOAD_DIR / f"{temp_upload_id}{suffix}"
             try:
-                urllib.request.urlretrieve(clean_url, str(temp_path))
-            except Exception as e:
-                logger.error(f"Failed to download video from URL: {e}")
+                download_trusted_video(
+                    clean_url, temp_path,
+                    allowed_hosts=settings.REMOTE_VIDEO_ALLOWED_HOSTS,
+                    max_bytes=settings.MAX_UPLOAD_SIZE_BYTES
+                )
+            except VideoSourceError as exc:
+                # Error strings never include the signed query string.
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Failed to retrieve video from URL: {str(e)}"
-                )
+                    detail=str(exc)
+                ) from exc
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Could not locate or resolve video source: '{clean_url}'"
-            )
+            try:
+                local = local_video_path(
+                    clean_url,
+                    roots=[settings.UPLOAD_DIR, settings.PROJECT_ROOT / "assets"],
+                    max_bytes=settings.MAX_UPLOAD_SIZE_BYTES
+                )
+                suffix = local.suffix.lower()
+                temp_path = settings.UPLOAD_DIR / f"{temp_upload_id}{suffix}"
+                shutil.copyfile(local, temp_path)
+            except VideoSourceError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+                ) from exc
+            except OSError as exc:
+                logger.error("Could not copy video from trusted local media directory", exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Could not copy the selected local video"
+                ) from exc
 
     # 3. Validate video readability with OpenCV
     cap = cv2.VideoCapture(str(temp_path))

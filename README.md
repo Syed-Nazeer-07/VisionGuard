@@ -477,6 +477,31 @@ Some directories or script names may vary between revisions. Do not create empty
 
 ---
 
+## Model and environment readiness
+
+**The ONNX model is not committed to this repository.** Browser YOLO, local
+Python analysis and HLS camera inference require a compatible, licensed
+`apps/web/public/models/yolo11n.onnx` with static FLOAT32 tensor shapes
+`[1,3,640,640]` → `[1,84,8400]` (COCO80, no built-in NMS).
+
+See **[Phase 7: export, validate, deploy and diagnose the model](docs/PHASE7_MODEL_READINESS.md)**
+for the manual GitHub Actions export workflow, platform-specific instructions,
+model checks and real-world test checklist.
+
+Local readiness commands (from the repository root):
+
+```bash
+python -m pip install "onnx>=1.16,<2"
+python scripts/validate_yolo_onnx.py
+python scripts/visionguard_doctor.py
+```
+
+Model-contract CI tests use **synthetic graphs**, not trained weights or real
+traffic video. A passing CI build must not be interpreted as tested detection
+accuracy, live camera functionality, or Supabase production readiness.
+
+---
+
 ## Getting started
 
 ### Prerequisites

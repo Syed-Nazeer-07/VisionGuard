@@ -44,6 +44,8 @@ export interface InferenceMessage {
   sourceHeight: number;
   calibration?: CalibrationData; // Pass active calibration
   featureFlags?: FeatureFlags;
+  /** False for ephemeral camera inference: never capture/cache vehicle evidence. */
+  collectEvidence?: boolean;
   confidenceThreshold?: number;
   iouThreshold?: number;
 }

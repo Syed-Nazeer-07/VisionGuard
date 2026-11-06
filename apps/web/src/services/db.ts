@@ -158,7 +158,12 @@ export const db = {
       return data
     },
     async get(cameraId: string) {
-      const { data, error } = await (supabase as any).from('scene_profiles').select('*').eq('camera_id', cameraId).maybeSingle()
+      // Older Scene Setup screens repeatedly inserted profiles without a
+      // camera_id UNIQUE constraint. Read the most recent row consistently
+      // instead of failing with "multiple rows" on legacy camera scenes.
+      const { data, error } = await (supabase as any).from('scene_profiles')
+        .select('*').eq('camera_id', cameraId).order('created_at', { ascending: false })
+        .limit(1).maybeSingle()
       if (error) throw error
       return data
     }

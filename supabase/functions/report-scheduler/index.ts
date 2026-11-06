@@ -11,8 +11,29 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  // This endpoint uses the service-role key. A project anon JWT alone must never
+  // authorize the invocation. Provision a 32+ character secret independently
+  // from SUPABASE_SERVICE_ROLE_KEY and provide it only to the trusted scheduler.
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  const secret = Deno.env.get('REPORT_SCHEDULER_SECRET') ?? ''
+  const supplied = req.headers.get('x-visionguard-scheduler-key') ?? ''
+  // Length-independent comparison to avoid leaking the secret's matching prefix.
+  const left = new TextEncoder().encode(secret)
+  const right = new TextEncoder().encode(supplied)
+  let difference = left.length ^ right.length
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    difference |= (left[i] ?? 0) ^ (right[i] ?? 0)
+  }
+  if (left.length < 32 || difference !== 0) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
 
   try {
@@ -153,8 +174,16 @@ serve(async (req) => {
 
           if (uploadError) throw new Error(`Storage error: ${uploadError.message}`)
 
-          const { data: publicUrlData } = supabaseClient.storage.from('reports').getPublicUrl(storagePath)
-          const fileUrl = publicUrlData.publicUrl
+          // Private report bucket: recipients receive a seven-day signed
+          // download URL instead of a permanent public CDN link.
+          // Reports retain file_path so authorized staff can re-sign later.
+          const { data: signedData, error: signedError } = await supabaseClient.storage
+            .from('reports')
+            .createSignedUrl(storagePath, 7 * 24 * 60 * 60)
+          if (signedError || !signedData?.signedUrl) {
+            throw new Error(`Could not create private report URL: ${signedError?.message ?? 'missing URL'}`)
+          }
+          const fileUrl = signedData.signedUrl
 
           // Save report row
           const { data: insertedReport, error: reportInsertError } = await supabaseClient

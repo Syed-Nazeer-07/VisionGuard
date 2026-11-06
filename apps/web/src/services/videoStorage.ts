@@ -115,19 +115,39 @@ const supabaseProvider: VideoStorageProvider = {
 
   async getVideoUrl(asset) {
     if (!asset.storage_path) throw new VideoUnavailableError('not_uploaded', 'This video has no stored file.')
-    const { data } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(asset.storage_path)
-    if (!data?.publicUrl) throw new VideoUnavailableError('object_missing', 'Could not resolve the stored file URL.')
-    return data.publicUrl
+    // The videos bucket is private: only owners/authorized staff can obtain
+    // a short-lived playback URL under storage.objects SELECT RLS.
+    // Never construct a /storage/v1/object/public URL for user footage.
+    const { data, error } = await supabase.storage.from(SUPABASE_BUCKET)
+      .createSignedUrl(asset.storage_path, 60 * 60)
+    if (error || !data?.signedUrl) {
+      throw new VideoUnavailableError(
+        'object_missing',
+        'This video is unavailable or you are not authorized to access it.'
+      )
+    }
+    return data.signedUrl
   },
 
   async deleteVideo(asset) {
+    // Confirm RLS visibility/authorization before removing storage, then remove
+    // the file while the ownership row still exists for storage.objects RLS.
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) throw new Error('Sign in to delete a video')
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
+    const { data: current, error: readError } = await supabase.from('video_assets')
+      .select('id, uploaded_by, storage_path').eq('id', asset.id).single()
+    if (readError || !current) throw new Error('Video asset not found or inaccessible')
+    if (current.uploaded_by !== user.id && profile?.role !== 'Supervisor' && profile?.role !== 'Admin') {
+      throw new Error('Only the uploader or a Supervisor/Admin can delete this video')
+    }
+    if (current.storage_path) {
+      const { error: storageErr } = await supabase.storage.from(SUPABASE_BUCKET).remove([current.storage_path])
+      if (storageErr) throw new Error(`Unable to delete stored video: ${storageErr.message}`)
+    }
     const { data, error } = await supabase.from('video_assets').delete().eq('id', asset.id).select('id')
     if (error) throw new Error(error.message)
-    if (!data || data.length === 0) throw new Error('not permitted (only the uploader or a Supervisor/Admin can delete)')
-    if (asset.storage_path) {
-      const { error: storageErr } = await supabase.storage.from(SUPABASE_BUCKET).remove([asset.storage_path])
-      if (storageErr) console.warn('Video file removal failed:', storageErr)
-    }
+    if (!data || data.length === 0) throw new Error('Video metadata could not be deleted (insufficient permission)')
   },
 
   async videoExists(asset) {

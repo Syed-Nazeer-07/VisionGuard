@@ -285,7 +285,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       const safeDt = dt > 0.01 && dt < 1.0 ? dt : 1 / 30;
 
       const evidenceJobs: EvidenceJob[] = [];
-      const platesEnabled = featureFlags?.plate_detection ?? false;
+      const evidenceEnabled = msg.collectEvidence !== false;
+      const platesEnabled = evidenceEnabled && (featureFlags?.plate_detection ?? false);
 
       for (const track of tracks) {
         // Track coordinates are already in original source video pixels (CENTER format cx, cy, w, h).
@@ -321,16 +322,19 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
           track.isOverspeed = false;
         }
 
-        // Evidence scoring is cheap; the expensive crop/encode is deferred until after the post.
-        const plate = detectPlateRegion(track);
-        const score = evaluateEvidence({
-          detectionConfidence: track.prob,
-          visibleArea: (track.w * track.h) / (width * height),
-          hasPlate: plate !== null
-        });
-        const currentBest = getBestEvidence(track.trackId);
-        if (!currentBest || score > currentBest.score) {
-          evidenceJobs.push({ track: { ...track }, plate, score });
+        // Camera preview must not capture or cache any vehicle crops. Saved
+        // video analysis keeps its original evidence collector behavior.
+        if (evidenceEnabled) {
+          const plate = detectPlateRegion(track);
+          const score = evaluateEvidence({
+            detectionConfidence: track.prob,
+            visibleArea: (track.w * track.h) / (width * height),
+            hasPlate: plate !== null
+          });
+          const currentBest = getBestEvidence(track.trackId);
+          if (!currentBest || score > currentBest.score) {
+            evidenceJobs.push({ track: { ...track }, plate, score });
+          }
         }
       }
 

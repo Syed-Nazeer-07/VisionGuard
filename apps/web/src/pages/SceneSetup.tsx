@@ -32,29 +32,57 @@ export default function SceneSetup() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const [videoSrc, setVideoSrc] = useState<string>('');
+  const [cameraName, setCameraName] = useState<string>('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Load existing profile if camera exists
+  // Scene configuration is explicitly associated with an existing camera.
+  // Never create a fake camera or pretend the configuration is attached.
   useEffect(() => {
-    async function loadData() {
-      if (!id || id === 'new') return;
-      try {
-        await db.cameras.get(id); // Ensure camera exists
-      } catch (err: any) {
-        setError(err.message);
-      }
+    let cancelled = false;
+    if (!id || id === 'new') {
+      setError('Choose an existing camera from the Camera Directory before configuring a scene.');
+      return;
     }
-    loadData();
+    void (async () => {
+      try {
+        const [camera, profile] = await Promise.all([db.cameras.get(id), db.scene_profiles.get(id)]);
+        if (cancelled) return;
+        setCameraName(camera.name);
+        if (!profile) return;
+        const roi = profile.roi_polygon && typeof profile.roi_polygon === 'object' ? profile.roi_polygon as Record<string, any> : {};
+        const goodPoint = (p: any): p is Point => p && typeof p.x === 'number' && typeof p.y === 'number'
+          && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x >= 0 && p.x <= 1 && p.y >= 0 && p.y <= 1;
+        const points = (a: unknown): Point[] => Array.isArray(a) ? a.filter(goodPoint) : [];
+        setDetectionZone(points(roi.detectionZone));
+        setStopLine(points(roi.stopLine));
+        setTrafficLight(points(roi.trafficLight));
+        setCalibrationArea(points(roi.calibrationArea));
+        setLanes(Array.isArray(roi.lanes) ? roi.lanes.map(points).filter((line: Point[]) => line.length > 0) : []);
+        const saved = profile.calibration_data;
+        if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+          setCalibrationData(prev => ({
+            referenceWidth: Number((saved as any).referenceWidth) || prev.referenceWidth,
+            referenceHeight: Number((saved as any).referenceHeight) || prev.referenceHeight,
+            speedLimit: Number((saved as any).speedLimit) || prev.speedLimit,
+            tolerance: Number((saved as any).tolerance ?? prev.tolerance)
+          }));
+        }
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => { cancelled = true; };
   }, [id]);
+
+  useEffect(() => {
+    return () => { if (videoSrc) URL.revokeObjectURL(videoSrc); };
+  }, [videoSrc]);
 
   const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && videoRef.current) {
-      const url = URL.createObjectURL(file);
-      setVideoSrc(url);
-    }
+    if (file) setVideoSrc(URL.createObjectURL(file));
   };
 
   const getCanvasPoint = (e: React.MouseEvent<HTMLCanvasElement>): Point => {
@@ -63,8 +91,8 @@ export default function SceneSetup() {
     const rect = canvas.getBoundingClientRect();
     // Return normalized coordinates 0-1
     return {
-      x: (e.clientX - rect.left) / rect.width,
-      y: (e.clientY - rect.top) / rect.height
+      x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
     };
   };
 
@@ -221,6 +249,13 @@ export default function SceneSetup() {
     if (detectionZone.length > 0 && detectionZone.length < 3) return setError('Detection zone must be a valid polygon (3+ points)');
     if (stopLine.length === 1) return setError('Stop line must have 2 points');
     if (trafficLight.length > 0 && trafficLight.length < 3) return setError('Traffic light box must be a valid polygon (3+ points)');
+    if (calibrationArea.length > 0 && calibrationArea.length !== 4) return setError('Speed calibration needs exactly four ordered points.');
+    if ([calibrationData.referenceWidth, calibrationData.referenceHeight, calibrationData.speedLimit, calibrationData.tolerance]
+      .some(value => !Number.isFinite(value)) || calibrationData.referenceWidth <= 0 || calibrationData.referenceHeight <= 0
+      || calibrationData.speedLimit <= 0 || calibrationData.tolerance < 0) {
+      return setError('Calibration dimensions and speed limit must be positive; tolerance cannot be negative.');
+    }
+    if (!id || id === 'new') return setError('Select a real camera before saving its scene.');
     
     setSaving(true);
     setError(null);
@@ -235,23 +270,14 @@ export default function SceneSetup() {
     };
 
     try {
-      // Assuming camera exists, just updating/inserting scene profile
-      // In a real flow, we ensure camera is created first. Since it's a POC, we create a dummy camera if 'new'
-      let targetCameraId = id;
-      if (!targetCameraId || targetCameraId === 'new') {
-        const cam = await db.cameras.create({ name: 'Scene Setup Camera', status: 'online' } as any);
-        targetCameraId = cam.id;
-      }
-
+      const existing = await db.scene_profiles.get(id);
       await db.scene_profiles.upsert({
-        camera_id: targetCameraId!,
+        ...(existing?.id ? { id: existing.id } : {}),
+        camera_id: id,
         roi_polygon: roi_polygon as any,
         calibration_data: calibrationData as any
       });
-      setSuccess('Configuration saved successfully');
-      
-      // For POC navigation
-      if (id === 'new') navigate(`/app/cameras/${targetCameraId}/scene`, { replace: true });
+      setSuccess('Scene settings saved. They are not yet connected to automatic live camera inference.');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -260,10 +286,11 @@ export default function SceneSetup() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden bg-gray-950 text-white">
+    <div className="flex flex-col h-full min-h-[calc(100vh-136px)] overflow-hidden bg-gray-950 text-white">
       <header className="px-8 py-6 border-b border-gray-800 shrink-0">
-        <h1 className="text-3xl font-bold">Scene Setup</h1>
-        <p className="text-gray-400 mt-1">Define tracking bounds, calibration areas, and rules for this camera.</p>
+        <button onClick={() => navigate('/app/cameras')} className="text-indigo-300 text-sm hover:underline mb-2">← Camera Directory</button>
+        <h1 className="text-3xl font-bold">Scene Setup{cameraName ? ` · ${cameraName}` : ''}</h1>
+        <p className="text-gray-400 mt-1">Save reference polygons for this camera. Live inference does not yet consume these settings.</p>
       </header>
 
       <div className="flex flex-1 overflow-hidden">
@@ -337,7 +364,7 @@ export default function SceneSetup() {
             <button onClick={handleResetMode} disabled={!mode} className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-md transition disabled:opacity-50">
               Clear Current Tool
             </button>
-            <button onClick={handleSave} disabled={saving} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition font-semibold disabled:opacity-50">
+            <button onClick={handleSave} disabled={saving || !id || id === 'new'} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md transition font-semibold disabled:opacity-50">
               {saving ? 'Saving...' : 'Save Configuration'}
             </button>
             {error && <div className="text-red-400 text-xs text-center">{error}</div>}
@@ -351,7 +378,8 @@ export default function SceneSetup() {
             {videoSrc ? (
               <>
                 <video 
-                  src={videoSrc} 
+                  ref={videoRef}
+                  src={videoSrc}
                   autoPlay 
                   loop 
                   muted 
