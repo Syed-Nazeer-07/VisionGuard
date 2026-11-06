@@ -297,7 +297,10 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         if (track.dh !== undefined) track.dh = track.dh / safeDt;
 
         const isVehicle = track.className === 'car' || track.className === 'truck' || track.className === 'bus' || track.className === 'motorcycle' || track.className === 'bicycle';
-        if (speedEstimator && isVehicle) {
+        if (speedEstimator && isVehicle && track.observationType === 'detection') {
+          // Predicted tracker boxes are not independent road-plane speed
+          // observations. Measuring them as ground truth creates phantom
+          // acceleration, especially on slower WebGPU/WASM machines.
           // Homography uses 0-1 normalized coordinates
           const normalizedBox = {
             x: track.x / width,
