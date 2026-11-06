@@ -20,8 +20,14 @@ export class ByteTracker {
     }
 
     // 2. Separate detections into high and low confidence
-    const highDetections = detections.filter(d => d.prob >= this.trackThreshold);
-    const lowDetections = detections.filter(d => d.prob < this.trackThreshold);
+    // Motorcycles/bicycles are frequently smaller and lower-scoring than
+    // cars. They need a slightly lower initialization gate, not the same
+    // strict car/person threshold. Keep the classes separate from people.
+    const highGate = (d: BoundingBox) => d.classId === 1 || d.classId === 3
+      ? Math.max(0.25, this.trackThreshold - 0.10)
+      : this.trackThreshold;
+    const highDetections = detections.filter(d => d.prob >= highGate(d));
+    const lowDetections = detections.filter(d => d.prob < highGate(d));
 
     // 3. Separate tracks into active and lost
     const activeTracks = this.tracks.filter(t => t.state === 'Confirmed' || t.state === 'Tentative');
@@ -90,9 +96,14 @@ export class ByteTracker {
       if (t.state === 'Lost' || t.state === 'Removed') {
         continue;
       }
-      // Emit confirmed tracks, or tentative tracks with high confidence (>= 0.60) on first sighting.
-      // Low-confidence tentative tracks must achieve hitCount >= 2 before rendering.
-      const isValidEmission = (t.state === 'Confirmed') || (t.hitCount >= 2) || (t.prob >= 0.60 && t.timeSinceUpdate === 0);
+      // Single-frame flashes were a major source of apparent road debris
+      // detections. Require repeated matches before showing a candidate.
+      // Cars/people need 3 hits; small two-wheelers need 2 to preserve recall.
+      // Even "Confirmed" does not waive this visibility gate.
+      const minimumHits = t.classId === 1 || t.classId === 3 ? 2 : 3;
+      const isValidEmission = t.state === 'Confirmed'
+        && t.hitCount >= minimumHits
+        && t.timeSinceUpdate === 0;
       if (!isValidEmission) {
         continue;
       }
