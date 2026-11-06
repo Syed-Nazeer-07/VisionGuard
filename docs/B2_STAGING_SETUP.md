@@ -9,7 +9,7 @@ is not a relational database).
 ## What is already in place
 
 - Staging Supabase project `wpkwxlhwjkgtvyersust`.
-- JWT-verified Edge Function `video-storage` **deployed and ACTIVE**.
+- JWT-verified Edge Function `video-storage` **deployed and ACTIVE** (v2, with artifact actions).
 - Video browser client supports B2 multipart upload, retry, resumable
   presigned part URLs, short-lived playback URLs and deletion.
 - This recovery branch restores `VITE_VIDEO_STORAGE_PROVIDER=b2` as the
@@ -71,10 +71,15 @@ the signed-in user's JWT and RLS policies.
    owner's footage. Verify staff review permissions independently.
 5. Simulate expired multipart part signature and retry; confirm failed
    uploads abort outstanding parts and record errors clearly.
-6. Confirm no new source video is stored in the Supabase `videos` bucket.
-   Analysis artifacts may still use Supabase Storage; if that separate quota
-   is exhausted, History persistence requires a follow-up B2 artifact
-   migration before it can be considered working.
+6. Run a saved Python analysis after configuring the optional backend.
+   Verify the gzip run artifact is stored in B2 under
+   `artifacts/{videoId}/{runId}.json.gz` (bucket marker `b2-artifacts`)
+   and is still readable after reloading Video Review.
+7. Confirm no new source video **or analysis artifact** is stored in the
+   Supabase `videos` Storage bucket. Existing historical artifacts there
+   remain readable for compatibility.
+8. Delete a test video and verify B2 **old versions and run artifacts**
+   have been removed rather than merely hidden by delete markers.
 
 ## Troubleshooting
 
@@ -86,7 +91,8 @@ the signed-in user's JWT and RLS policies.
   restricted application key's bucket scope.
 - **CORS / missing ETag:** inspect the bucket's S3 CORS policy.
 - **Supabase Storage quota:** do not select the Supabase video provider;
-  choose B2 for new footage. Analysis artifacts remain a separate concern.
+  choose B2 for new footage. New compressed analysis artifacts now also use B2;
+  old artifacts are read from Supabase Storage only when explicitly referenced.
 - **Local backend:** independent FastAPI application; browser YOLO does not
   require Python. On Windows on ARM, use the browser engine while native
   Python ML support is validated.
