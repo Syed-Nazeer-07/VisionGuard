@@ -46,7 +46,7 @@ jobs:
       - run: python -m pip install -r backend/requirements.txt
       # Tests use deterministic fake detector/tracker and no external model.
       # --noconftest avoids importing the real API startup fixture.
-      - run: PYTHONPATH=backend python -m pytest -q --noconftest backend/tests/test_overspeed_events.py backend/tests/test_processor_metrics.py backend/tests/test_speed_event_artifact.py backend/tests/test_video_source_security.py
+      - run: PYTHONPATH=backend python -m pytest -q --noconftest backend/tests/test_overspeed_events.py backend/tests/test_processor_metrics.py backend/tests/test_speed_event_artifact.py backend/tests/test_video_source_security.py backend/tests/test_job_source_guards.py
       # No YOLO model weights are stored in Git. This check deliberately
       # avoids claiming to run the real-video inference test suite.
       - name: Check overspeed counter behavior
