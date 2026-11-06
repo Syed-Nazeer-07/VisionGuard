@@ -301,20 +301,22 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
 
   const framesAnalyzed = useMemo(() => {
     const meta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
-    return activeArtifact?.total_frames ??
-      selectedRun?.frames_processed ??
+    return selectedRun?.frames_processed ??
+      activeArtifact?.summary?.processed_frames ??
+      activeArtifact?.total_frames ??
       meta.frame_count ??
       (tracks.length > 0 ? Math.max(...tracks.map(t => t.frame_count || 0)) : 0);
   }, [data, selectedRun, tracks, activeArtifact]);
 
   const uniqueVehicles = useMemo(() => {
     const summary = activeArtifact?.summary as any;
-    const meta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
+    const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
+    const runSummary = (runMeta.summary && typeof runMeta.summary === 'object' ? runMeta.summary : {}) as Record<string, any>;
     return summary?.unique_vehicles ??
       summary?.unique_tracks ??
-      meta.unique_vehicles ??
+      runSummary.unique_vehicles ??
       tracks.length;
-  }, [data, tracks, activeArtifact]);
+  }, [selectedRun, tracks, activeArtifact]);
 
   const detectionProfileLabel = useMemo(() => {
     const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
@@ -350,7 +352,7 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
     const assetMeta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
     const avg = activeArtifact?.summary?.average_speed_kmh ??
       runMeta?.summary?.average_speed_kmh ??
-      assetMeta?.average_speed_kmh;
+      (selectedRun ? null : assetMeta?.average_speed_kmh);
     if (typeof avg === 'number' && avg > 0) return `${Math.round(avg)} km/h`;
     const trackSpeeds = tracks.flatMap(t => trajectoryOf(t).map(p => p.speed).filter((s): s is number => typeof s === 'number'));
     if (trackSpeeds.length > 0) {
@@ -362,7 +364,7 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
 
   const isUnanalyzed = useMemo(() => {
     return !!data?.asset && data.asset.processing_status !== 'completed' && tracks.length === 0 && !activeArtifact;
-  }, [data, tracks]);
+  }, [data, tracks, activeArtifact]);
 
   // Replay persisted boxes + trajectories against the playhead. No inference is run here.
   const tracksRef = useRef<TrackRow[]>([]);
