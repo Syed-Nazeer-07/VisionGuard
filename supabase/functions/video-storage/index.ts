@@ -183,8 +183,18 @@ async function loadArtifactRun(db: SupabaseClient, videoId: string, runId: unkno
 async function requireArtifactReader(db: SupabaseClient, asset: AssetRow, userId: string) {
   if (asset.uploaded_by === userId) return
   const { data, error } = await db.rpc('auth_user_role')
-  if (error || (data !== 'Admin' && data !== 'Supervisor')) {
+  // Operators review saved runs, but may not DELETE the original footage
+  // or an analysis artifact owned by someone else.
+  if (error || !['Operator', 'Supervisor', 'Admin'].includes(data)) {
     throw new HttpError(403, 'Only the video uploader or authorized staff can read this artifact')
+  }
+}
+
+async function requireArtifactDeletion(db: SupabaseClient, asset: AssetRow, userId: string) {
+  if (asset.uploaded_by === userId) return
+  const { data, error } = await db.rpc('auth_user_role')
+  if (error || (data !== 'Supervisor' && data !== 'Admin')) {
+    throw new HttpError(403, 'Only the uploader or a Supervisor/Admin can delete this artifact')
   }
 }
 
@@ -271,9 +281,8 @@ Deno.serve(async (req) => {
 
       case 'delete-artifact': {
         const asset = await loadAsset(db, videoId)
-        // Authorized Supervisors/Admins can manage case retention even
-        // when they are not the original uploader.
-        await requireArtifactReader(db, asset, userId)
+        // Operators may review but never delete another user's evidence.
+        await requireArtifactDeletion(db, asset, userId)
         const key = await loadArtifactRun(db, videoId, body.runId)
         const cfg = b2Config()
         const removed = await purgeObjectVersions(cfg, key)
