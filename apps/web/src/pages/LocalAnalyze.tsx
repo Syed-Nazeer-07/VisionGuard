@@ -73,7 +73,7 @@ async function seek(video: HTMLVideoElement, time: number, signal: AbortSignal):
   });
 }
 
-export default function LocalAnalyze() {
+export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -151,6 +151,15 @@ export default function LocalAnalyze() {
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     };
   }, [attachVideo]);
+
+  useEffect(() => {
+    if (active || status === 'processing') return;
+    const video = videoRef.current;
+    if (video && !video.paused) video.pause();
+    if (video && Number.isFinite(video.currentTime)) {
+      void localAnalysisStorage.savePosition(video.currentTime).catch(() => {});
+    }
+  }, [active, status]);
 
   const onUpload = async (file?: File) => {
     if (!file || status === 'processing') return;
