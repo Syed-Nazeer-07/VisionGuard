@@ -1,8 +1,17 @@
-name: Export YOLO11n ONNX (manual, license acknowledgement required)
+name: Export YOLO11 ONNX (n/s/m, manual license acknowledgement required)
 
 on:
   workflow_dispatch:
     inputs:
+      model_variant:
+        description: 'n = fastest, s = better accuracy, m = highest accuracy of these options (slower)'
+        type: choice
+        options:
+          - 'n'
+          - 's'
+          - 'm'
+        default: 's'
+        required: true
       accept_upstream_license:
         description: 'I have reviewed and accepted the Ultralytics weights/code license for my intended use'
         type: choice
@@ -30,22 +39,27 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
           python -m pip install "ultralytics>=8.3,<9" "onnx>=1.16,<2" "onnxruntime>=1.20,<2"
-      - name: Fetch approved upstream weights and export static ONNX
+      - name: Export selected licensed COCO80 model (static 640px, no NMS)
+        env:
+          VARIANT: ${{ inputs.model_variant }}
         run: |
-          python scripts/export_yolo11n.py --weights yolo11n.pt \
+          case "$VARIANT" in n|s|m) ;; *) echo "Invalid model variant"; exit 2 ;; esac
+          python scripts/export_yolo11n.py --weights "yolo11${VARIANT}.pt" \
             --download-upstream --acknowledge-license \
-            --output apps/web/public/models/yolo11n.onnx
-      - name: Validate exact model contract and run CPU inference smoke test
+            --output "apps/web/public/models/yolo11${VARIANT}.onnx"
+      - name: Validate model shape and run actual CPU inference smoke test
+        env:
+          VARIANT: ${{ inputs.model_variant }}
         run: |
-          python scripts/validate_yolo_onnx.py --json > model-manifest.json
-          python scripts/smoke_yolo_onnx.py
+          python scripts/validate_yolo_onnx.py --model "apps/web/public/models/yolo11${VARIANT}.onnx" --json > model-manifest.json
+          python scripts/smoke_yolo_onnx.py --model "apps/web/public/models/yolo11${VARIANT}.onnx"
           cat model-manifest.json
-      - name: Preserve model for manual deployment (no Git commit)
+      - name: Preserve validated model for local deployment (no Git commit)
         uses: actions/upload-artifact@v4
         with:
-          name: visionguard-yolo11n-onnx
+          name: visionguard-yolo11${{ inputs.model_variant }}-onnx
           path: |
-            apps/web/public/models/yolo11n.onnx
+            apps/web/public/models/yolo11*.onnx
             model-manifest.json
           if-no-files-found: error
           retention-days: 7
