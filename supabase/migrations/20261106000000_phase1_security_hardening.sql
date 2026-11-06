@@ -25,7 +25,7 @@ CREATE POLICY "Video asset updates require ownership or staff" ON public.video_a
   )
   WITH CHECK (
     uploaded_by = auth.uid()
-    OR public.auth_user_role() IN ('Supervisor', 'Admin')
+    OR public.auth_user_role() IN ('Operator', 'Supervisor', 'Admin')
   );
 
 -- Prevent an uploader from changing the owner of an existing video. Admin
@@ -35,7 +35,7 @@ RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   IF auth.uid() IS NOT NULL
      AND NEW.uploaded_by IS DISTINCT FROM OLD.uploaded_by
-     AND public.auth_user_role() <> 'Admin' THEN
+     AND public.auth_user_role() IS DISTINCT FROM 'Admin' THEN
     RAISE EXCEPTION 'Only an administrator may transfer video ownership'
       USING ERRCODE = '42501';
   END IF;
@@ -157,8 +157,18 @@ CREATE POLICY "Staff can update evidence" ON storage.objects
 -- Remove broad bucket-wide overwrites and deletes of OTHER users' videos.
 -- Existing public playback is unchanged in this migration; converting the
 -- public videos bucket to private requires signed-URL client changes first.
+DROP POLICY IF EXISTS "Authenticated users can upload videos" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can update their videos" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can delete their videos" ON storage.objects;
+CREATE POLICY "Video storage inserts require asset owner" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'videos' AND EXISTS (
+      SELECT 1 FROM public.video_assets v
+      WHERE v.id::text = split_part(name, '/', 1)
+        AND v.uploaded_by = auth.uid()
+    )
+  );
 CREATE POLICY "Video storage updates require asset owner" ON storage.objects
   FOR UPDATE TO authenticated
   USING (
