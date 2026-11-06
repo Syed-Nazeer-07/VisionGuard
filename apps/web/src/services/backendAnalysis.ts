@@ -35,15 +35,15 @@ export const DETECTION_PROFILES: Record<DetectionProfile, DetectionProfileConfig
   balanced: {
     id: 'balanced',
     label: 'Balanced',
-    description: 'Standard detection with balanced false-positive rejection (0.35 conf • 0.45 IoU)',
-    confidenceThreshold: 0.35,
+    description: 'Benchmark reference: 0.20 confidence / 0.45 IoU. May increase false positives on new scenes.',
+    confidenceThreshold: 0.20,
     iouThreshold: 0.45
   },
   high_recall: {
     id: 'high_recall',
     label: 'High Recall',
-    description: 'Detects more distant and partially occluded vehicles (0.25 conf • 0.45 IoU)',
-    confidenceThreshold: 0.25,
+    description: 'Experimental high recall (0.15 conf / 0.45 IoU): more distant vehicles, more potential false positives.',
+    confidenceThreshold: 0.15,
     iouThreshold: 0.45
   }
 };
