@@ -12,6 +12,11 @@ type InMessage =
 
 let session: InferenceSession | null = null;
 let executionProvider = 'unknown';
+// Reuse model-sized pixel buffers between frames. The previous implementation
+// allocated a fresh canvas and a ~5 MB Float32Array for EVERY sampled frame.
+let preprocessCanvas: OffscreenCanvas | null = null;
+let preprocessContext: OffscreenCanvasRenderingContext2D | null = null;
+let inputBuffer: Float32Array | null = null;
 const tracker = new ByteTracker();
 tracker.trackThreshold = 0.45;
 tracker.maxTimeLost = 8;
@@ -42,15 +47,21 @@ function preprocess(bitmap: ImageBitmap) {
   const sh = Math.max(1, Math.round(bitmap.height * scale));
   const left = Math.floor((size - sw) / 2);
   const top = Math.floor((size - sh) / 2);
-  const canvas = new OffscreenCanvas(size, size);
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('No canvas context available for inference.');
+  if (!preprocessCanvas) {
+    preprocessCanvas = new OffscreenCanvas(size, size);
+    preprocessContext = preprocessCanvas.getContext('2d', { willReadFrequently: true });
+    inputBuffer = new Float32Array(3 * size * size);
+  }
+  const ctx = preprocessContext;
+  if (!ctx || !preprocessCanvas || !inputBuffer) throw new Error('No canvas context available for inference.');
   ctx.fillStyle = 'rgb(114,114,114)';
   ctx.fillRect(0, 0, size, size);
   ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, left, top, sw, sh);
   const pixels = ctx.getImageData(0, 0, size, size).data;
   const area = size * size;
-  const data = new Float32Array(3 * area);
+  // Worker receives one inference request at a time and awaits session.run,
+  // so it is safe to reuse the buffer when processing the next frame.
+  const data = inputBuffer;
   for (let i = 0; i < area; i++) {
     const j = i * 4;
     data[i] = pixels[j] / 255;
