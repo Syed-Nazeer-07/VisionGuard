@@ -27,7 +27,7 @@ export class TrackStateStore {
   private lastInferenceMediaTime: number = 0;
 
   // Maximum time to hold an active track during continuous playback without an update (in media seconds)
-  public maxActiveRetentionMediaSec: number = 0.85;
+  public maxActiveRetentionMediaSec: number = 0.45;
   // Maximum consecutive inference misses before removing an unconfirmed or lost track
   public maxConsecutiveMisses: number = 5;
 
@@ -102,10 +102,11 @@ export class TrackStateStore {
           const measuredVy = (t.y - existing.track.y) / dt;
           existing.observedVx = 0.35 * existing.observedVx + 0.65 * measuredVx;
           existing.observedVy = 0.35 * existing.observedVy + 0.65 * measuredVy;
-          // Short correction smoothing avoids one-frame jumps; do not
-          // replace the underlying raw observation used for future velocity.
-          existing.displayX += 0.78 * (t.x - existing.displayX);
-          existing.displayY += 0.78 * (t.y - existing.displayY);
+          // The detector is the latest ground-truth *box estimate*: start
+          // presentation from its actual coordinates. Smoothing this point
+          // behind the detection created visible lag on moving cars.
+          existing.displayX = t.x;
+          existing.displayY = t.y;
         } else {
           // Reacquisition or implausible jump: snap to the actual detection
           // and reset velocity so stale predictions cannot drift across lanes.
@@ -188,10 +189,10 @@ export class TrackStateStore {
       // While playing, accept up to maxActiveRetentionMediaSec (0.85s) or wall-clock 1800ms
       const isFresh = isPaused
         ? Math.abs(mediaAge) <= 0.50
-        : (mediaAge >= -0.10 && mediaAge <= this.maxActiveRetentionMediaSec && wallAgeMs <= 1800);
+        : (mediaAge >= -0.08 && mediaAge <= this.maxActiveRetentionMediaSec && wallAgeMs <= 1100);
 
       if (!isFresh) {
-        if (mediaAge > this.maxActiveRetentionMediaSec || wallAgeMs > 1800) {
+        if (mediaAge > this.maxActiveRetentionMediaSec || wallAgeMs > 1100) {
           idsToDelete.push(id);
         }
         continue;
@@ -205,9 +206,9 @@ export class TrackStateStore {
       let renderedY = rec.displayY;
       let obsType = t.observationType;
 
-      if (!isPaused && mediaAge > 0.02 && mediaAge <= 0.30) {
-        const dt = Math.min(0.22, mediaAge);
-        const maxDelta = Math.max(t.w, t.h) * 0.45;
+      if (!isPaused && mediaAge > 0.02 && mediaAge <= 0.18) {
+        const dt = Math.min(0.18, mediaAge);
+        const maxDelta = Math.max(t.w, t.h) * 0.35;
         renderedX += Math.max(-maxDelta, Math.min(maxDelta, rec.observedVx * dt));
         renderedY += Math.max(-maxDelta, Math.min(maxDelta, rec.observedVy * dt));
         if (rec.observedVx !== 0 || rec.observedVy !== 0) obsType = 'predicted';
