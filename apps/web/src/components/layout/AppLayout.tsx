@@ -20,7 +20,9 @@ import {
   FileKey,
   Clock,
   LineChart,
-  Film
+  Film,
+  Camera,
+  MonitorPlay
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useAuthStore } from '../../store/auth'
