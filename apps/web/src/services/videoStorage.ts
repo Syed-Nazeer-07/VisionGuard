@@ -115,9 +115,18 @@ const supabaseProvider: VideoStorageProvider = {
 
   async getVideoUrl(asset) {
     if (!asset.storage_path) throw new VideoUnavailableError('not_uploaded', 'This video has no stored file.')
-    const { data } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(asset.storage_path)
-    if (!data?.publicUrl) throw new VideoUnavailableError('object_missing', 'Could not resolve the stored file URL.')
-    return data.publicUrl
+    // The videos bucket is private: only owners/authorized staff can obtain
+    // a short-lived playback URL under storage.objects SELECT RLS.
+    // Never construct a /storage/v1/object/public URL for user footage.
+    const { data, error } = await supabase.storage.from(SUPABASE_BUCKET)
+      .createSignedUrl(asset.storage_path, 60 * 60)
+    if (error || !data?.signedUrl) {
+      throw new VideoUnavailableError(
+        'object_missing',
+        'This video is unavailable or you are not authorized to access it.'
+      )
+    }
+    return data.signedUrl
   },
 
   async deleteVideo(asset) {
