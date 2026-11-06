@@ -247,7 +247,10 @@ export default function Analyze() {
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [live, setLive] = useState<LiveMetrics>(EMPTY_METRICS);
   const [saved, setSaved] = useState<SavedSummary | null>(null);
-  const [saveToHistory, setSaveToHistory] = useState<boolean>(true);
+  // Temporary browser analysis must work even when object storage quota is
+  // exhausted or the B2 Edge Function has not yet been configured.
+  // Persisting footage is an explicit opt-in, never a hidden prerequisite.
+  const [saveToHistory, setSaveToHistory] = useState<boolean>(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [stagedFile, setStagedFile] = useState<File | null>(null);
   const [playbackTime, setPlaybackTime] = useState<{ current: number; duration: number }>({ current: 0, duration: 0 });
