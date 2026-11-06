@@ -235,7 +235,7 @@ export function Cameras() {
                             style={{ width: `${cam.health_score || 0}%` }}
                           />
                         </div>
-                        <span className="text-[12px] font-bold text-slate-700">{cam.health_score || 0}%</span>
+                        <span className="text-[12px] font-bold text-slate-700">{cam.health_score == null ? "Not checked" : `${cam.health_score}%`}</span>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-right">
@@ -279,42 +279,24 @@ export function Cameras() {
               </tbody>
             </table>
           ) : (
-            // Schematic Map View
-            <div className="absolute inset-0 bg-[#e2e8f0] overflow-hidden relative">
-              {/* Fake grid pattern to simulate a tactical map surface */}
-              <div className="absolute inset-0 opacity-[0.03] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+CjxwYXRoIGQ9Ik0wIDBoNDB2NDBIMHoiIGZpbGw9Im5vbmUiLz4KPHBhdGggZD0iTTAgMGg0MHY0MEgweiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEiIG9wYWNpdHk9IjAuMSIvPgo8L3N2Zz4=')]"></div>
-              
-              {filteredCameras.map((cam, i) => {
-                // Generate a stable pseudo-random position if lat/lng missing
-                const top = cam.latitude ? ((cam.latitude % 100) + 10) + '%' : `${20 + (i * 17 % 60)}%`;
-                const left = cam.longitude ? ((cam.longitude % 100) + 10) + '%' : `${15 + (i * 23 % 70)}%`;
-                
-                return (
-                  <div 
-                    key={cam.id} 
-                    className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer"
-                    style={{ top, left }}
-                    onClick={() => handleOpenDetails(cam)}
-                  >
-                    <div className={cn(
-                      "w-4 h-4 rounded-full border-2 border-white shadow-md relative z-10",
-                      cam.status === 'online' ? "bg-emerald-500" :
-                      cam.status === 'warning' ? "bg-amber-500" : "bg-red-500"
-                    )}>
-                      {cam.status === 'online' && <div className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-50"></div>}
+            // Location directory, not a fabricated geospatial map.
+            <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <p className="col-span-full text-sm text-slate-600">
+                Saved locations — geographic map integration is not configured.
+                Coordinates below come directly from camera records.
+              </p>
+              {filteredCameras.map(cam => (
+                <button key={cam.id} onClick={() => handleOpenDetails(cam)}
+                  className="rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-blue-300">
+                  <div className="font-bold text-slate-900">{cam.name}</div>
+                  <div className="text-sm text-slate-600">{cam.location || 'No location specified'}</div>
+                  {Number.isFinite(cam.latitude) && Number.isFinite(cam.longitude) && (
+                    <div className="text-xs text-slate-500 mt-1">
+                      GPS: {Number(cam.latitude).toFixed(5)}, {Number(cam.longitude).toFixed(5)}
                     </div>
-                    <div className="mt-1 bg-white/90 backdrop-blur px-2 py-0.5 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap text-[10px] font-bold text-slate-800 border border-slate-200">
-                      {cam.camera_identifier || cam.name}
-                    </div>
-                  </div>
-                )
-              })}
-              
-              <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur p-3 rounded-lg border border-slate-200 shadow-sm text-[11px] font-bold text-slate-600 flex flex-col gap-2">
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Online</div>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Warning</div>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> Offline</div>
-              </div>
+                  )}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -404,7 +386,7 @@ export function Cameras() {
                               style={{ width: `${selectedCamera.health_score || 0}%` }}
                             />
                           </div>
-                          <span className="text-[14px] font-bold text-slate-900">{selectedCamera.health_score || 0}%</span>
+                          <span className="text-[14px] font-bold text-slate-900">{selectedCamera.health_score == null ? "Not checked" : `${selectedCamera.health_score}%`}</span>
                         </div>
                       </div>
                       
@@ -417,7 +399,7 @@ export function Cameras() {
                         </div>
                         <div className="overflow-hidden">
                           <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Source URL</div>
-                          <div className="text-[13px] font-medium text-slate-900 truncate" title={selectedCamera.source_url || selectedCamera.stream_url}>
+                          <div className="text-[13px] font-medium text-slate-900 truncate" title={cameraSourceHost(selectedCamera)}>
                             {cameraSourceHost(selectedCamera)}
                           </div>
                         </div>
