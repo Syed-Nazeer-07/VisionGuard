@@ -40,10 +40,20 @@ def make_fixture(path: Path, *, input_shape=(1, 3, 640, 640),
             labels[2] = "truck"
         model.metadata_props.add(key="names", value=str(labels))
     if external:
-        tensor = helper.make_tensor("external_weights", TensorProto.FLOAT, [1], [1.0])
-        tensor.data_location = TensorProto.EXTERNAL
-        tensor.external_data.add(key="location", value="external.bin")
+        # ONNX only saves an initializer externally when it contains raw_data.
+        # A float_data tensor with data_location manually set is normalized by
+        # the serializer and would not exercise the validator's external guard.
+        tensor = helper.make_tensor(
+            "external_weights", TensorProto.FLOAT, [1],
+            b"\\x00\\x00\\x80\\x3f", raw=True
+        )
         graph.initializer.append(tensor)
+        onnx.save_model(
+            model, path, save_as_external_data=True,
+            all_tensors_to_one_file=True, size_threshold=0,
+            location="external.bin"
+        )
+        return
     onnx.save(model, path)
 
 
