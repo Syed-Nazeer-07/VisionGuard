@@ -158,10 +158,14 @@ function CameraInferencePlayer({ camera }: { camera: CameraRecord }) {
           scheduleFrames();
         });
       } else {
+        // DOM typings now declare requestVideoFrameCallback unconditionally.
+        // Cast the fallback reference explicitly instead of narrowing the
+        // entire videoElement to `never` in this legacy-browser branch.
+        const fallbackVideo = videoElement as HTMLVideoElement;
         fallbackHandle = window.setInterval(() => {
-          if (disposed || videoElement.paused || videoElement.readyState < 2) return;
-          if (!Number.isFinite(videoElement.currentTime) || videoElement.currentTime === lastFallbackMediaTime) return;
-          lastFallbackMediaTime = videoElement.currentTime;
+          if (disposed || fallbackVideo.paused || fallbackVideo.readyState < 2) return;
+          if (!Number.isFinite(fallbackVideo.currentTime) || fallbackVideo.currentTime === lastFallbackMediaTime) return;
+          lastFallbackMediaTime = fallbackVideo.currentTime;
           void submit(performance.now() / 1000);
         }, 100);
       }
