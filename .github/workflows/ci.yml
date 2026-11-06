@@ -18,10 +18,21 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-      - run: npm ci
+      - name: Install dependencies
+        id: install
+        run: npm ci
+      # Some npm lockfiles omit platform-specific optional packages. Pin the
+      # Linux binary to the exact installed oxlint version, without changing
+      # package.json or package-lock.json.
+      - name: Ensure Linux oxlint binding is installed
+        run: |
+          OXLINT_VERSION=$(node -p "require('./apps/web/node_modules/oxlint/package.json').version")
+          npm install --no-save --no-package-lock --no-audit "@oxlint/binding-linux-x64-gnu@${OXLINT_VERSION}"
       - run: npm run lint
       - run: npm run build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
       - run: npm run test -w web
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
 
   backend-source:
     name: Backend syntax and pure event-counter smoke test
