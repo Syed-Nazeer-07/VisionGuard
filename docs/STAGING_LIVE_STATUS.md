@@ -22,14 +22,16 @@ new isolated Supabase project and were **not** deployed to production.
 
 - Applied **30 original repo migrations** in filename order to a fresh
   Supabase 17.x PostgreSQL project, with success confirmed for each.
-- Applied two additional audited security migrations:
-  `20261106185954_staging_policy_and_rpc_hardening.sql` and
-  `20261106190514_private_footage_and_owner_scoped_reads.sql`.
+- Applied three additional audited security migrations:
+  `20261106185954_staging_policy_and_rpc_hardening.sql`,
+  `20261106190514_private_footage_and_owner_scoped_reads.sql`, and
+  `20261106191554_private_scheduled_report_downloads.sql`.
 - Normalized the originally generated migration ledger version IDs to match
   the repository's canonical filenames, enabling future Supabase CLI
   migration-history comparisons. Rechecked the list.
 - All **24 public application tables** have RLS enabled.
-- `videos` Supabase Storage bucket is **private**, with SELECT/INSERT/
+- `videos`, `evidence` and `reports` Supabase Storage buckets are all
+  **private**. Videos have SELECT/INSERT/
   UPDATE/DELETE rules scoped to the uploaded video owner's asset/run
   reference or authorized staff. Frontend now creates a one-hour signed
   playback URL rather than publishing a permanent public URL.
@@ -105,9 +107,10 @@ or signed-URL playback test**; no actual Supabase Auth session was issued.
 7. **Scheduler/B2:** Report scheduler secret, trusted invocation, and
    Backblaze credentials/function deployment are intentionally absent
    from this new staging project.
-8. **Privacy:** Reports bucket currently follows legacy public settings.
-   Do not store confidential reports there until its delivery/download
-   workflow is updated to signed authorization.
+8. **Private reports:** The reports bucket was switched to private and
+   the scheduler now emails seven-day signed URLs. This change is verified
+   structurally but not tested via a deployed scheduler/email integration;
+   archived emailed links expire and require re-signing by authorized staff.
 9. **Performance:** Some unindexed FKs, multiple permissive policies,
    and unused-index notices remain in the performance advisor.
    These are not equivalent to a completed performance tuning pass.
