@@ -265,7 +265,10 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
 
       const confidenceThreshold = typeof msg.confidenceThreshold === 'number' ? msg.confidenceThreshold : 0.35;
       const iouThreshold = typeof msg.iouThreshold === 'number' ? msg.iouThreshold : 0.45;
-      tracker.trackThreshold = Math.max(0.45, confidenceThreshold);
+      // The previous hard floor of 0.45 silently discarded new small
+      // motorcycles in "high recall" mode (whose detector threshold is
+      // 0.25). Tentative tracks still need repeated hits before display.
+      tracker.trackThreshold = Math.max(0.30, confidenceThreshold);
       const boxes = processOutput(
         output.data as Float32Array,
         confidenceThreshold,
