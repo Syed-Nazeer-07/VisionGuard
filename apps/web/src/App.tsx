@@ -17,7 +17,6 @@ import { Config } from './pages/Config'
 import { AuditLogs } from './pages/AuditLogs'
 import Analytics from './pages/Analytics'
 import { Reports } from './pages/Reports'
-import Analyze from './pages/Analyze'
 import Settings from './pages/Settings'
 import { VideoLibrary } from './pages/VideoLibrary'
 import { evidenceQueue } from './pipeline/evidence/queue'
@@ -78,7 +77,7 @@ function App() {
               <Route path="analytics" element={<Analytics />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="analyze" element={<Analyze />} />
+              <Route path="analyze" element={null} />
               <Route path="videos" element={<VideoLibrary />} />
               <Route path="video-review" element={<VideoReviewRedirect />} />
               <Route path="history" element={<Navigate to="/app/videos" replace />} />
