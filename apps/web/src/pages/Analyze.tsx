@@ -180,8 +180,13 @@ interface SavedSummary {
 }
 
 const EMPTY_METRICS: LiveMetrics = { fps: 0, latency: 0, frames: 0, droppedFrames: 0, detections: 0, created: 0, suppressed: 0, saved: 0, tracked: 0, queue: 0, resultAge: 0, renderedTracks: 0, staleDropped: 0, staleRejected: 0, workerErrors: 0, workerBusy: false };
-const MODEL_PATH = '/models/yolo11n.onnx';
-const MODEL_NAME = 'YOLO11n';
+// Explicit same-origin model selection. YOLO11s gives a higher general COCO
+// detection score but can be slower; the user must install its ONNX asset.
+// Do not fetch model URLs from arbitrary untrusted origins.
+const selectedModelPath = import.meta.env.VITE_YOLO_MODEL_PATH?.trim() || '/models/yolo11n.onnx';
+const MODEL_PATH = /^\/models\/yolo11[nsm]\.onnx$/.test(selectedModelPath)
+  ? selectedModelPath : '/models/yolo11n.onnx';
+const MODEL_NAME = MODEL_PATH.match(/yolo11([nsm])\.onnx$/)?.[0]?.replace('.onnx', '').toUpperCase() ?? 'YOLO11n';
 
 function describeError(e: unknown): string {
   if (e && typeof e === 'object') {
