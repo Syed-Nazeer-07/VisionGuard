@@ -74,14 +74,14 @@ END $$;
 DELETE FROM public.analysis_runs
 WHERE id IN ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
              'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
-DO $
+DO $$
 BEGIN
   IF (SELECT COUNT(*) FROM public.tracked_objects
       WHERE video_id = '11111111-1111-1111-1111-111111111111'
         AND analysis_run_id IS NULL AND track_id = 1) <> 2 THEN
     RAISE EXCEPTION 'Deleting runs damaged or rejected surviving history';
   END IF;
-END $;
+END $$;
 
 -- Re-applying the additive migration must remain safe.
 \i supabase/migrations/20261106020000_run_scoped_tracking.sql
