@@ -18,6 +18,9 @@ import { AuditLogs } from './pages/AuditLogs'
 import Analytics from './pages/Analytics'
 import { Reports } from './pages/Reports'
 import Analyze from './pages/Analyze'
+import { Cameras } from './pages/Cameras'
+import { Monitor } from './pages/Monitor'
+import SceneSetup from './pages/SceneSetup'
 import Settings from './pages/Settings'
 import { VideoLibrary } from './pages/VideoLibrary'
 import { evidenceQueue } from './pipeline/evidence/queue'
@@ -73,8 +76,10 @@ function App() {
           <Route path="/app" element={<RequireAuth />}>
             <Route element={<AppLayout />}>
               <Route index element={<AppHome />} />
-              <Route path="cameras" element={<Navigate to="/app/analyze" replace />} />
-              <Route path="monitor" element={<Navigate to="/app/analyze" replace />} />
+              <Route path="cameras" element={<Cameras />} />
+              <Route path="monitor" element={<Monitor />} />
+              <Route path="scene-setup/:id" element={<SceneSetup />} />
+              <Route path="scene-setup" element={<Navigate to="/app/cameras" replace />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
@@ -84,7 +89,6 @@ function App() {
               <Route path="history" element={<Navigate to="/app/videos" replace />} />
               <Route path="alerts" element={<Navigate to="/app/cases?tab=incidents" replace />} />
               <Route path="violations" element={<Navigate to="/app/cases?tab=incidents" replace />} />
-              <Route path="scene-setup" element={<Navigate to="/app/analyze" replace />} />
 
               {/* Staff operations */}
               <Route element={<RequireRole allowedRoles={['Viewer', 'Operator', 'Supervisor', 'Admin']} />}>
