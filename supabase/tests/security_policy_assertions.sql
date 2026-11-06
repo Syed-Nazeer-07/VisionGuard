@@ -44,5 +44,11 @@ BEGIN
       AND policyname = 'Video storage inserts require asset owner') THEN
     RAISE EXCEPTION 'Missing expected Phase 1 policies';
   END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE oid = 'public.can_manage_video_storage_object(text)'::regprocedure
+  ) THEN
+    RAISE EXCEPTION 'Missing video/artifact storage ownership helper';
+  END IF;
   RAISE NOTICE 'Phase 1 known-policy assertions passed';
 END $$;
