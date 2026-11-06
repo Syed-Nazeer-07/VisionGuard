@@ -8,7 +8,6 @@ authentication, rate limits and network egress isolation.
 from __future__ import annotations
 
 import ipaddress
-import shutil
 import socket
 import urllib.error
 import urllib.parse
@@ -98,10 +97,11 @@ def trusted_https_video_url(
     if not addresses:
         raise VideoSourceError("Trusted video host has no reachable addresses")
     try:
-        if any(not ipaddress.ip_address(address).is_global for address in addresses):
-            raise VideoSourceError("Video host resolved to an unsafe non-public address")
+        non_public = any(not ipaddress.ip_address(address).is_global for address in addresses)
     except ValueError as exc:
         raise VideoSourceError("Video host DNS result was invalid") from exc
+    if non_public:
+        raise VideoSourceError("Video host resolved to an unsafe non-public address")
     return raw
 
 
