@@ -14,7 +14,7 @@ export function iou(box1: BoundingBox, box2: BoundingBox): number {
   const area1 = box1.w * box1.h;
   const area2 = box2.w * box2.h;
 
-  return intersection / (area1 + area2 - intersection);
+  return intersection / Math.max(1e-6, area1 + area2 - intersection);
 }
 
 export function iom(box1: BoundingBox, box2: BoundingBox): number {
@@ -66,6 +66,10 @@ export function processOutput(
 ): BoundingBox[] {
   const numClasses = 80;
   const numAnchors = 8400;
+  if (!Number.isFinite(ratio) || ratio <= 0 || !Number.isFinite(origW) || !Number.isFinite(origH) ||
+      origW <= 0 || origH <= 0 || outputData.length < (4 + numClasses) * numAnchors) {
+    return [];
+  }
   const allowedClasses = [0, 1, 2, 3, 5, 7];
   const boxes: BoundingBox[] = [];
 
@@ -95,24 +99,26 @@ export function processOutput(
         continue;
       }
 
-      // Convert once from model space to source video pixel coordinates
-      const srcCx = Math.max(0, Math.min(origW, (cx - padW) / ratio));
-      const srcCy = Math.max(0, Math.min(origH, (cy - padH) / ratio));
-      const srcW = Math.max(1, Math.min(origW, w / ratio));
-      const srcH = Math.max(1, Math.min(origH, h / ratio));
+      // Unletterbox the *corners*, then clip the rectangle to the visible
+      // video. Clamping only the centre independently from width/height
+      // caused boxes to extend outside the source frame near the edges.
+      const left = Math.max(0, Math.min(origW, ((cx - w / 2) - padW) / ratio));
+      const top = Math.max(0, Math.min(origH, ((cy - h / 2) - padH) / ratio));
+      const right = Math.max(0, Math.min(origW, ((cx + w / 2) - padW) / ratio));
+      const bottom = Math.max(0, Math.min(origH, ((cy + h / 2) - padH) / ratio));
 
-      // Reject degenerate/non-finite coordinates, but do NOT apply arbitrary
-      // "lower road vehicles must be 65px tall" or aspect-ratio rules.
-      // Those rules systematically discarded small/distant motorcycles.
-      if (![srcCx, srcCy, srcW, srcH].every(Number.isFinite) || srcW < 3 || srcH < 3) {
+      // Keep small/distant motorcycles; reject only invalid or degenerate
+      // geometry, not arbitrary road position, class, or aspect-ratio rules.
+      if (![left, top, right, bottom].every(Number.isFinite) ||
+          right - left < 3 || bottom - top < 3) {
         continue;
       }
 
       boxes.push({
-        x: srcCx,
-        y: srcCy,
-        w: srcW,
-        h: srcH,
+        x: (left + right) / 2,
+        y: (top + bottom) / 2,
+        w: right - left,
+        h: bottom - top,
         prob: maxProb,
         classId: maxClassId,
         className: LABELS[maxClassId],
