@@ -278,7 +278,7 @@ export default function Analyze() {
   const analysisEngineRef = useRef(analysisEngine);
   analysisEngineRef.current = analysisEngine;
   const [syncPlayback, setSyncPlayback] = useState<boolean>(
-    () => localStorage.getItem('visionguard_sync_playback') === 'true'
+    () => localStorage.getItem('visionguard_sync_playback_user_opt_in_v2') === 'true'
   );
   const syncPlaybackRef = useRef(syncPlayback);
   syncPlaybackRef.current = syncPlayback;
@@ -287,7 +287,9 @@ export default function Analyze() {
   const lastPresentedFrameCountRef = useRef<number | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('visionguard_sync_playback', String(syncPlayback));
+    // The old version automatically wrote "true" into localStorage. Use a
+    // new explicit opt-in key so previously slowed videos return to 1×.
+    localStorage.setItem('visionguard_sync_playback_user_opt_in_v2', String(syncPlayback));
     if (videoRef.current && !syncPlayback) {
       videoRef.current.playbackRate = 1;
       setEffectivePlaybackRate(1);
