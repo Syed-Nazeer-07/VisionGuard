@@ -103,3 +103,12 @@ jobs:
         run: |
           command -v psql || (sudo apt-get update && sudo apt-get install -y postgresql-client)
           psql -X -v ON_ERROR_STOP=1 -f supabase/tests/run_track_history_integration.sql
+      - name: Verify cross-user RLS and owned-video artifact writes
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -d postgres -c "CREATE DATABASE visionguard_security_ci"
+          psql -X -v ON_ERROR_STOP=1 -d visionguard_security_ci -f supabase/tests/security_policy_integration.sql
