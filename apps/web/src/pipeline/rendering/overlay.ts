@@ -77,32 +77,12 @@ export function drawBoundingBoxes(
     if (track.w < 6 || track.h < 6) {
       continue;
     }
-    // Reject implausibly large bounding boxes covering majority of the frame
-    if (track.w > videoWidth * 0.85 || track.h > videoHeight * 0.85) {
-      continue;
-    }
-
+    // Display exactly the geometrically valid tracks accepted by the detector.
+    // Hardcoded assumptions about box aspect ratio or its position on the road
+    // made small motorcycles disappear as they moved through the picture.
     const rawClass = (track.className || 'vehicle').toLowerCase();
     const isPerson = rawClass === 'person' || rawClass === 'pedestrian';
     const vehicleType = (track.className || 'vehicle').toUpperCase();
-
-    // Geometric plausibility filter: discard road markings, stripes, and pole artifacts
-    if (isPerson) {
-      const pAspect = track.h / Math.max(1, track.w);
-      if (pAspect > 3.4 || pAspect < 1.1) {
-        continue;
-      }
-    } else {
-      const vAspect = track.w / Math.max(1, track.h);
-      if (vAspect > 4.0 || vAspect < 0.22) {
-        continue;
-      }
-      // Perspective road artifact rejection:
-      // Road markings and circular manhole covers in the lower foreground road cannot be smaller than 65px
-      if (track.y > videoHeight * 0.60 && track.h < 65 && (track.y + track.h * 0.5 < videoHeight - 15)) {
-        continue;
-      }
-    }
 
     const { x, y, w, h } = sourceCenterBoxToDisplay(
       { x: track.x, y: track.y, w: track.w, h: track.h },
