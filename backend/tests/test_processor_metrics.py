@@ -70,6 +70,8 @@ def test_video_summary_counts_detections_and_confirmed_speeding_episodes(tmp_pat
     class FakeSpeedEstimator:
         idx = 0
         is_calibrated = True
+        speed_limit = 60.0
+        tolerance = 10.0
 
         def __init__(self, **kwargs):
             pass
@@ -98,3 +100,15 @@ def test_video_summary_counts_detections_and_confirmed_speeding_episodes(tmp_pat
     assert summary["speed_violations_count"] == 2
     assert summary["unique_vehicles"] == 1
     assert sum(f["detection_count"] for f in result["frames"]) == 18
+
+    # The same 12 frames generate two speeding episodes at frames 3 and 10.
+    events = result["speeding_events"]
+    assert len(events) == summary["speed_violations_count"] == 2
+    assert [event["frame_id"] for event in events] == [3, 10]
+    assert all(event["track_id"] == 11 for event in events)
+    assert all(event["observation_type"] == "detection" and event["is_calibrated"] for event in events)
+    for event in events:
+        assert event["speed_kmh"] > event["speed_limit_kmh"] + event["tolerance_kmh"]
+        assert event["source_width"] == 640 and event["source_height"] == 480
+        assert event["bbox"] == {"x": 100.0, "y": 200.0, "w": 60.0, "h": 45.0}
+        assert 0 < event["confidence"] <= 1

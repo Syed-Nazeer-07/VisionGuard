@@ -254,7 +254,8 @@ class JobManager:
                 record.job_id,
                 result["video_metadata"],
                 result["summary"],
-                result["frames"]
+                result["frames"],
+                result.get("speeding_events", [])
             )
 
             # Update record status & summary
