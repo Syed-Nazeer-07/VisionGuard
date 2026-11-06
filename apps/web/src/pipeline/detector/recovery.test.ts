@@ -29,6 +29,38 @@ describe('vehicle-sensitive detector postprocessing', () => {
     expect(nonMaxSuppression(input, 0.45)).toHaveLength(1);
     expect(input[0].prob).toBe(0.4);
   });
+  it('clips partially visible motorcycles at the image edge without shifting the centre incorrectly', () => {
+    const output = syntheticOutput(3, 5, 620, 30, 50, 0.93);
+    const result = processOutput(output, 0.2, 0.45, 1, 0, 0, 640, 640);
+    expect(result).toHaveLength(1);
+    const box = result[0];
+    expect(box.x).toBeCloseTo(10, 5);
+    expect(box.y).toBeCloseTo(617.5, 5);
+    expect(box.w).toBeCloseTo(20, 5);
+    expect(box.h).toBeCloseTo(45, 5);
+    expect(box.x - box.w / 2).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.h / 2).toBeLessThanOrEqual(640);
+  });
+
+  it('unletterboxes and clips a motorcycle within a 1920x1080 source image', () => {
+    // 1920x1080 -> 640x360 centered in 640x640, 140px top/bottom padding.
+    // Object extends 15px into the top letterbox and must clip to y=0.
+    const output = syntheticOutput(3, 320, 155, 60, 60, 0.9);
+    const result = processOutput(output, 0.2, 0.45, 1 / 3, 0, 140, 1920, 1080);
+    expect(result).toHaveLength(1);
+    expect(result[0].x).toBeCloseTo(960, 5);
+    expect(result[0].y).toBeCloseTo(67.5, 5);
+    expect(result[0].w).toBeCloseTo(180, 5);
+    expect(result[0].h).toBeCloseTo(135, 5);
+  });
+
+  it('ignores malformed tensor shapes or invalid letterbox ratios', () => {
+    const output = syntheticOutput(3, 300, 300, 20, 15, 0.9);
+    expect(processOutput(new Float32Array(10), 0.2, 0.45)).toEqual([]);
+    expect(processOutput(output, 0.2, 0.45, 0)).toEqual([]);
+    expect(processOutput(output, 0.2, 0.45, Number.NaN)).toEqual([]);
+  });
+
   it('removes invalid and tiny degenerate detector boxes', () => {
     expect(processOutput(syntheticOutput(3, 300, 490, 0.1, 0.1, 0.9), 0.25, 0.45)).toHaveLength(0);
   });
