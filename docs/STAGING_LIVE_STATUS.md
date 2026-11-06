@@ -22,10 +22,11 @@ new isolated Supabase project and were **not** deployed to production.
 
 - Applied **30 original repo migrations** in filename order to a fresh
   Supabase 17.x PostgreSQL project, with success confirmed for each.
-- Applied three additional audited security migrations:
+- Applied four additional audited security migrations:
   `20261106185954_staging_policy_and_rpc_hardening.sql`,
-  `20261106190514_private_footage_and_owner_scoped_reads.sql`, and
-  `20261106191554_private_scheduled_report_downloads.sql`.
+  `20261106190514_private_footage_and_owner_scoped_reads.sql`,
+  `20261106191554_private_scheduled_report_downloads.sql`, and
+  `20261106191932_restrict_signed_report_links.sql`.
 - Normalized the originally generated migration ledger version IDs to match
   the repository's canonical filenames, enabling future Supabase CLI
   migration-history comparisons. Rechecked the list.
@@ -107,10 +108,11 @@ or signed-URL playback test**; no actual Supabase Auth session was issued.
 7. **Scheduler/B2:** Report scheduler secret, trusted invocation, and
    Backblaze credentials/function deployment are intentionally absent
    from this new staging project.
-8. **Private reports:** The reports bucket was switched to private and
-   the scheduler now emails seven-day signed URLs. This change is verified
-   structurally but not tested via a deployed scheduler/email integration;
-   archived emailed links expire and require re-signing by authorized staff.
+8. **Private reports:** The reports bucket is private, the scheduler
+   emails seven-day signed links, and the reports/scheduled_reports table
+   reads are now scoped to authorized staff or the creating user. These
+   changes have not yet been tested via a deployed scheduler/email run;
+   archived email links expire and require re-signing by authorized staff.
 9. **Performance:** Some unindexed FKs, multiple permissive policies,
    and unused-index notices remain in the performance advisor.
    These are not equivalent to a completed performance tuning pass.
