@@ -13,38 +13,35 @@ describe('ByteTracker', () => {
     className
   });
 
-  it('maintains consistent track ID, class, confidence, and exact detected box for active track', () => {
+  it('shows a car only after 3 real observations and uses the exact last box', () => {
     const tracker = new ByteTracker();
-    const det1 = makeBox(1, 100, 200, 'car', 2, 0.92);
+    tracker.reset();
+    expect(tracker.update([makeBox(1, 100, 200, 'car', 2, .92)])).toEqual([]);
+    expect(tracker.update([makeBox(1, 105, 202, 'car', 2, .95)])).toEqual([]);
+    const tracks = tracker.update([makeBox(1, 110, 204, 'car', 2, .96)]);
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0]).toMatchObject({
+      trackId: 1, state: 'Confirmed', className: 'car',
+      x: 110, y: 204, prob: .96, hitCount: 3
+    });
+  });
 
-    // Frame 1: Tentative track created
-    const tracks1 = tracker.update([det1]);
-    expect(tracks1.length).toBe(1);
-    expect(tracks1[0].trackId).toBe(1);
-    expect(tracks1[0].className).toBe('car');
-    expect(tracks1[0].prob).toBe(0.92);
-    expect(tracks1[0].x).toBe(100);
-    expect(tracks1[0].y).toBe(200);
-
-    // Frame 2: Confirmed track updated
-    const det2 = makeBox(2, 105, 202, 'car', 2, 0.95);
-    const tracks2 = tracker.update([det2]);
-    expect(tracks2.length).toBe(1);
-    expect(tracks2[0].trackId).toBe(1); // Same track ID
-    expect(tracks2[0].state).toBe('Confirmed');
-    expect(tracks2[0].className).toBe('car');
-    expect(tracks2[0].prob).toBe(0.95);
-    // Uses the exact detected box coordinates, not displaced Kalman prediction
-    expect(tracks2[0].x).toBe(105);
-    expect(tracks2[0].y).toBe(202);
+  it('keeps a two-wheeler after 2 consecutive observations with lower confidence', () => {
+    const tracker = new ByteTracker();
+    tracker.reset();
+    tracker.trackThreshold = .40;
+    expect(tracker.update([makeBox(1, 100, 200, 'motorcycle', 3, .31)])).toEqual([]);
+    const tracks = tracker.update([makeBox(1, 103, 201, 'motorcycle', 3, .33)]);
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0].className).toBe('motorcycle');
   });
 
   it('recovers lost tracks when vehicle is redetected instead of fragmenting into new track ID', () => {
     const tracker = new ByteTracker();
     tracker.reset();
     // Frame 1 & 2: establish confirmed track
-    const tracks1 = tracker.update([makeBox(1, 100, 100)]);
-    const initialId = tracks1[0].trackId;
+    tracker.update([makeBox(1, 100, 100)]);
+    const initialId = tracker.tracks[0].trackId;
     tracker.update([makeBox(1, 102, 101)]);
 
     // Frame 3: missed detection (occlusion) -> track becomes Lost
@@ -83,6 +80,8 @@ describe('ByteTracker', () => {
 
     // Next frame: at the exact same location, a person is detected
     const personDet = makeBox(2, 100, 100, 'person', 0, 0.9);
+    tracker.update([personDet]);
+    tracker.update([personDet]);
     const tracks = tracker.update([personDet]);
 
     // The person detection must NOT take over car track #1
@@ -94,8 +93,8 @@ describe('ByteTracker', () => {
   it('preserves track ID across car and truck flip and votes class stably', () => {
     const tracker = new ByteTracker();
     // 3 confident car frames
-    const tracks1 = tracker.update([makeBox(1, 100, 100, 'car', 2, 0.95)]);
-    const initialId = tracks1[0].trackId;
+    tracker.update([makeBox(1, 100, 100, 'car', 2, 0.95)]);
+    const initialId = tracker.tracks[0].trackId;
     tracker.update([makeBox(1, 102, 101, 'car', 2, 0.95)]);
     tracker.update([makeBox(1, 104, 102, 'car', 2, 0.95)]);
 
@@ -108,8 +107,8 @@ describe('ByteTracker', () => {
 
   it('matches track under larger frame displacement with 0.2 threshold', () => {
     const tracker = new ByteTracker();
-    const tracks1 = tracker.update([makeBox(1, 100, 100, 'car', 2, 0.9)]);
-    const initialId = tracks1[0].trackId;
+    tracker.update([makeBox(1, 100, 100, 'car', 2, 0.9)]);
+    const initialId = tracker.tracks[0].trackId;
     tracker.update([makeBox(1, 100, 100, 'car', 2, 0.9)]);
 
     // Move by 30 pixels out of 50px width (IOU is around 0.25)
