@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export a single-file static YOLO11n ONNX model for VisionGuard.
+"""Export a single-file static COCO80 YOLO11 n/s/m ONNX model for VisionGuard.
 
 Run on a compatible x64 Python environment or use the explicitly-triggered
 GitHub Actions export workflow. No model weights are committed to Git.
@@ -22,26 +22,26 @@ else:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--weights", default="yolo11n.pt",
-                        help="Existing local Ultralytics YOLO11n .pt weights (default: yolo11n.pt)")
+                        help="Official YOLO11n/s/m .pt weights or compatible local checkpoint")
     parser.add_argument("--output", type=Path, default=DEFAULT_MODEL,
                         help="Output ONNX file used by both web and Python backends")
     parser.add_argument("--download-upstream", action="store_true",
-                        help="Allow Ultralytics to fetch upstream yolo11n.pt if missing")
+                        help="Allow Ultralytics to fetch approved upstream YOLO11n/s/m weights")
     parser.add_argument("--acknowledge-license", action="store_true",
                         help="Confirm you reviewed upstream Ultralytics model and code licensing")
     args = parser.parse_args(argv)
 
     if not args.acknowledge_license:
-        parser.error("Review upstream YOLO11n and Ultralytics license terms, then pass --acknowledge-license")
+        parser.error("Review upstream YOLO11/Ultralytics license terms, then pass --acknowledge-license")
     weights = Path(args.weights).expanduser()
     if weights.suffix.lower() != ".pt":
         parser.error("Provide a compatible .pt checkpoint; the exporter produces the .onnx file")
     if not weights.is_file() and not (
-        args.download_upstream and args.weights == "yolo11n.pt"
+        args.download_upstream and args.weights in ("yolo11n.pt", "yolo11s.pt", "yolo11m.pt")
     ):
         parser.error(
-            "Weights file is missing. Supply --weights /path/to/yolo11n.pt, "
-            "or explicitly use --download-upstream to fetch official YOLO11n weights."
+            "Weights file is missing. Supply --weights /path/to/model.pt, "
+            "or explicitly use --download-upstream for official YOLO11n/s/m weights."
         )
     if args.output.suffix.lower() != ".onnx":
         parser.error("--output must be an .onnx file")
@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         **report,
         "next": (
             "The model file is excluded from Git. Deploy this binary at "
-            "/models/yolo11n.onnx alongside the built frontend; "
+            f"/models/{target.name} alongside the built frontend; "
             "the Python backend reads it from the same directory by default."
         ),
     }, indent=2))
