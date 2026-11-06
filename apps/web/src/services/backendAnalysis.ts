@@ -427,6 +427,8 @@ export function clearActiveBackendJob(): void {
   setActiveBackendJob(null);
 }
 
+import type { BackendSpeedingEvent } from './backendSpeedIncidents';
+
 export interface BackendArtifactPayload {
   version: string;
   job_id: string;
@@ -446,6 +448,8 @@ export interface BackendArtifactPayload {
   summary: BackendJobSummary;
   total_frames: number;
   frames: BackendFrameResult[];
+  /** 1.1+ artifacts: true frame-localized, calibrated speeding candidates. */
+  speeding_events?: BackendSpeedingEvent[];
 }
 
 /**
