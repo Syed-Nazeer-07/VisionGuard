@@ -51,6 +51,7 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
   const [testRequest, setTestRequest] = useState<string | null>(null);
+  const [testAttempt, setTestAttempt] = useState(0);
   const [testError, setTestError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -93,6 +94,7 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
     }
     // Only the video element's real 'playing' event indicates success.
     setTestRequest(source.url);
+    setTestAttempt(n => n + 1); // Force a fresh video connection on every retry.
     setIsTesting(true);
   };
 
@@ -309,7 +311,7 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
 
                 <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center relative">
                   {testRequest ? (
-                    <CameraStream camera={{ source_type: 'hls', source_url: testRequest }} controls
+                    <CameraStream key={testAttempt} camera={{ source_type: 'hls', source_url: testRequest }} controls
                       onPlayback={(status, reason) => {
                         setIsTesting(false);
                         setTestResult(status === 'playing' ? 'success' : 'error');
