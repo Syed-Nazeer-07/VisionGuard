@@ -7,6 +7,7 @@ from app.pipeline.detector import YOLODetector
 from app.pipeline.tracker import ByteTracker
 from app.pipeline.interpolator import TrackInterpolator
 from app.pipeline.speed import SpeedEstimator
+from app.pipeline.overspeed_events import OverspeedEventCounter
 from app.config import settings
 from app.core.logging import logger
 
@@ -64,7 +65,8 @@ class VideoProcessor:
             unique_tracks = set()
             vehicle_track_classes: Dict[int, Dict[str, int]] = {}
             max_vehicles_in_frame = 0
-            speed_violations_count = 0
+            overspeed_events = OverspeedEventCounter()
+            detections_generated = 0
             speeds_recorded: List[float] = []
 
             # Resolve frame_stride: fast processing uses stride 2
@@ -113,6 +115,7 @@ class VideoProcessor:
 
                 # Run YOLO detection with job-specific detection profile thresholds
                 raw_boxes = self.detector.detect(frame, conf_threshold=conf_threshold, iou_threshold=iou_threshold)
+                detections_generated += len(raw_boxes)
 
                 # Run tracker
                 tracks = tracker.update(raw_boxes)
@@ -146,8 +149,13 @@ class VideoProcessor:
                             t["speed"] = speed_res["speed"]
                             t["velocity"] = speed_res["velocity"]
                             t["is_overspeed"] = speed_res["is_overspeed"]
-                            if speed_res["is_overspeed"]:
-                                speed_violations_count += 1
+                            # Count a new episode only after confirmed consecutive
+                            # detector observations, not for every flagged frame.
+                            overspeed_events.observe(
+                                track_id,
+                                bool(speed_res["is_overspeed"]),
+                                observed=t.get("observation_type") == "detection",
+                            )
                             if speed_res["speed"] is not None:
                                 speeds_recorded.append(speed_res["speed"])
                         else:
@@ -250,7 +258,8 @@ class VideoProcessor:
                 "vehicle_counts_by_class": unique_vehicle_counts_by_class,
                 "max_vehicles_in_frame": max_vehicles_in_frame,
                 "average_speed_kmh": avg_speed,
-                "speed_violations_count": speed_violations_count,
+                "speed_violations_count": overspeed_events.count,
+                "detections_generated": detections_generated,
                 "detection_profile": detection_profile,
                 "confidence_threshold": round(conf_threshold if conf_threshold is not None else settings.CONFIDENCE_THRESHOLD, 2),
                 "iou_threshold": round(iou_threshold if iou_threshold is not None else settings.IOU_THRESHOLD, 2),

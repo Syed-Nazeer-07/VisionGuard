@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend lint, typecheck, build, and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        id: install
+        run: npm ci
+      # Some npm lockfiles omit platform-specific optional packages. Pin the
+      # Linux binary to the exact installed oxlint version, without changing
+      # package.json or package-lock.json.
+      - name: Ensure Linux oxlint binding is installed
+        run: |
+          OXLINT_VERSION=$(node -p "require('./apps/web/node_modules/oxlint/package.json').version")
+          npm install --no-save --no-package-lock --no-audit "@oxlint/binding-linux-x64-gnu@${OXLINT_VERSION}"
+      - run: npm run lint
+      - run: npm run build
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+      - run: npm run test -w web
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+
+  backend-source:
+    name: Backend syntax and deterministic analysis tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m compileall -q backend/app backend/tests
+      - run: python -m pip install -r backend/requirements.txt
+      # Tests use deterministic fake detector/tracker and no external model.
+      # --noconftest avoids importing the real API startup fixture.
+      - run: PYTHONPATH=backend python -m pytest -q --noconftest backend/tests/test_overspeed_events.py backend/tests/test_processor_metrics.py
+      # No YOLO model weights are stored in Git. This check deliberately
+      # avoids claiming to run the real-video inference test suite.
+      - name: Check overspeed counter behavior
+        run: |
+          PYTHONPATH=backend python - <<'PY'
+          from app.pipeline.overspeed_events import OverspeedEventCounter
+          counter = OverspeedEventCounter()
+          for flag in [True] * 8 + [False] * 3 + [True] * 3:
+              counter.observe(1, flag)
+          assert counter.count == 2, counter.count
+          print("Speeding episode count: OK")
+          PY

@@ -50,6 +50,7 @@ class JobProgress(BaseModel):
 class JobSummary(BaseModel):
     total_frames: int = 0
     processed_frames: int = 0
+    detections_generated: int = 0  # Actual YOLO boxes, not the processed-frame count
     duration_seconds: float = 0.0
     unique_vehicles: int = 0
     vehicle_counts_by_class: Dict[str, int] = Field(default_factory=dict)

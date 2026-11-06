@@ -48,6 +48,7 @@ import {
   type ProcessingSpeed,
   PROCESSING_SPEEDS
 } from '../services/backendAnalysis';
+import { countBackendDetections } from '../services/analysisMetrics';
 import type { TrackedObject } from '../pipeline/types';
 import { TrackStateStore } from '../pipeline/tracker/trackStore';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
@@ -268,7 +269,7 @@ export default function Analyze() {
   const [, setBackendFrames] = useState<BackendFrameResult[] | null>(null);
   const backendFramesRef = useRef<BackendFrameResult[] | null>(null);
   const activeBackendJobIdRef = useRef<string | null>(null);
-  const [analysisStage, setAnalysisStage] = useState<'idle' | 'preparing' | 'uploading' | 'queued' | 'analyzing' | 'finalizing' | 'completed' | 'failed' | 'cancelled'>('idle');
+  const [analysisStage, setAnalysisStage] = useState<'idle' | 'preparing' | 'uploading' | 'queued' | 'analyzing' | 'finalizing' | 'completed' | 'persistence_failed' | 'failed' | 'cancelled'>('idle');
   const [isPollingRetrying, setIsPollingRetrying] = useState<boolean>(false);
   const [isProgressStalled, setIsProgressStalled] = useState<boolean>(false);
   const smoothedFpsRef = useRef<number>(0);
@@ -2104,15 +2105,16 @@ export default function Analyze() {
           if (activeBackendJobIdRef.current !== currentJobId) return;
           backendFramesRef.current = frames;
           setBackendFrames(frames);
-          setRunState('COMPLETED');
-          setAnalysisStage('completed');
+          const actualDetections = countBackendDetections(frames, st.summary?.detections_generated);
+          setRunState('COMPLETED'); // Inference is done; history persistence is a separate operation.
+          setAnalysisStage(st.save_to_history ? 'finalizing' : 'completed');
           if (st.summary) {
             setLive({
               fps: Math.round(st.progress?.processing_fps || 30),
               latency: 0,
               frames: st.summary.processed_frames,
               droppedFrames: 0,
-              detections: st.summary.processed_frames,
+              detections: actualDetections,
               created: 0,
               suppressed: 0,
               saved: 0,
@@ -2130,6 +2132,7 @@ export default function Analyze() {
           // Persist to Supabase if Save to History is enabled
           if (st.save_to_history && st.video_id) {
             const vid = st.video_id;
+            let persistedRunId: string | null = null;
             try {
               // 1. Download artifact blob from local backend (reuse if already downloaded)
               if (!artifactBlob) {
@@ -2140,13 +2143,12 @@ export default function Analyze() {
               const run = await db.analysisRuns.create({
                 camera_id: null,
                 video_id: vid,
-                status: 'completed',
+                status: 'running', // Mark completed only once the artifact/rows are durable.
                 started_at: st.created_at,
-                ended_at: st.completed_at || new Date().toISOString(),
                 fps: Math.round(st.progress?.processing_fps || 30),
-                frames_processed: st.summary?.processed_frames || frames.length,
-                detections_generated: st.summary?.processed_frames || frames.length,
-                incidents_created: st.summary?.speed_violations_count || 0,
+                frames_processed: st.summary?.processed_frames ?? frames.length,
+                detections_generated: actualDetections,
+                incidents_created: 0, // Backend speed summaries are not persisted incident rows.
                 incidents_suppressed: 0,
                 metrics: {
                   schema_version: '1.0',
@@ -2158,6 +2160,8 @@ export default function Analyze() {
                   summary: st.summary as any
                 }
               });
+
+              persistedRunId = run.id;
 
               // 3. Save artifact to Supabase Storage
               const { storagePath, bucket } = await saveArtifactToStorage(vid, run.id, artifactBlob);
@@ -2175,7 +2179,7 @@ export default function Analyze() {
                   frame_stride: st.frame_stride,
                   summary: st.summary as any
                 }
-              }).catch(() => {});
+              });
 
               // Deduplicate & compile unique tracks from all processed frames
               const trackMap = new Map<number, {
@@ -2237,14 +2241,14 @@ export default function Analyze() {
                   .from('tracked_objects')
                   .upsert(rows, { onConflict: 'video_id,track_id' });
                 if (upsertErr) {
-                  console.warn('Backend tracking persistence failed:', upsertErr);
+                  throw new Error(`Backend tracking persistence failed: ${upsertErr.message}`);
                 }
               }
 
               // 5. Update video_assets ONLY AFTER artifact is persisted
               const { data: currentAsset } = await supabase.from('video_assets').select('metadata').eq('id', vid).maybeSingle();
               const existingMeta = (currentAsset?.metadata && typeof currentAsset.metadata === 'object' && !Array.isArray(currentAsset.metadata) ? currentAsset.metadata : {}) as Record<string, any>;
-              await supabase.from('video_assets').update({
+              const { data: updatedAsset, error: assetUpdateError } = await supabase.from('video_assets').update({
                 processing_status: 'completed',
                 duration: st.summary?.duration_seconds,
                 metadata: {
@@ -2262,16 +2266,43 @@ export default function Analyze() {
                   average_speed_kmh: st.summary?.average_speed_kmh ?? null,
                   speed_violations_count: st.summary?.speed_violations_count ?? 0
                 }
-              }).eq('id', vid);
+              }).eq('id', vid).select('id').maybeSingle();
+              if (assetUpdateError || !updatedAsset) {
+                throw new Error(`Video history update failed: ${assetUpdateError?.message ?? 'asset missing or access denied'}`);
+              }
 
-              setSaved({ incidents: st.summary?.speed_violations_count || 0, tracks: trackMap.size, runs: 1 });
+              await db.analysisRuns.update(run.id, {
+                status: 'completed',
+                ended_at: st.completed_at || new Date().toISOString()
+              });
+              if (activeBackendJobIdRef.current === currentJobId) {
+                setSaved({ incidents: 0, tracks: trackMap.size, runs: 1 });
+                setSaveError(null);
+                setAnalysisStage('completed');
+              }
               analysisLogger.log({
                 category: 'PERSISTENCE',
                 message: `Persisted analysis artifact and ${trackMap.size} tracks to History for video "${displayName}"`
               });
             } catch (err) {
-              console.warn('Failed to persist backend results to History:', err);
+              const message = describeError(err);
+              console.error('Failed to persist backend results to History:', err);
+              if (persistedRunId) {
+                await db.analysisRuns.update(persistedRunId, {
+                  status: 'failed',
+                  ended_at: new Date().toISOString()
+                }).catch((statusError) => console.warn('Could not mark failed persistence run:', statusError));
+              }
+              if (activeBackendJobIdRef.current === currentJobId) {
+                setSaved(null);
+                setSaveError(`Backend analysis succeeded but results were not fully saved: ${message}`);
+                setAnalysisStage('persistence_failed');
+              }
+              analysisLogger.log({ category: 'ERROR', message: `Backend history persistence failed: ${message}` });
             }
+          } else if (st.save_to_history) {
+            setSaveError('Save to History was requested, but no persisted video ID is available.');
+            setAnalysisStage('persistence_failed');
           }
 
           analysisLogger.log({
@@ -2553,7 +2584,11 @@ export default function Analyze() {
             targetVideoId = videoId;
             setPendingFile(null);
           } catch (err) {
+            const message = `Cannot save this video to History: ${describeError(err)}. Retry the upload, or turn off Save to History for temporary analysis.`;
             console.error('Upload could not start:', err);
+            setPendingFile({ name: file.name, size: file.size, error: message });
+            setError(message);
+            return; // Do not silently run a supposedly persistent backend job without an asset.
           }
         }
 
@@ -2893,7 +2928,7 @@ export default function Analyze() {
         {saveError && (
           <div className="bg-amber-50 border border-amber-200 text-amber-800 px-3.5 py-2.5 rounded-md text-xs flex items-center gap-2" id="analyze-save-error">
             <Clock className="w-4 h-4 shrink-0 text-amber-600" />
-            <span>Detections active, but persistence failed: {saveError}</span>
+            <span>Saving results failed: {saveError}</span>
           </div>
         )}
 
