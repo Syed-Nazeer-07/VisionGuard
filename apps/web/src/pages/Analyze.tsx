@@ -18,6 +18,7 @@ import {
   diagnosePipeline
 } from '../pipeline/worker/frameSync';
 import { InferenceCoordinator } from '../pipeline/worker/inferenceCoordinator';
+import { recommendedPlaybackRate, estimateVideoFrameRate } from '../pipeline/worker/syncedPlayback';
 import type { ResultMessage, WorkerOutputMessage, CalibrationData, Point } from '../pipeline/types';
 import { validateVideoCalibration } from '../pipeline/tracker/calibrationValidation';
 import { VideoCalibrationOverlay } from '../components/analysis/VideoCalibrationOverlay';
@@ -271,6 +272,22 @@ export default function Analyze() {
   });
   const analysisEngineRef = useRef(analysisEngine);
   analysisEngineRef.current = analysisEngine;
+  const [syncPlayback, setSyncPlayback] = useState<boolean>(
+    () => localStorage.getItem('visionguard_sync_playback') !== 'false'
+  );
+  const syncPlaybackRef = useRef(syncPlayback);
+  syncPlaybackRef.current = syncPlayback;
+  const [effectivePlaybackRate, setEffectivePlaybackRate] = useState(1);
+  const sourceFrameRateRef = useRef(30);
+  const lastPresentedFrameCountRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('visionguard_sync_playback', String(syncPlayback));
+    if (!syncPlayback && videoRef.current) {
+      videoRef.current.playbackRate = 1;
+      setEffectivePlaybackRate(1);
+    }
+  }, [syncPlayback]);
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
   const [backendAvailable, setBackendAvailable] = useState<boolean>(false);
   const [backendJob, setBackendJob] = useState<BackendJobStatus | null>(null);
@@ -361,6 +378,10 @@ export default function Analyze() {
     analysisEngineRef.current = engine;
     setAnalysisEngine(engine);
     localStorage.setItem('visionguard_analysis_engine', engine);
+    if (videoRef.current && engine !== 'browser') {
+      videoRef.current.playbackRate = 1;
+      setEffectivePlaybackRate(1);
+    }
 
     // Cleanly clear overlays and incompatible cached results without resetting the loaded source or preview player
     clearOverlayCanvas();
@@ -870,7 +891,17 @@ export default function Analyze() {
   const scheduleNext = (video: HTMLVideoElement) => {
     if (typeof video.requestVideoFrameCallback === 'function') {
       video.requestVideoFrameCallback((_now, metadata) => {
+        const previousMedia = lastPresentedMediaTimeRef.current;
+        const previousFrame = lastPresentedFrameCountRef.current;
+        if (previousMedia !== null && previousFrame !== null) {
+          sourceFrameRateRef.current = estimateVideoFrameRate(
+            sourceFrameRateRef.current,
+            metadata.presentedFrames - previousFrame,
+            metadata.mediaTime - previousMedia
+          );
+        }
         lastPresentedMediaTimeRef.current = metadata.mediaTime;
+        lastPresentedFrameCountRef.current = metadata.presentedFrames;
         processFrame(metadata.mediaTime);
       });
     } else {
@@ -1285,6 +1316,20 @@ export default function Analyze() {
     drawOverlay(); // redraw immediately; do not wait for the next presented frame
 
     const video = videoRef.current;
+    if (video && !video.paused && analysisEngineRef.current === 'browser' && syncPlaybackRef.current) {
+      const elapsedMs = outcome.request
+        ? Math.max(msg.inferenceTime, performance.now() - outcome.request.startedAt)
+        : msg.inferenceTime;
+      const target = recommendedPlaybackRate(elapsedMs, sourceFrameRateRef.current);
+      // Low-pass the playback rate to avoid oscillation between fast/slow
+      // frames on WebGPU and WASM. Lower video speed is explicit in the UI.
+      const current = video.playbackRate || 1;
+      const next = Math.max(0.2, Math.min(1, 0.65 * current + 0.35 * target));
+      if (Math.abs(current - next) > 0.012) {
+        video.playbackRate = next;
+        setEffectivePlaybackRate(Math.round(next * 100) / 100);
+      }
+    }
     if (video && !video.paused && runStateRef.current === 'ANALYZING' && !loopActiveRef.current) {
       startLoop();
     }
@@ -1435,6 +1480,10 @@ export default function Analyze() {
     const video = videoRef.current;
     if (video) {
       video.pause();
+      video.playbackRate = 1;
+      setEffectivePlaybackRate(1);
+      sourceFrameRateRef.current = 30;
+      lastPresentedFrameCountRef.current = null;
       if (video.getAttribute('src')) {
         video.removeAttribute('src');
         video.load(); // aborts the previous resource; its pending events are dropped
@@ -2987,6 +3036,16 @@ export default function Analyze() {
                 Local Backend
               </button>
             </div>
+            {analysisEngine === 'browser' && (
+              <label title="Adapt video playback to the real inference throughput so bounding boxes stay aligned. Disable for normal 1× video playback."
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-700 select-none cursor-pointer shrink-0">
+                <input type="checkbox" checked={syncPlayback}
+                  onChange={event => setSyncPlayback(event.target.checked)}
+                  className="accent-indigo-600 w-3.5 h-3.5" />
+                Sync video to AI
+                <span className="font-mono text-indigo-700">{effectivePlaybackRate.toFixed(2)}×</span>
+              </label>
+            )}
           </div>
 
           <input
