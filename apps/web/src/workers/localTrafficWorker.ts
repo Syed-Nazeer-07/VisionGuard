@@ -95,7 +95,12 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
     const processed = preprocess(message.bitmap, message.sourceWidth, message.sourceHeight);
     const feeds = { [session.inputNames[0]]: processed.tensor };
     const output = await session.run(feeds);
-    if (thisEpoch !== epoch) return;
+    if (thisEpoch !== epoch) {
+      self.postMessage({
+        type: 'skipped', requestId: message.requestId, generation: message.generation
+      });
+      return;
+    }
     const boxes = decodeTrafficVehicles(
       output[session.outputNames[0]].data as Float32Array,
       message.sourceWidth, message.sourceHeight,
