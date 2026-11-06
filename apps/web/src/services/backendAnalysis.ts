@@ -36,15 +36,15 @@ export const DETECTION_PROFILES: Record<DetectionProfile, DetectionProfileConfig
   balanced: {
     id: 'balanced',
     label: 'Balanced',
-    description: 'Benchmark reference: 0.20 confidence / 0.45 IoU. May increase false positives on new scenes.',
-    confidenceThreshold: 0.20,
+    description: 'Cleaner boxes: suppress uncertain road artifacts; two-wheelers have a lower class-specific threshold. Can miss distant vehicles.',
+    confidenceThreshold: 0.40,
     iouThreshold: 0.45
   },
   high_recall: {
     id: 'high_recall',
     label: 'High Recall',
-    description: 'Experimental high recall (0.15 conf / 0.45 IoU): more distant vehicles, more potential false positives.',
-    confidenceThreshold: 0.15,
+    description: 'More distant motorcycles; also more false positives. Use when detection coverage matters more than precision.',
+    confidenceThreshold: 0.25,
     iouThreshold: 0.45
   }
 };
