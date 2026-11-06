@@ -85,9 +85,16 @@ export function processOutput(
       }
     }
 
-    // The selected detection profile sets the confidence threshold. The
-    // classifier should not silently hard-code a higher threshold for people.
-    const minConf = confidenceThreshold;
+    // On road footage a 0.15–0.20 universal threshold made manholes,
+    // bollards and lane paint appear as CAR/PERSON boxes. Apply stronger
+    // minimum evidence for those classes while preserving a lower threshold
+    // for small motorcycles and bicycles, which have much poorer recall.
+    // These thresholds are heuristics, NOT proof of scene understanding.
+    const minConf = maxClassId === 0
+      ? Math.max(0.58, confidenceThreshold)
+      : maxClassId === 1 || maxClassId === 3
+        ? Math.max(0.25, confidenceThreshold - 0.10)
+        : confidenceThreshold;
     if (maxProb >= minConf && allowedClasses.includes(maxClassId)) {
       const cx = outputData[0 * numAnchors + i];
       const cy = outputData[1 * numAnchors + i];
