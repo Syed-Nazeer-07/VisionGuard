@@ -160,39 +160,54 @@ CREATE POLICY "Staff can update evidence" ON storage.objects
 DROP POLICY IF EXISTS "Authenticated users can upload videos" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can update their videos" ON storage.objects;
 DROP POLICY IF EXISTS "Authenticated users can delete their videos" ON storage.objects;
+-- Storage keys have two supported shapes:
+--   <video-uuid>/original.<extension>        original Supabase video
+--   artifacts/<video-uuid>/<run-uuid>.json.gz  saved backend inference
+-- The saved-analysis artifact is not video_assets.storage_path. Authorizing
+-- only that column previously broke Save to History after this migration.
+CREATE OR REPLACE FUNCTION public.can_manage_video_storage_object(object_key TEXT)
+RETURNS BOOLEAN
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.video_assets v
+    WHERE (
+      v.uploaded_by = auth.uid()
+      OR public.auth_user_role() IN ('Supervisor', 'Admin')
+    ) AND (
+      object_key LIKE (v.id::text || '/original.%')
+      OR EXISTS (
+        SELECT 1 FROM public.analysis_runs r
+        WHERE r.video_id = v.id
+          AND object_key = ('artifacts/' || v.id::text || '/' || r.id::text || '.json.gz')
+      )
+    )
+  );
+$$;
+REVOKE ALL ON FUNCTION public.can_manage_video_storage_object(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.can_manage_video_storage_object(TEXT) TO authenticated;
+
 CREATE POLICY "Video storage inserts require asset owner" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (
-    bucket_id = 'videos' AND EXISTS (
-      SELECT 1 FROM public.video_assets v
-      WHERE v.id::text = split_part(name, '/', 1)
-        AND v.uploaded_by = auth.uid()
-    )
+    bucket_id = 'videos'
+    AND public.can_manage_video_storage_object(name)
   );
 CREATE POLICY "Video storage updates require asset owner" ON storage.objects
   FOR UPDATE TO authenticated
   USING (
-    bucket_id = 'videos' AND EXISTS (
-      SELECT 1 FROM public.video_assets v
-      WHERE v.storage_path = name AND
-        (v.uploaded_by = auth.uid() OR public.auth_user_role() IN ('Supervisor', 'Admin'))
-    )
+    bucket_id = 'videos'
+    AND public.can_manage_video_storage_object(name)
   )
   WITH CHECK (
-    bucket_id = 'videos' AND EXISTS (
-      SELECT 1 FROM public.video_assets v
-      WHERE v.storage_path = name AND
-        (v.uploaded_by = auth.uid() OR public.auth_user_role() IN ('Supervisor', 'Admin'))
-    )
+    bucket_id = 'videos'
+    AND public.can_manage_video_storage_object(name)
   );
 CREATE POLICY "Video storage deletions require asset owner" ON storage.objects
   FOR DELETE TO authenticated
   USING (
-    bucket_id = 'videos' AND EXISTS (
-      SELECT 1 FROM public.video_assets v
-      WHERE v.storage_path = name AND
-        (v.uploaded_by = auth.uid() OR public.auth_user_role() IN ('Supervisor', 'Admin'))
-    )
+    bucket_id = 'videos'
+    AND public.can_manage_video_storage_object(name)
   );
 
 -- Legacy records and storage permissions intentionally stay readable here.
