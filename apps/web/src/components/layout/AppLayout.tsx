@@ -1,3 +1,4 @@
+import LocalAnalyze from '../../pages/LocalAnalyze'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { ErrorBoundary } from '../ErrorBoundary'
 import { 
@@ -364,7 +365,13 @@ export function AppLayout() {
         <div className="flex-1 overflow-y-auto overflow-x-hidden bg-[#F8FAFC] p-4 sm:p-6 lg:p-8 min-w-0">
           <div className="w-full max-w-[1700px] mx-auto min-w-0">
             <ErrorBoundary>
-              <Outlet />
+              {/* Keep the local video/decoder/worker mounted while visiting other dashboard pages. */}
+              <div style={location.pathname === '/app/analyze'
+                ? { display: 'block' }
+                : { position: 'absolute', left: '-200vw', top: 0, width: '100%', visibility: 'hidden', pointerEvents: 'none' }}>
+                <LocalAnalyze />
+              </div>
+              {location.pathname !== '/app/analyze' && <Outlet />}
             </ErrorBoundary>
           </div>
         </div>
