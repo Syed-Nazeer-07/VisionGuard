@@ -74,9 +74,23 @@ describe('drawBoundingBoxes', () => {
     expect(ctx.fillText).toHaveBeenCalled();
     const textCalls = (ctx.fillText as any).mock.calls;
     const labelString = textCalls[0][0];
-    // Must NOT contain negative speed
+    // Invalid km/h must NOT be silently fabricated as 0 km/h.
     expect(labelString).not.toContain('-38');
-    expect(labelString).toContain('0 km/h');
+    expect(labelString).not.toContain('km/h');
+  });
+
+  it('shows actual confidence on demand for investigating false CAR/PERSON boxes', () => {
+    const ctx = getMockCtx();
+    drawBoundingBoxes(ctx, [createTrack(21, { prob: 0.42 })], 800, 600, 800, 600, false, 0, { showConfidence: true });
+    const renderedLabels = (ctx.fillText as any).mock.calls.map((call: any[]) => String(call[0]));
+    expect(renderedLabels.some((str: string) => str.includes('42%'))).toBe(true);
+  });
+
+  it('does not claim an uncalibrated car has a physical speed', () => {
+    const ctx = getMockCtx();
+    drawBoundingBoxes(ctx, [createTrack(29, { speed: undefined })], 800, 600, 800, 600);
+    const renderedLabels = (ctx.fillText as any).mock.calls.map((call: any[]) => String(call[0]));
+    expect(renderedLabels.join(' ')).not.toContain('km/h');
   });
 
   it('avoids drawing stale predictions with timeSinceUpdate > 1', () => {
