@@ -2584,7 +2584,11 @@ export default function Analyze() {
             targetVideoId = videoId;
             setPendingFile(null);
           } catch (err) {
+            const message = `Cannot save this video to History: ${describeError(err)}. Retry the upload, or turn off Save to History for temporary analysis.`;
             console.error('Upload could not start:', err);
+            setPendingFile({ name: file.name, size: file.size, error: message });
+            setError(message);
+            return; // Do not silently run a supposedly persistent backend job without an asset.
           }
         }
 
