@@ -20,6 +20,17 @@ describe('vehicle-sensitive detector postprocessing', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({ classId: 3, x: 300, y: 490, w: 12, h: 16 });
   });
+  it('rejects uncertain CAR and PERSON road artifacts without excluding an equally scored small motorcycle', () => {
+    // Regression for the reported manhole CAR and roadside bollard PERSON
+    // false positives: class-specific confidence is a heuristic, not a
+    // semantic understanding of road surface objects.
+    expect(processOutput(syntheticOutput(2, 340, 490, 65, 29, .32), .40, .45)).toEqual([]);
+    expect(processOutput(syntheticOutput(0, 60, 500, 13, 42, .52), .40, .45)).toEqual([]);
+    const motorcycle = processOutput(syntheticOutput(3, 340, 490, 13, 29, .32), .40, .45);
+    expect(motorcycle).toHaveLength(1);
+    expect(motorcycle[0].classId).toBe(3);
+  });
+
   it('retains side-by-side and overlapping motorcycle/bicycle/person boxes across different classes', () => {
     const result = nonMaxSuppression([box(3, 100, 100), box(1, 100, 100), box(0, 100, 100)], 0.45);
     expect(result.map(x => x.classId).sort()).toEqual([0, 1, 3]);
