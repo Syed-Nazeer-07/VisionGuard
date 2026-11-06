@@ -45,15 +45,12 @@ ALTER TABLE public.tracked_objects
 ALTER TABLE public.tracked_objects
   DROP CONSTRAINT IF EXISTS tracked_objects_camera_id_track_id_key;
 
--- Legacy NULL-run records were previously unique within their source.
--- Preserve that behavior without interfering with new per-run identities.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tracked_objects_legacy_video_track
-  ON public.tracked_objects(video_id, track_id)
-  WHERE analysis_run_id IS NULL AND video_id IS NOT NULL;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tracked_objects_legacy_camera_track
-  ON public.tracked_objects(camera_id, track_id)
-  WHERE analysis_run_id IS NULL AND camera_id IS NOT NULL;
+-- Do not add a partial UNIQUE index for legacy NULL-run rows. The existing
+-- analysis_run_id foreign key uses ON DELETE SET NULL; deleting two runs that
+-- both have track #1 on a video would otherwise fail when both rows become
+-- NULL-run records. Legacy rows remain readable without data loss.
+DROP INDEX IF EXISTS public.idx_tracked_objects_legacy_video_track;
+DROP INDEX IF EXISTS public.idx_tracked_objects_legacy_camera_track;
 
 CREATE INDEX IF NOT EXISTS idx_tracked_objects_video_run
   ON public.tracked_objects(video_id, analysis_run_id);
