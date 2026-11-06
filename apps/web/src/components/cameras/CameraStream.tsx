@@ -30,6 +30,8 @@ export function CameraStream({
 
   useEffect(() => {
     if (!url) return;
+    setState('loading');
+    setMessage(null);
     const video = videoRef.current;
     if (!video) return;
     let hls: Hls | null = null;
