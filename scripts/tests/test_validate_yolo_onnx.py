@@ -45,7 +45,7 @@ def make_fixture(path: Path, *, input_shape=(1, 3, 640, 640),
         # the serializer and would not exercise the validator's external guard.
         tensor = helper.make_tensor(
             "external_weights", TensorProto.FLOAT, [1],
-            b"\\x00\\x00\\x80\\x3f", raw=True
+            bytes.fromhex("0000803f"), raw=True
         )
         graph.initializer.append(tensor)
         onnx.save_model(
