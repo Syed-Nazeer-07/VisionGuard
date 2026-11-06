@@ -31,18 +31,25 @@ export function iom(box1: BoundingBox, box2: BoundingBox): number {
 }
 
 /**
- * Score-sorted, class-aware NMS. Suppress ONLY genuinely duplicate
- * boxes in the same class. Overlapping vehicles and their riders are
- * different objects and must not be removed by ad-hoc containment tests.
- * Cross-class suppression of bicycles and motorcycles loses true positives.
+ * Score-sorted, vehicle-aware NMS. Suppress same-class duplicates.
+ * Also suppress near-identical four-wheeler boxes (car/truck/bus class
+ * instability), but preserve bicycle vs motorcycle and rider vs bike.
+ * Never use broad sub-box containment that suppresses true road users.
  */
 export function nonMaxSuppression(boxes: BoundingBox[], iouThreshold: number): BoundingBox[] {
   const ordered = [...boxes].sort((a, b) => b.prob - a.prob);
   const selected: BoundingBox[] = [];
+  const fourWheeler = (id: number) => id === 2 || id === 5 || id === 7;
   for (const box of ordered) {
-    if (!selected.some(other => other.classId === box.classId && iou(box, other) > iouThreshold)) {
-      selected.push(box);
-    }
+    const duplicate = selected.some(other => {
+      const overlap = iou(box, other);
+      if (other.classId === box.classId) return overlap > iouThreshold;
+      // Strong overlap between 4-wheel vehicle classes is usually the same
+      // object classified differently; a much stricter gate avoids erasing
+      // partially overlapping neighboring cars.
+      return fourWheeler(other.classId) && fourWheeler(box.classId) && overlap > Math.max(0.68, iouThreshold);
+    });
+    if (!duplicate) selected.push(box);
   }
   return selected;
 }
