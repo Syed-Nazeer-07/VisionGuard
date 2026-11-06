@@ -83,6 +83,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const workerReadyRef = useRef(false);
   const loadTimeoutRef = useRef<number | null>(null);
   const selectedFileVersionRef = useRef(0);
+  const storageQueueRef = useRef<Promise<void>>(Promise.resolve());
   const replyRef = useRef<((reply: WorkerReply) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const urlRef = useRef<string | null>(null);
@@ -96,6 +97,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const [status, setStatus] = useState<Status>('empty');
   const [modelStatus, setModelStatus] = useState('YOLO11s · loads when analysis starts');
   const [videoLoadStatus, setVideoLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [storageStatus, setStorageStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [provider, setProvider] = useState('');
   const [error, setError] = useState('');
   const [progress, setProgress] = useState(0);
@@ -137,6 +139,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
         if (!alive || generation !== selectedFileVersionRef.current || !saved) return;
         loadedPositionRef.current = savedPosition;
         attachVideo(saved.file, saved.name);
+        setStorageStatus('saved');
         setStatus('ready');
         // Restoring large inference results must never delay the first video frame.
         const result = await localAnalysisStorage.loadAnalysis();
@@ -252,13 +255,24 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     loadedPositionRef.current = 0;
     attachVideo(file, file.name);
     setStatus('ready');
-    try {
+    setStorageStatus('saving');
+    const generation = selectedFileVersionRef.current;
+    // Give the video element a head start decoding its first frame before the
+    // potentially large IndexedDB blob-copy starts. Never await this to open.
+    storageQueueRef.current = storageQueueRef.current.catch(() => {}).then(async () => {
+      await new Promise<void>(resolve => window.setTimeout(resolve, 750));
+      if (generation !== selectedFileVersionRef.current) return;
       await localAnalysisStorage.saveVideo(file, file.name);
+      if (generation !== selectedFileVersionRef.current) return;
       await localAnalysisStorage.clearAnalysis();
       await localAnalysisStorage.savePosition(0);
-    } catch (e) {
+      if (generation === selectedFileVersionRef.current) setStorageStatus('saved');
+    });
+    void storageQueueRef.current.catch(e => {
+      if (generation !== selectedFileVersionRef.current) return;
+      setStorageStatus('error');
       setError('Local storage failed (possibly insufficient disk quota): ' + String(e));
-    }
+    });
   };
 
   const infer = (bitmap: ImageBitmap, time: number): Promise<LocalTrack[]> => {
@@ -406,6 +420,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     selectedFileVersionRef.current += 1;
     setStatus('empty');
     setVideoLoadStatus('idle');
+    setStorageStatus('idle');
     if (loadTimeoutRef.current !== null) window.clearTimeout(loadTimeoutRef.current);
     setAnalysis(null);
     analysisRef.current = null;
@@ -442,7 +457,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
         <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-600">
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{modelStatus}</span>
           {provider && <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">Accelerator: {provider.toUpperCase()}</span>}
-          <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">Local storage · No Supabase upload</span>
+          <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{storageStatus === 'saving' ? 'Saving locally...' : storageStatus === 'saved' ? 'Saved on this device' : storageStatus === 'error' ? 'Local save failed' : 'Local-only · no upload'}</span>
         </div>
         {error && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</div>}
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -461,6 +476,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
                       loadTimeoutRef.current = null;
                     }
                     setVideoLoadStatus('ready');
+                    setError(current => current.startsWith('Video could not become ready within 10 seconds.') ? '' : current);
                     // Restore position after the first frame is available; early seeking
                     // forces decoding from a distant keyframe and delays initial load.
                     const savedPosition = loadedPositionRef.current;
