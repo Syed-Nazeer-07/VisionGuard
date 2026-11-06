@@ -17,7 +17,10 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from validate_yolo_onnx import DEFAULT_MODEL, ModelValidationError, validate_model
+if __package__:
+    from .validate_yolo_onnx import DEFAULT_MODEL, ModelValidationError, validate_model
+else:
+    from validate_yolo_onnx import DEFAULT_MODEL, ModelValidationError, validate_model
 
 ROOT = Path(__file__).resolve().parents[1]
 
