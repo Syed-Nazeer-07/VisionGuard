@@ -53,3 +53,18 @@ export function cameraSourceHost(camera: CameraSourceRecord): string {
   try { return new URL(value).host || 'Configured'; }
   catch { return 'Configured (invalid URL)'; }
 }
+
+/** Select unique camera tiles. A 2×2 grid with one configured camera must not
+ * present the same stream as four independent active cameras. */
+export function selectCameraTiles<T extends { id: string }>(
+  cameras: readonly T[], selectedId: string | null, slots: 1 | 4 | 9
+): T[] {
+  const seen = new Set<string>();
+  const unique = cameras.filter(cam => {
+    if (seen.has(cam.id)) return false;
+    seen.add(cam.id);
+    return true;
+  });
+  const chosen = unique.find(cam => cam.id === selectedId);
+  return (chosen ? [chosen, ...unique.filter(cam => cam.id !== chosen.id)] : unique).slice(0, slots);
+}
