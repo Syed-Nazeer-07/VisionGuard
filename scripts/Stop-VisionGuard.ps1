@@ -10,7 +10,7 @@ if (-not $ProjectRoot) {
 }
 
 Write-Host "========================================================================" -ForegroundColor Cyan
-Write-Host "                    STOPPING VISIONGUARD SERVICES                       " -ForegroundColor Cyan
+Write-Host "                    STOPPING VISIONGUARD WEB SERVER                       " -ForegroundColor Cyan
 Write-Host "========================================================================" -ForegroundColor Cyan
 
 $pidFile = Join-Path $ProjectRoot ".visionguard.pids"
@@ -20,12 +20,6 @@ $stoppedAny = $false
 if (Test-Path $pidFile) {
     try {
         $pidsData = Get-Content $pidFile -Raw | ConvertFrom-Json
-        
-        if ($pidsData.backend_pid) {
-            Write-Host "Stopping Backend process tree (PID $($pidsData.backend_pid))..." -ForegroundColor Gray
-            taskkill /PID $pidsData.backend_pid /T /F 2>$null
-            $stoppedAny = $true
-        }
         
         if ($pidsData.frontend_pid) {
             Write-Host "Stopping Frontend process tree (PID $($pidsData.frontend_pid))..." -ForegroundColor Gray
@@ -39,19 +33,7 @@ if (Test-Path $pidFile) {
     }
 }
 
-# 2. Targeted cleanup: check port 8000 (FastAPI Backend)
-try {
-    $port8000 = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
-    if ($port8000) {
-        $proc8000 = Get-Process -Id $port8000.OwningProcess -ErrorAction SilentlyContinue
-        if ($proc8000 -and $proc8000.ProcessName -match "python") {
-            Write-Host "Terminating orphaned Python backend on port 8000 (PID $($proc8000.Id))..." -ForegroundColor Gray
-            taskkill /PID $proc8000.Id /T /F 2>$null
-            $stoppedAny = $true
-        }
-    }
-} catch {}
-
+# 2. Only stop the local web server. Do not terminate unrelated Python services.
 # 3. Targeted cleanup: check port 3000 (Vite Frontend)
 try {
     $port3000 = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
