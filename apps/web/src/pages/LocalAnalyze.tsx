@@ -3,6 +3,7 @@ import { CheckCircle2, Film, Loader2, Pause, Play, RotateCcw, Upload, X } from '
 import { localAnalysisStorage, type LocalAnalysis, type LocalFrame, type LocalTrack } from '../services/localAnalysisStorage';
 
 const MODEL = '/models/yolo11s.onnx';
+const VIDEO_LOAD_TIMEOUT_MS = 10_000;
 const STEP = 0.10; // 10 observed frames/second; interpolate each confirmed track during native-rate playback.
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
 
@@ -78,6 +79,10 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const workerRef = useRef<Worker | null>(null);
+  const workerInitializationRef = useRef<Promise<void> | null>(null);
+  const workerReadyRef = useRef(false);
+  const loadTimeoutRef = useRef<number | null>(null);
+  const selectedFileVersionRef = useRef(0);
   const replyRef = useRef<((reply: WorkerReply) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const urlRef = useRef<string | null>(null);
@@ -89,7 +94,8 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const [videoUrl, setVideoUrl] = useState('');
   const [name, setName] = useState('');
   const [status, setStatus] = useState<Status>('empty');
-  const [modelStatus, setModelStatus] = useState('Loading YOLO11s...');
+  const [modelStatus, setModelStatus] = useState('YOLO11s · loads when analysis starts');
+  const [videoLoadStatus, setVideoLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [provider, setProvider] = useState('');
   const [error, setError] = useState('');
   const [progress, setProgress] = useState(0);
@@ -98,56 +104,59 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const [playing, setPlaying] = useState(false);
   const [analysis, setAnalysis] = useState<LocalAnalysis | null>(null);
 
+  const beginVideoLoad = useCallback(() => {
+    if (loadTimeoutRef.current !== null) window.clearTimeout(loadTimeoutRef.current);
+    setVideoLoadStatus('loading');
+    loadTimeoutRef.current = window.setTimeout(() => {
+      setVideoLoadStatus(current => current === 'loading' ? 'error' : current);
+      setError(current => current || 'Video could not become ready within 10 seconds. Try an H.264 MP4 file or a smaller clip.');
+      loadTimeoutRef.current = null;
+    }, VIDEO_LOAD_TIMEOUT_MS);
+  }, []);
+
   const attachVideo = useCallback((blob: Blob, label: string) => {
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     const url = URL.createObjectURL(blob);
     urlRef.current = url;
     setVideoUrl(url);
     setName(label);
-  }, []);
+    setDuration(0);
+    beginVideoLoad();
+  }, [beginVideoLoad]);
 
   // The owner of this component is AppLayout, which remains mounted across dashboard navigation.
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const saved = await localAnalysisStorage.loadVideo();
-        if (!alive || !saved) return;
-        loadedPositionRef.current = await localAnalysisStorage.loadPosition();
-        const result = await localAnalysisStorage.loadAnalysis();
-        if (!alive) return;
+        const generation = selectedFileVersionRef.current;
+        const [saved, savedPosition] = await Promise.all([
+          localAnalysisStorage.loadVideo(),
+          localAnalysisStorage.loadPosition()
+        ]);
+        if (!alive || generation !== selectedFileVersionRef.current || !saved) return;
+        loadedPositionRef.current = savedPosition;
         attachVideo(saved.file, saved.name);
+        setStatus('ready');
+        // Restoring large inference results must never delay the first video frame.
+        const result = await localAnalysisStorage.loadAnalysis();
+        if (!alive || generation !== selectedFileVersionRef.current) return;
         if (result && result.name === saved.name) {
           setAnalysis(result);
           analysisRef.current = result;
           setStatus('completed');
-        } else setStatus('ready');
+        }
       } catch (e) {
         if (alive) setError('Local video restore failed: ' + String(e));
       }
     })();
-    const worker = new Worker(new URL('../workers/localTrafficWorker.ts', import.meta.url), { type: 'module' });
-    workerRef.current = worker;
-    worker.onmessage = (event: MessageEvent<WorkerReply>) => {
-      const reply = event.data;
-      if (reply.type === 'ready') {
-        setModelStatus('YOLO11s ready');
-        setProvider(reply.provider);
-      } else if (reply.type === 'error' && reply.requestId === -1) {
-        setModelStatus('Model unavailable');
-        setError('YOLO11s could not load. Check apps/web/public/models/yolo11s.onnx: ' + reply.message);
-      } else replyRef.current?.(reply);
-    };
-    worker.onerror = event => {
-      setModelStatus('Model unavailable');
-      setError('YOLO11s worker failed: ' + event.message);
-    };
-    worker.postMessage({ type: 'init', modelPath: MODEL });
     return () => {
       alive = false;
       abortRef.current?.abort();
-      worker.terminate();
+      workerRef.current?.terminate();
       workerRef.current = null;
+      workerReadyRef.current = false;
+      if (loadTimeoutRef.current !== null) window.clearTimeout(loadTimeoutRef.current);
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     };
   }, [attachVideo]);
@@ -174,12 +183,65 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     return () => document.removeEventListener('visibilitychange', pauseWhenHidden);
   }, []);
 
+  const ensureWorkerReady = (): Promise<void> => {
+    if (workerReadyRef.current) return Promise.resolve();
+    if (workerInitializationRef.current) return workerInitializationRef.current;
+    setModelStatus('Loading YOLO11s model...');
+    const promise = new Promise<void>((resolve, reject) => {
+      let worker: Worker;
+      try {
+        worker = new Worker(new URL('../workers/localTrafficWorker.ts', import.meta.url), { type: 'module' });
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      workerRef.current = worker;
+      let settled = false;
+      const timeout = window.setTimeout(() => {
+        fail(new Error('YOLO11s initialization timed out. Check the model file and browser acceleration.'));
+      }, 60_000);
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        worker.terminate();
+        if (workerRef.current === worker) workerRef.current = null;
+        workerReadyRef.current = false;
+        setModelStatus('Model unavailable');
+        reject(error);
+      };
+      worker.onmessage = (event: MessageEvent<WorkerReply>) => {
+        const reply = event.data;
+        if (reply.type === 'ready') {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(timeout);
+          workerReadyRef.current = true;
+          setModelStatus('YOLO11s ready');
+          setProvider(reply.provider);
+          resolve();
+        } else if (reply.type === 'error' && reply.requestId === -1) {
+          fail(new Error(reply.message));
+        } else {
+          replyRef.current?.(reply);
+        }
+      };
+      worker.onerror = event => fail(new Error(event.message || 'YOLO11s worker failed'));
+      worker.postMessage({ type: 'init', modelPath: MODEL });
+    });
+    workerInitializationRef.current = promise.finally(() => {
+      workerInitializationRef.current = null;
+    });
+    return workerInitializationRef.current;
+  };
+
   const onUpload = async (file?: File) => {
     if (!file || status === 'processing') return;
     if (!VIDEO_TYPES.includes(file.type) && !/\.(mp4|webm|mov|mkv)$/i.test(file.name)) {
       setError('Choose an MP4, WebM, MOV, or MKV video supported by your browser.');
       return;
     }
+    selectedFileVersionRef.current += 1;
     setError('');
     setPlaying(false);
     videoRef.current?.pause();
@@ -221,7 +283,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
 
   const startAnalysis = async () => {
     const video = videoRef.current;
-    if (!video || modelStatus !== 'YOLO11s ready' || !videoUrl || status === 'processing') return;
+    if (!video || videoLoadStatus !== 'ready' || !videoUrl || status === 'processing') return;
     if (!Number.isFinite(video.duration) || video.duration <= 0) {
       setError('Video metadata is not ready or duration is invalid.');
       return;
@@ -238,8 +300,10 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     const frames: LocalFrame[] = [];
     const end = video.duration;
     const count = Math.ceil(end / STEP);
-    workerRef.current?.postMessage({ type: 'reset' });
     try {
+      await ensureWorkerReady();
+      if (controller.signal.aborted) throw new Error('Analysis cancelled');
+      workerRef.current?.postMessage({ type: 'reset' });
       for (let i = 0; i < count; i++) {
         if (controller.signal.aborted) throw new Error('Analysis cancelled');
         const time = Math.min(end - 0.001, i * STEP);
@@ -339,7 +403,10 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     if (status === 'processing') return;
     videoRef.current?.pause();
     setPlaying(false);
+    selectedFileVersionRef.current += 1;
     setStatus('empty');
+    setVideoLoadStatus('idle');
+    if (loadTimeoutRef.current !== null) window.clearTimeout(loadTimeoutRef.current);
     setAnalysis(null);
     analysisRef.current = null;
     setVideoUrl('');
@@ -386,22 +453,55 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
                   style={{ visibility: status === 'processing' ? 'hidden' : 'visible' }}
                   className="h-full w-full object-contain"
                   onLoadedMetadata={event => {
-                    const video = event.currentTarget;
-                    setDuration(video.duration);
-                    video.currentTime = Math.min(loadedPositionRef.current, Math.max(0, video.duration - .05));
+                    setDuration(event.currentTarget.duration);
+                  }}
+                  onLoadedData={event => {
+                    if (loadTimeoutRef.current !== null) {
+                      window.clearTimeout(loadTimeoutRef.current);
+                      loadTimeoutRef.current = null;
+                    }
+                    setVideoLoadStatus('ready');
+                    // Restore position after the first frame is available; early seeking
+                    // forces decoding from a distant keyframe and delays initial load.
+                    const savedPosition = loadedPositionRef.current;
                     loadedPositionRef.current = 0;
+                    const video = event.currentTarget;
+                    if (savedPosition > 0 && Number.isFinite(video.duration)) {
+                      video.currentTime = Math.min(savedPosition, Math.max(0, video.duration - .05));
+                      setPosition(video.currentTime);
+                    }
                   }}
                   onPlay={() => { setPlaying(true); playbackRef.current = true; }}
                   onPause={() => { setPlaying(false); playbackRef.current = false; }}
                   onEnded={() => setPlaying(false)}
-                  onError={() => setError('Video could not be decoded by the browser. Try an H.264 MP4.')}
+                  onError={() => {
+                    if (loadTimeoutRef.current !== null) window.clearTimeout(loadTimeoutRef.current);
+                    setVideoLoadStatus('error');
+                    setError('Video could not be decoded by the browser. Try an H.264 MP4.');
+                  }}
                 />
                 <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
+                {videoLoadStatus === 'loading' && status !== 'processing' && (
+                  <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0b1225] text-white">
+                    <Loader2 className="animate-spin text-indigo-300" size={28} />
+                    <span className="text-sm">Opening video locally...</span>
+                  </div>
+                )}
+                {videoLoadStatus === 'error' && status !== 'processing' && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#0b1225] px-5 text-center text-white">
+                    <p className="text-sm">This video did not open within 10 seconds.</p>
+                    <button type="button" className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900" onClick={() => {
+                      setError('');
+                      beginVideoLoad();
+                      videoRef.current?.load();
+                    }}>Retry opening video</button>
+                  </div>
+                )}
                 {status === 'processing' && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#0b1225] px-6 text-center text-white">
                     <Loader2 className="animate-spin text-indigo-300" size={36} />
-                    <div className="text-lg font-semibold">Analyzing vehicle movements</div>
-                    <div className="max-w-sm text-sm text-slate-300">Processing original frames with YOLO11s. Playback starts only when the complete analysis is ready.</div>
+                    <div className="text-lg font-semibold">{workerReadyRef.current ? 'Analyzing vehicle movements' : 'Preparing YOLO11s detector'}</div>
+                    <div className="max-w-sm text-sm text-slate-300">{modelStatus === 'YOLO11s ready' ? 'Processing original frames. Playback starts only after full analysis.' : 'First-time model initialization is separate from the video loading time.'}</div>
                     <div className="h-2 w-full max-w-sm overflow-hidden rounded-full bg-white/20">
                       <div className="h-full rounded-full bg-indigo-400 transition-[width]" style={{ width: progress + '%' }} />
                     </div>
@@ -442,7 +542,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
                       {playing ? <Pause size={16} /> : <Play size={16} />} {playing ? 'Pause' : 'Play results'}
                     </button>
                   ) : (
-                    <button type="button" disabled={modelStatus !== 'YOLO11s ready' || !duration}
+                    <button type="button" disabled={videoLoadStatus !== 'ready' || !duration}
                       onClick={() => void startAnalysis()}
                       className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
                       <Play size={16} /> Analyze video
