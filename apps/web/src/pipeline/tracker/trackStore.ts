@@ -76,8 +76,16 @@ export class TrackStateStore {
     this.lastInferenceMediaTime = mediaTime;
     const incomingIds = new Set<number>();
 
-    // 1. Ingest fresh incoming tracks
+    // 1. Ingest only genuine detector measurements. Some tracker/backends
+    // send interpolated/predicted boxes on frames with no detector match.
+    // Those must NOT reset the freshness clock, update display velocity,
+    // or create a new visible track: doing so produces boxes that drift
+    // across the road and survive after their actual vehicle disappeared.
     for (const t of incomingTracks) {
+      const isObserved = (t.observationType === undefined || t.observationType === 'detection')
+        && (t.timeSinceUpdate ?? 0) === 0;
+      if (!isObserved) continue;
+
       incomingIds.add(t.trackId);
       const existing = this.tracks.get(t.trackId);
 
@@ -86,10 +94,9 @@ export class TrackStateStore {
         // not Kalman velocity in "pixels per inference step". Video frames
         // may arrive at 5–60 FPS while the model runs at a different cadence.
         const dt = mediaTime - existing.lastUpdatedMediaTime;
-        const validObservation = t.observationType !== 'predicted' && (t.timeSinceUpdate ?? 0) === 0;
         const maxMove = Math.max(t.w, t.h, existing.track.w, existing.track.h) * 2;
         const move = Math.hypot(t.x - existing.track.x, t.y - existing.track.y);
-        const continuous = validObservation && dt >= 0.025 && dt <= 0.8 && move <= maxMove;
+        const continuous = dt >= 0.025 && dt <= 0.8 && move <= maxMove;
         if (continuous) {
           const measuredVx = (t.x - existing.track.x) / dt;
           const measuredVy = (t.y - existing.track.y) / dt;
