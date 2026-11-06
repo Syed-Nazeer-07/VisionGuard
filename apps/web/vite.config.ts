@@ -1,11 +1,16 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, type Plugin } from 'vitest/config'
 
 const require = createRequire(import.meta.url)
+// npm runs Vite from apps/web (workspace root), while this repository keeps
+// shared VITE_ staging settings in the top-level .env/.env.local file.
+// Make the env search directory explicit to avoid silently entering demo mode.
+const repositoryEnvDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
 /**
  * Dev server: serves ONNX Runtime Web's WebAssembly artifacts straight from the installed
@@ -53,6 +58,7 @@ function onnxRuntimeWasmDevPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  envDir: repositoryEnvDir,
   plugins: [onnxRuntimeWasmDevPlugin(), react(), tailwindcss()],
   optimizeDeps: {
     // Pre-bundling relocates ORT's module and breaks its import.meta.url-relative loading.
