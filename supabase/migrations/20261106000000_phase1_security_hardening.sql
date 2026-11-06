@@ -59,19 +59,37 @@ CREATE POLICY "Tracked object insertion scoped to source" ON public.tracked_obje
       video_id IS NOT NULL
       AND EXISTS (SELECT 1 FROM public.video_assets v
                   WHERE v.id = video_id AND v.uploaded_by = auth.uid())
+      AND (
+        analysis_run_id IS NULL OR EXISTS (
+          SELECT 1 FROM public.analysis_runs r WHERE r.id = analysis_run_id
+            AND r.video_id = video_id AND r.created_by = auth.uid()
+        )
+      )
     )
   );
 CREATE POLICY "Tracked object updates scoped to source" ON public.tracked_objects
   FOR UPDATE TO authenticated
   USING (
     public.auth_user_role() IN ('Operator', 'Supervisor', 'Admin')
-    OR EXISTS (SELECT 1 FROM public.video_assets v
-               WHERE v.id = video_id AND v.uploaded_by = auth.uid())
+    OR (
+      EXISTS (SELECT 1 FROM public.video_assets v
+              WHERE v.id = video_id AND v.uploaded_by = auth.uid())
+      AND (analysis_run_id IS NULL OR EXISTS (
+        SELECT 1 FROM public.analysis_runs r WHERE r.id = analysis_run_id
+          AND r.video_id = video_id AND r.created_by = auth.uid()
+      ))
+    )
   )
   WITH CHECK (
     public.auth_user_role() IN ('Operator', 'Supervisor', 'Admin')
-    OR EXISTS (SELECT 1 FROM public.video_assets v
-               WHERE v.id = video_id AND v.uploaded_by = auth.uid())
+    OR (
+      EXISTS (SELECT 1 FROM public.video_assets v
+              WHERE v.id = video_id AND v.uploaded_by = auth.uid())
+      AND (analysis_run_id IS NULL OR EXISTS (
+        SELECT 1 FROM public.analysis_runs r WHERE r.id = analysis_run_id
+          AND r.video_id = video_id AND r.created_by = auth.uid()
+      ))
+    )
   );
 
 -- Drop the development-era allow-all INSERTs. Live analysis can still write an
@@ -87,14 +105,16 @@ CREATE POLICY "Incident insertion requires owned analysis source" ON public.inci
   WITH CHECK (
     public.auth_user_role() IN ('Operator', 'Supervisor', 'Admin')
     OR (
-      analysis_run_id IS NOT NULL
-      AND EXISTS (SELECT 1 FROM public.analysis_runs r
-                  WHERE r.id = analysis_run_id AND r.created_by = auth.uid())
-    )
-    OR (
       video_id IS NOT NULL
       AND EXISTS (SELECT 1 FROM public.video_assets v
                   WHERE v.id = video_id AND v.uploaded_by = auth.uid())
+      AND (
+        analysis_run_id IS NULL OR EXISTS (
+          SELECT 1 FROM public.analysis_runs r
+          WHERE r.id = analysis_run_id AND r.video_id = video_id
+            AND r.created_by = auth.uid()
+        )
+      )
     )
   );
 
