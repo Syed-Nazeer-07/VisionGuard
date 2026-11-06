@@ -43,7 +43,7 @@ export function VideoCalibrationOverlay({
     };
   }, [videoRef]);
 
-  const displayed = size.videoWidth && size.videoHeight
+  const displayed = size.videoWidth > 0 && size.videoHeight > 0
     ? points.map(point => videoPointToDisplay(point, size, size, fit))
     : [];
 
