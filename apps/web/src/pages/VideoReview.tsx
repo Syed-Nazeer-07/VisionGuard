@@ -12,6 +12,7 @@ import { computeVideoTransform, sourceTopLeftBoxToDisplay, sourcePointToDisplay 
 import { drawBoundingBoxes } from '../pipeline/rendering/overlay';
 import type { TrackedObject, TrackState } from '../pipeline/types';
 import { loadArtifactFromStorage, findFrameAtMediaTime, type BackendArtifactPayload } from '../services/backendAnalysis';
+import { artifactLocationForRun } from '../services/runTrackIdentity';
 import type { Json } from '../types/supabase';
 
 function formatTime(seconds: number): string {
@@ -73,7 +74,6 @@ interface ReviewData {
   evidenceUrls: Record<string, { thumb: string; full: string }>;
   warnings: string[];
   identicalTo: VideoAsset | null;
-  artifact: BackendArtifactPayload | null;
 }
 
 type Tab = 'timeline' | 'tracks' | 'evidence' | 'logs';
@@ -130,6 +130,13 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
   const [detailError, setDetailError] = useState<string | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string>(ALL_RUNS);
+  // A cached artifact always belongs to one video AND one specific analysis run.
+  // Never draw the latest backend artifact over an earlier run's tracked objects.
+  const [loadedRunArtifact, setLoadedRunArtifact] = useState<{
+    videoId: string;
+    runId: string;
+    artifact: BackendArtifactPayload;
+  } | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('timeline');
   const [selectedEvidence, setSelectedEvidence] = useState<EvidenceRow | null>(null);
   const [currentTime, setCurrentTime] = useState<number>(0);
@@ -251,33 +258,10 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
           : `${reason ?? 'No stored file exists for this video.'} It cannot be replayed.`);
       }
 
-      // Load durable analysis artifact from storage
-      let artifact: BackendArtifactPayload | null = null;
-      const meta = (typedAsset.metadata && typeof typedAsset.metadata === 'object' && !Array.isArray(typedAsset.metadata) ? typedAsset.metadata : {}) as Record<string, any>;
-      let artifactPath = meta.artifact_storage_path;
-      let artifactBucket = meta.artifact_bucket || 'videos';
-      if (!artifactPath && runs.length > 0) {
-        for (const r of runs) {
-          const runMeta = (r.metrics && typeof r.metrics === 'object' && !Array.isArray(r.metrics) ? r.metrics : {}) as Record<string, any>;
-          if (runMeta.artifact_storage_path) {
-            artifactPath = runMeta.artifact_storage_path;
-            artifactBucket = runMeta.artifact_bucket || 'videos';
-            break;
-          }
-        }
-      }
-      if (artifactPath && typeof artifactPath === 'string') {
-        try {
-          artifact = await loadArtifactFromStorage(artifactPath, artifactBucket);
-        } catch (e) {
-          warnings.push(`Analysis artifact could not be loaded: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      }
-
       // Default to the latest run that produced tracks, so overlays from different runs never overlap.
       const runWithTracks = runs.find(r => tracks.some(t => t.analysis_run_id === r.id));
       setSelectedRunId(runWithTracks ? runWithTracks.id : ALL_RUNS);
-      setData({ asset: typedAsset, videoUrl, runs, tracks, incidents, evidence, evidenceUrls, warnings, identicalTo, artifact });
+      setData({ asset: typedAsset, videoUrl, runs, tracks, incidents, evidence, evidenceUrls, warnings, identicalTo });
       setDetailLoading(false);
     })();
 
@@ -294,56 +278,77 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
     return data.runs.find(r => r.id === selectedRunId) || null;
   }, [data, selectedRunId]);
 
+  const activeArtifact = loadedRunArtifact?.videoId === videoId && loadedRunArtifact.runId === selectedRunId
+    ? loadedRunArtifact.artifact : null;
+
+  useEffect(() => {
+    // All Runs uses trajectory overlays; rendering a single run's artifact
+    // would misrepresent which inference generated the bounding boxes.
+    const location = selectedRunId !== ALL_RUNS ? artifactLocationForRun(selectedRun) : null;
+    setLoadedRunArtifact(null);
+    if (!videoId || !selectedRun || !location) return;
+
+    let cancelled = false;
+    loadArtifactFromStorage(location.path, location.bucket)
+      .then(artifact => {
+        if (!cancelled) setLoadedRunArtifact({ videoId, runId: selectedRun.id, artifact });
+      })
+      .catch(error => {
+        if (!cancelled) console.warn('Could not load artifact for selected analysis run:', error);
+      });
+    return () => { cancelled = true; };
+  }, [videoId, selectedRunId, selectedRun]);
+
   const framesAnalyzed = useMemo(() => {
     const meta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
-    return data?.artifact?.total_frames ??
+    return activeArtifact?.total_frames ??
       selectedRun?.frames_processed ??
       meta.frame_count ??
       (tracks.length > 0 ? Math.max(...tracks.map(t => t.frame_count || 0)) : 0);
-  }, [data, selectedRun, tracks]);
+  }, [data, selectedRun, tracks, activeArtifact]);
 
   const uniqueVehicles = useMemo(() => {
-    const summary = data?.artifact?.summary as any;
+    const summary = activeArtifact?.summary as any;
     const meta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
     return summary?.unique_vehicles ??
       summary?.unique_tracks ??
       meta.unique_vehicles ??
       tracks.length;
-  }, [data, tracks]);
+  }, [data, tracks, activeArtifact]);
 
   const detectionProfileLabel = useMemo(() => {
     const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
     const assetMeta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
-    const prof = data?.artifact?.summary?.detection_profile || runMeta.detection_profile || assetMeta.detection_profile;
+    const prof = activeArtifact?.summary?.detection_profile || runMeta.detection_profile || assetMeta.detection_profile;
     if (prof === 'high_recall') return 'High Recall';
     if (prof === 'balanced') return 'Balanced';
     return 'Balanced';
-  }, [data, selectedRun]);
+  }, [data, selectedRun, activeArtifact]);
 
   const processingSpeedLabel = useMemo(() => {
     const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
     const assetMeta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
-    const speed = data?.artifact?.summary?.processing_speed || runMeta.processing_speed || assetMeta.processing_speed;
+    const speed = activeArtifact?.summary?.processing_speed || runMeta.processing_speed || assetMeta.processing_speed;
     if (speed === 'fast') return 'Fast (2x)';
     if (speed === 'full') return 'Full (1x)';
     return 'Full (1x)';
-  }, [data, selectedRun]);
+  }, [data, selectedRun, activeArtifact]);
 
   const effectiveFps = useMemo(() => {
-    const summary = data?.artifact?.summary as any;
-    const artifactMeta = (data?.artifact as any)?.metrics;
+    const summary = activeArtifact?.summary as any;
+    const artifactMeta = (activeArtifact as any)?.metrics;
     const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
     const fps = summary?.effective_fps ??
       artifactMeta?.effective_fps ??
       selectedRun?.fps ??
       runMeta.fps;
     return typeof fps === 'number' && fps > 0 ? `${Math.round(fps)} FPS` : null;
-  }, [data, selectedRun]);
+  }, [data, selectedRun, activeArtifact]);
 
   const averageSpeedLabel = useMemo(() => {
     const runMeta = (selectedRun?.metrics && typeof selectedRun.metrics === 'object' && !Array.isArray(selectedRun.metrics) ? selectedRun.metrics : {}) as Record<string, any>;
     const assetMeta = (data?.asset?.metadata && typeof data.asset.metadata === 'object' && !Array.isArray(data.asset.metadata) ? data.asset.metadata : {}) as Record<string, any>;
-    const avg = data?.artifact?.summary?.average_speed_kmh ??
+    const avg = activeArtifact?.summary?.average_speed_kmh ??
       runMeta?.summary?.average_speed_kmh ??
       assetMeta?.average_speed_kmh;
     if (typeof avg === 'number' && avg > 0) return `${Math.round(avg)} km/h`;
@@ -353,17 +358,17 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
       return `${Math.round(mean)} km/h`;
     }
     return 'Uncalibrated';
-  }, [data, selectedRun, tracks]);
+  }, [data, selectedRun, tracks, activeArtifact]);
 
   const isUnanalyzed = useMemo(() => {
-    return !!data?.asset && data.asset.processing_status !== 'completed' && tracks.length === 0 && !data?.artifact;
+    return !!data?.asset && data.asset.processing_status !== 'completed' && tracks.length === 0 && !activeArtifact;
   }, [data, tracks]);
 
   // Replay persisted boxes + trajectories against the playhead. No inference is run here.
   const tracksRef = useRef<TrackRow[]>([]);
   tracksRef.current = tracks;
   const artifactRef = useRef<BackendArtifactPayload | null>(null);
-  artifactRef.current = data?.artifact ?? null;
+  artifactRef.current = activeArtifact ?? null;
 
   // Keyboard shortcuts: Space for play/pause, Left/Right for frame stepping
   useEffect(() => {
