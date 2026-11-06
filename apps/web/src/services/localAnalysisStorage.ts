@@ -101,11 +101,9 @@ interface SavedVideoHandle {
 export async function readSavedVideo(): Promise<SavedLocalVideo | undefined> {
   const stored = await read<SavedLocalVideo | SavedVideoHandle>('video');
   if (!stored) return undefined;
-  if ('kind' in stored && stored.kind === 'file-handle') {
-    const file = await stored.handle.getFile();
-    return { file, name: stored.name };
-  }
-  return stored;
+  if ('file' in stored) return stored;
+  const file = await stored.handle.getFile();
+  return { file, name: stored.name };
 }
 
 export const localAnalysisStorage = {
