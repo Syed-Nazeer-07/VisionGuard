@@ -10,6 +10,7 @@ import { useAuthStore } from '../store/auth'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CameraCreationWizard } from '../components/cameras/CameraCreationWizard'
 import { useNavigate } from 'react-router-dom'
+import { cameraSourceHost } from '../services/cameraSources'
 
 export function Cameras() {
   const { role, user } = useAuthStore()
@@ -19,6 +20,8 @@ export function Cameras() {
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list')
   const [activeFilter, setActiveFilter] = useState('All')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
   
   // Drawer States
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -44,8 +47,8 @@ export function Cameras() {
       .eq('is_deleted', false)
       .order('created_at', { ascending: false })
       
-    if (error) console.error(error)
-    if (data) setCameras(data)
+    if (error) setError(`Camera directory could not be loaded: ${error.message}`)
+    else { setError(null); setCameras(data || []) }
     setLoading(false)
   }
 
@@ -68,27 +71,27 @@ export function Cameras() {
   }
 
   const handleDelete = async (cam: any) => {
+    if (role !== 'Admin') return setError('Only Admin can delete cameras.')
+    if (!window.confirm(`Delete ${cam.name}? Related camera data may be affected.`)) return
     try {
-      if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Are you sure you want to delete ${cam.name}?`)) {
-        return
+      const { data, error: deleteError } = await supabase.from('cameras')
+        .update({ is_deleted: true }).eq('id', cam.id).select('id').maybeSingle()
+      if (deleteError || !data) throw new Error(deleteError?.message || 'Camera not found or access denied')
+      if (user?.id) {
+        const { error: auditError } = await supabase.from('audit_logs')
+          .insert([{ user_id: user.id, action: `Deleted Camera ${cam.camera_identifier || cam.id}` }])
+        if (auditError) console.warn('Camera deletion audit log unavailable:', auditError)
       }
-    } catch {
-      // In iframe sandbox where window.confirm may be restricted, continue deletion
-    }
-    try {
-      await supabase.from('cameras').update({ is_deleted: true }).eq('id', cam.id)
-      await supabase.from('audit_logs').insert([{ user_id: user?.id, action: `Deleted Camera ${cam.camera_identifier || cam.id}` }])
       setIsDetailsOpen(false)
-    } catch (err) {
-      console.error(err)
-    }
+      setSelectedCamera(null)
+      await fetchCameras()
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
   }
 
-  const filteredCameras = cameras.filter(c => {
-    if (activeFilter === 'Online') return c.status === 'online'
-    if (activeFilter === 'Offline') return c.status === 'offline'
-    if (activeFilter === 'Warning') return c.status === 'warning'
-    return true
+  const filteredCameras = cameras.filter(cam => {
+    if (activeFilter !== 'All' && cam.status !== activeFilter.toLowerCase()) return false
+    const q = searchQuery.toLowerCase().trim()
+    return [cam.name, cam.camera_identifier, cam.location].some(value => (value || '').toLowerCase().includes(q))
   })
 
   // Permission Checks
@@ -141,7 +144,7 @@ export function Cameras() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input 
                 type="text" 
-                placeholder="Search cameras..." 
+                placeholder="Search cameras..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} aria-label="Search cameras" 
                 className="w-48 xl:w-64 pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
               />
             </div>
@@ -157,6 +160,9 @@ export function Cameras() {
           </div>
         </div>
 
+        {error && <div role="alert" className="p-3 bg-red-50 border-b border-red-200 text-red-700 text-sm">
+          {error} <button onClick={() => void fetchCameras()} className="underline ml-2">Retry</button>
+        </div>}
         {/* Content */}
         <div className="flex-1 overflow-auto relative">
           {loading ? (
@@ -229,15 +235,15 @@ export function Cameras() {
                             style={{ width: `${cam.health_score || 0}%` }}
                           />
                         </div>
-                        <span className="text-[12px] font-bold text-slate-700">{cam.health_score || 0}%</span>
+                        <span className="text-[12px] font-bold text-slate-700">{cam.health_score == null ? "Not checked" : `${cam.health_score}%`}</span>
                       </div>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
-                          onClick={() => navigate(`/app/analyze?camera=${cam.id}`)}
+                          onClick={() => navigate(`/app/monitor?camera=${encodeURIComponent(cam.id)}`)}
                           className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                          title="Launch Live AI Analysis"
+                          title="Open HLS preview (AI inference not connected)"
                         >
                           <Play className="w-4 h-4 text-emerald-600" />
                         </button>
@@ -273,42 +279,24 @@ export function Cameras() {
               </tbody>
             </table>
           ) : (
-            // Schematic Map View
-            <div className="absolute inset-0 bg-[#e2e8f0] overflow-hidden relative">
-              {/* Fake grid pattern to simulate a tactical map surface */}
-              <div className="absolute inset-0 opacity-[0.03] bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MCIgaGVpZ2h0PSI0MCI+CjxwYXRoIGQ9Ik0wIDBoNDB2NDBIMHoiIGZpbGw9Im5vbmUiLz4KPHBhdGggZD0iTTAgMGg0MHY0MEgweiIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMDAwIiBzdHJva2Utd2lkdGg9IjEiIG9wYWNpdHk9IjAuMSIvPgo8L3N2Zz4=')]"></div>
-              
-              {filteredCameras.map((cam, i) => {
-                // Generate a stable pseudo-random position if lat/lng missing
-                const top = cam.latitude ? ((cam.latitude % 100) + 10) + '%' : `${20 + (i * 17 % 60)}%`;
-                const left = cam.longitude ? ((cam.longitude % 100) + 10) + '%' : `${15 + (i * 23 % 70)}%`;
-                
-                return (
-                  <div 
-                    key={cam.id} 
-                    className="absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer"
-                    style={{ top, left }}
-                    onClick={() => handleOpenDetails(cam)}
-                  >
-                    <div className={cn(
-                      "w-4 h-4 rounded-full border-2 border-white shadow-md relative z-10",
-                      cam.status === 'online' ? "bg-emerald-500" :
-                      cam.status === 'warning' ? "bg-amber-500" : "bg-red-500"
-                    )}>
-                      {cam.status === 'online' && <div className="absolute inset-0 rounded-full bg-emerald-500 animate-ping opacity-50"></div>}
+            // Location directory, not a fabricated geospatial map.
+            <div className="p-5 grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <p className="col-span-full text-sm text-slate-600">
+                Saved locations — geographic map integration is not configured.
+                Coordinates below come directly from camera records.
+              </p>
+              {filteredCameras.map(cam => (
+                <button key={cam.id} onClick={() => handleOpenDetails(cam)}
+                  className="rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-blue-300">
+                  <div className="font-bold text-slate-900">{cam.name}</div>
+                  <div className="text-sm text-slate-600">{cam.location || 'No location specified'}</div>
+                  {Number.isFinite(cam.latitude) && Number.isFinite(cam.longitude) && (
+                    <div className="text-xs text-slate-500 mt-1">
+                      GPS: {Number(cam.latitude).toFixed(5)}, {Number(cam.longitude).toFixed(5)}
                     </div>
-                    <div className="mt-1 bg-white/90 backdrop-blur px-2 py-0.5 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap text-[10px] font-bold text-slate-800 border border-slate-200">
-                      {cam.camera_identifier || cam.name}
-                    </div>
-                  </div>
-                )
-              })}
-              
-              <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur p-3 rounded-lg border border-slate-200 shadow-sm text-[11px] font-bold text-slate-600 flex flex-col gap-2">
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Online</div>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Warning</div>
-                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-500"></div> Offline</div>
-              </div>
+                  )}
+                </button>
+              ))}
             </div>
           )}
         </div>
@@ -373,13 +361,18 @@ export function Cameras() {
                     
                     {/* Live Preview Button */}
                     <button 
-                      onClick={() => navigate(`/app/analyze?camera=${selectedCamera.id}`)}
+                      onClick={() => navigate(`/app/monitor?camera=${encodeURIComponent(selectedCamera.id)}`)}
                       className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 p-3 rounded-lg text-[13px] font-bold text-slate-900 shadow-sm hover:border-blue-300 transition-colors cursor-pointer group"
                     >
                       <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
                         <Play className="w-4 h-4 ml-0.5" />
                       </div>
                       Watch Live Stream
+                    </button>
+
+                    <button onClick={() => navigate(`/app/scene-setup/${encodeURIComponent(selectedCamera.id)}`)}
+                      className="w-full inline-flex justify-center px-3 py-2 rounded-lg font-bold text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">
+                      Configure Scene Geometry
                     </button>
 
                     {/* Info Card */}
@@ -393,7 +386,7 @@ export function Cameras() {
                               style={{ width: `${selectedCamera.health_score || 0}%` }}
                             />
                           </div>
-                          <span className="text-[14px] font-bold text-slate-900">{selectedCamera.health_score || 0}%</span>
+                          <span className="text-[14px] font-bold text-slate-900">{selectedCamera.health_score == null ? "Not checked" : `${selectedCamera.health_score}%`}</span>
                         </div>
                       </div>
                       
@@ -406,8 +399,8 @@ export function Cameras() {
                         </div>
                         <div className="overflow-hidden">
                           <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Source URL</div>
-                          <div className="text-[13px] font-medium text-slate-900 truncate" title={selectedCamera.source_url || selectedCamera.stream_url}>
-                            {selectedCamera.source_url || selectedCamera.stream_url || 'N/A'}
+                          <div className="text-[13px] font-medium text-slate-900 truncate" title={cameraSourceHost(selectedCamera)}>
+                            {cameraSourceHost(selectedCamera)}
                           </div>
                         </div>
                       </div>
