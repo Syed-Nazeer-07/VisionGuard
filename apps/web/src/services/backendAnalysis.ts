@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { callVideoStorage } from './videoStorage';
 
 export interface BackendHealth {
   status: string;
@@ -465,23 +466,56 @@ export async function downloadJobArtifactBlob(jobId: string): Promise<Blob> {
 }
 
 /**
- * Persists the compressed artifact to durable Supabase Storage.
- * Associating with the video and run.
+ * New analysis artifacts are stored privately in B2. Supabase is used as the
+ * metadata/auth database; its Storage quota is NOT required for new runs.
+ * The Edge Function verifies video ownership and the analysis run before
+ * signing a single-object PUT, then HEAD-checks the resulting object size.
+ * 'videos' is retained only to read historical Supabase artifacts.
  */
+export const B2_ARTIFACT_BUCKET = 'b2-artifacts';
+
+export function parseB2ArtifactPath(storagePath: string): { videoId: string; runId: string } {
+  const match = /^artifacts\/([0-9a-f]{8}-[0-9a-f-]{27})\/([0-9a-f]{8}-[0-9a-f-]{27})\.json\.gz$/i.exec(storagePath);
+  if (!match) throw new Error('Invalid B2 analysis artifact path');
+  return { videoId: match[1], runId: match[2] };
+}
+
+/** Upload a compressed backend analysis artifact to B2 with short-lived signed PUT. */
 export async function saveArtifactToStorage(
   videoId: string,
   runId: string,
   artifactBlob: Blob,
-  bucket: string = 'videos'
+  bucket: string = B2_ARTIFACT_BUCKET
 ): Promise<{ storagePath: string; bucket: string; size: number }> {
   const storagePath = `artifacts/${videoId}/${runId}.json.gz`;
-  const { error } = await supabase.storage.from(bucket).upload(storagePath, artifactBlob, {
-    contentType: 'application/gzip',
-    upsert: true
-  });
-  if (error) {
-    throw new Error(`Failed to save artifact to storage: ${error.message}`);
+  if (bucket === B2_ARTIFACT_BUCKET) {
+    // Validate identifiers before contacting the server or signing any URL.
+    parseB2ArtifactPath(storagePath);
+    const signed = await callVideoStorage<{ key: string; url: string }>({
+      action: 'create-artifact-upload', videoId, runId, fileSize: artifactBlob.size
+    });
+    if (signed.key !== storagePath) throw new Error('B2 returned an unexpected artifact object key');
+    const response = await fetch(signed.url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/gzip' },
+      body: artifactBlob
+    });
+    if (!response.ok) throw new Error(`B2 artifact upload failed: HTTP ${response.status}`);
+    const confirmed = await callVideoStorage<{ exists: boolean; size: number; key: string }>({
+      action: 'verify-artifact-upload', videoId, runId, fileSize: artifactBlob.size
+    });
+    if (!confirmed.exists || confirmed.size !== artifactBlob.size || confirmed.key !== storagePath) {
+      throw new Error('B2 failed to verify the uploaded analysis artifact');
+    }
+    return { storagePath, bucket, size: confirmed.size };
   }
+
+  // Explicit legacy-only path. Never silently switch new B2 uploads back to
+  // quota-limited Supabase Storage if B2 configuration or network fails.
+  const { error } = await supabase.storage.from(bucket).upload(storagePath, artifactBlob, {
+    contentType: 'application/gzip', upsert: true
+  });
+  if (error) throw new Error(`Failed to save artifact to storage: ${error.message}`);
   return { storagePath, bucket, size: artifactBlob.size };
 }
 
@@ -509,6 +543,16 @@ export async function loadArtifactFromStorage(
   bucket: string = 'videos'
 ): Promise<BackendArtifactPayload> {
   let blob: Blob | null = null;
+  if (bucket === B2_ARTIFACT_BUCKET) {
+    const { videoId, runId } = parseB2ArtifactPath(storagePath);
+    const signed = await callVideoStorage<{ key: string; url: string }>({
+      action: 'artifact-playback-url', videoId, runId
+    });
+    if (signed.key !== storagePath) throw new Error('B2 returned an unexpected analysis artifact key');
+    const response = await fetch(signed.url);
+    if (!response.ok) throw new Error(`B2 artifact download failed: HTTP ${response.status}`);
+    blob = await response.blob();
+  } else {
   const { data, error } = await supabase.storage.from(bucket).download(storagePath);
   if (!error && data) {
     blob = data;
@@ -530,6 +574,8 @@ export async function loadArtifactFromStorage(
   if (!blob) {
     throw new Error(`Failed to download artifact from storage (${bucket}/${storagePath}): ${error?.message || 'Empty response or access error'}`);
   }
+  }
+  if (!blob) throw new Error(`Missing analysis artifact in ${bucket}/${storagePath}`);
 
   const jsonText = await decompressGzipBlob(blob);
   try {
@@ -546,7 +592,13 @@ export async function deleteArtifactFromStorage(
   storagePath: string,
   bucket: string = 'videos'
 ): Promise<void> {
-  await supabase.storage.from(bucket).remove([storagePath]);
+  if (bucket === B2_ARTIFACT_BUCKET) {
+    const { videoId, runId } = parseB2ArtifactPath(storagePath);
+    await callVideoStorage({ action: 'delete-artifact', videoId, runId });
+    return;
+  }
+  const { error } = await supabase.storage.from(bucket).remove([storagePath]);
+  if (error) throw new Error(`Failed to delete artifact: ${error.message}`);
 }
 
 /**
