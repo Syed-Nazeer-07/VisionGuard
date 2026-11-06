@@ -78,6 +78,8 @@ export const PROCESSING_SPEEDS: Record<ProcessingSpeed, ProcessingSpeedConfig> =
 export interface BackendJobSummary {
   total_frames: number;
   processed_frames: number;
+  /** Actual YOLO boxes on analyzed frames; absent on legacy artifacts. */
+  detections_generated?: number;
   duration_seconds: number;
   unique_vehicles: number;
   vehicle_counts_by_class: Record<string, number>;
