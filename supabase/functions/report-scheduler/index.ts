@@ -174,8 +174,16 @@ serve(async (req) => {
 
           if (uploadError) throw new Error(`Storage error: ${uploadError.message}`)
 
-          const { data: publicUrlData } = supabaseClient.storage.from('reports').getPublicUrl(storagePath)
-          const fileUrl = publicUrlData.publicUrl
+          // Private report bucket: recipients receive a seven-day signed
+          // download URL instead of a permanent public CDN link.
+          // Reports retain file_path so authorized staff can re-sign later.
+          const { data: signedData, error: signedError } = await supabaseClient.storage
+            .from('reports')
+            .createSignedUrl(storagePath, 7 * 24 * 60 * 60)
+          if (signedError || !signedData?.signedUrl) {
+            throw new Error(`Could not create private report URL: ${signedError?.message ?? 'missing URL'}`)
+          }
+          const fileUrl = signedData.signedUrl
 
           // Save report row
           const { data: insertedReport, error: reportInsertError } = await supabaseClient
