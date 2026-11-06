@@ -30,6 +30,8 @@ const PLAYBACK_URL_TTL_SECONDS = 6 * 60 * 60 // 6 h
 const MIN_PART_SIZE = 10 * 1024 * 1024 // B2/S3 minimum is 5 MiB; 10 MiB keeps retries cheap on slow links
 const MAX_PARTS = 10_000
 const MAX_FILE_SIZE = 50 * 1024 * 1024 * 1024 // 50 GiB application ceiling
+const MAX_ARTIFACT_FILE_SIZE = 1024 * 1024 * 1024 // 1 GiB compressed analysis artifact cap
+const ARTIFACT_URL_TTL_SECONDS = 15 * 60 // 15 min; request a fresh playback URL as needed
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -119,6 +121,34 @@ async function loadAsset(db: SupabaseClient, videoId: string): Promise<AssetRow>
   return data as AssetRow
 }
 
+function requireAssetOwner(asset: AssetRow, userId: string) {
+  if (asset.uploaded_by !== userId) throw new HttpError(403, 'Only the uploader may modify artifacts for this video')
+}
+
+// The artifact key is DERIVED FROM UUIDs, never an arbitrary client path.
+async function loadArtifactRun(db: SupabaseClient, videoId: string, runId: unknown): Promise<string> {
+  if (typeof runId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(runId)) {
+    throw new HttpError(400, 'Invalid analysis run ID')
+  }
+  const { data: run, error } = await db
+    .from('analysis_runs')
+    .select('id, video_id')
+    .eq('id', runId)
+    .eq('video_id', videoId)
+    .maybeSingle()
+  if (error) throw new HttpError(500, `analysis_runs lookup failed: ${error.message}`)
+  if (!run) throw new HttpError(404, 'No accessible analysis run exists for this video')
+  return `artifacts/${videoId}/${runId}.json.gz`
+}
+
+async function requireArtifactReader(db: SupabaseClient, asset: AssetRow, userId: string) {
+  if (asset.uploaded_by === userId) return
+  const { data, error } = await db.rpc('auth_user_role')
+  if (error || (data !== 'Admin' && data !== 'Supervisor')) {
+    throw new HttpError(403, 'Only the video uploader or authorized staff can read this artifact')
+  }
+}
+
 function requireUploader(asset: AssetRow, userId: string) {
   if (asset.storage_provider !== 'b2') throw new HttpError(409, `Video asset ${asset.id} is not stored in B2`)
   if (asset.uploaded_by !== userId) throw new HttpError(403, 'Only the uploader can upload this video')
@@ -156,6 +186,59 @@ Deno.serve(async (req) => {
     const videoId = String(body.videoId ?? '')
 
     switch (action) {
+      // Analysis artifacts also live in B2. Supabase is used for the
+      // analysis_runs row and authorization, NOT its quota-limited object bucket.
+      case 'create-artifact-upload': {
+        const asset = await loadAsset(db, videoId)
+        requireAssetOwner(asset, userId)
+        const key = await loadArtifactRun(db, videoId, body.runId)
+        const fileSize = Number(body.fileSize)
+        if (!Number.isSafeInteger(fileSize) || fileSize < 1 || fileSize > MAX_ARTIFACT_FILE_SIZE) {
+          throw new HttpError(400, 'Invalid compressed artifact size')
+        }
+        const cfg = b2Config()
+        const url = await presign(cfg, 'PUT', objectUrl(cfg, key), ARTIFACT_URL_TTL_SECONDS)
+        return json({ key, url, expiresIn: ARTIFACT_URL_TTL_SECONDS })
+      }
+
+      case 'verify-artifact-upload': {
+        const asset = await loadAsset(db, videoId)
+        requireAssetOwner(asset, userId)
+        const key = await loadArtifactRun(db, videoId, body.runId)
+        const expectedSize = Number(body.fileSize)
+        if (!Number.isSafeInteger(expectedSize) || expectedSize < 1 || expectedSize > MAX_ARTIFACT_FILE_SIZE) {
+          throw new HttpError(400, 'Invalid compressed artifact size')
+        }
+        const cfg = b2Config()
+        const head = await s3(cfg, 'HEAD', objectUrl(cfg, key))
+        if (head.status === 404) throw new HttpError(502, 'Artifact upload was not found in B2')
+        const storedSize = Number(head.headers.get('Content-Length') ?? '-1')
+        if (storedSize !== expectedSize) {
+          throw new HttpError(502, `B2 artifact size mismatch (expected ${expectedSize}, got ${storedSize})`)
+        }
+        return json({ key, size: storedSize, exists: true })
+      }
+
+      case 'artifact-playback-url': {
+        const asset = await loadAsset(db, videoId)
+        await requireArtifactReader(db, asset, userId)
+        const key = await loadArtifactRun(db, videoId, body.runId)
+        const cfg = b2Config()
+        const head = await s3(cfg, 'HEAD', objectUrl(cfg, key))
+        if (head.status === 404) throw new HttpError(404, 'Analysis artifact was not found in B2')
+        const url = await presign(cfg, 'GET', objectUrl(cfg, key), ARTIFACT_URL_TTL_SECONDS)
+        return json({ key, url, size: Number(head.headers.get('Content-Length') ?? '0') })
+      }
+
+      case 'delete-artifact': {
+        const asset = await loadAsset(db, videoId)
+        requireAssetOwner(asset, userId)
+        const key = await loadArtifactRun(db, videoId, body.runId)
+        const cfg = b2Config()
+        await s3(cfg, 'DELETE', objectUrl(cfg, key))
+        return json({ deleted: true })
+      }
+
       case 'create-upload': {
         const asset = await loadAsset(db, videoId)
         requireUploader(asset, userId)
