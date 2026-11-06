@@ -100,3 +100,26 @@ automatically.** It is a staging candidate to reduce isolated-PR conflict
 risk. First validate with a real Supabase staging environment, owned model
 binary, authentic footage, then resolve any remaining security/functional
 issues before a coordinated production rollout.
+
+## Local backend video source security
+
+The FastAPI analysis endpoint is unauthenticated and intended for loopback
+access only (`127.0.0.1:8000`). Arbitrary `video_url` values are no
+longer dereferenced; local paths are restricted to the project `assets/`
+directory or backend `uploads/` directory (with symlink/traversal and size
+checks). Direct user file uploads are still supported.
+
+Remote URLs are **disabled by default**. To analyze an already-uploaded B2
+or Supabase video through the local backend, explicitly set
+`VISIONGUARD_ALLOWED_VIDEO_HOSTS` in `backend/.env` to the trusted
+**exact HTTPS hostname(s)** of your storage endpoint, e.g. the B2
+endpoint supplied by your deployment. The download rejects redirects,
+private/non-public DNS targets, unsupported protocols and oversize files.
+Never include the whole signed URL or its access token in this setting,
+and never expose the unauthenticated local backend on the public internet.
+
+If you use Supabase Storage/B2 URLs in browser analysis, verify their
+specific hosts in staging. DNS rebinding resistance additionally benefits
+from firewall or egress rules; code allowlisting alone is not an internet
+security boundary. Internal error responses are generic while diagnostics
+remain in backend logs.
