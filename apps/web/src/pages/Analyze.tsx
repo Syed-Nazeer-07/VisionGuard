@@ -261,7 +261,8 @@ export default function Analyze() {
 
   // Local Python backend vs In-Browser WebGPU mode
   const [analysisEngine, setAnalysisEngine] = useState<'backend' | 'browser'>(() => {
-    return (localStorage.getItem('visionguard_analysis_engine') as 'backend' | 'browser') || 'backend';
+    // Browser inference is self-contained; the Python service is optional.
+    return (localStorage.getItem('visionguard_analysis_engine') as 'backend' | 'browser') || 'browser';
   });
   const analysisEngineRef = useRef(analysisEngine);
   analysisEngineRef.current = analysisEngine;
@@ -360,6 +361,13 @@ export default function Analyze() {
       if (!cancelled) {
         setBackendAvailable(res.isAvailable);
         setBackendHealth(res.health || null);
+        if (!res.isAvailable && analysisEngineRef.current === 'backend') {
+          // Previous sessions may have persisted backend as the default.
+          // Don't strand users in an unavailable engine when browser AI works.
+          analysisEngineRef.current = 'browser';
+          setAnalysisEngine('browser');
+          localStorage.setItem('visionguard_analysis_engine', 'browser');
+        }
       }
     };
     void check();
@@ -2971,15 +2979,22 @@ export default function Analyze() {
           </div>
         )}
 
+        {analysisEngine === 'browser' && (!calibration || calibration.calibrationArea?.length !== 4) && (
+          <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs text-blue-900 flex items-center gap-2">
+            <Activity className="w-4 h-4 shrink-0" />
+            <span><strong>Speed: calibration required.</strong> Vehicles can still be detected and tracked, but no trustworthy km/h value is available until a measured road-plane reference is configured.</span>
+          </div>
+        )}
+
         {/* Actionable Local Backend Offline Banner */}
         {analysisEngine === 'backend' && !backendAvailable && (
           <div className="bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 rounded-lg text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs" id="analyze-backend-offline-banner">
             <div className="flex items-start sm:items-center gap-2.5">
               <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
               <div>
-                <span className="font-semibold text-amber-950">Local AI Backend is Offline (http://127.0.0.1:8000).</span>
+                <span className="font-semibold text-amber-950">Optional Python engine isn't running.</span>
                 <span className="text-amber-800 ml-1">
-                  Run <code className="bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded font-mono text-[11px]">Start-VisionGuard.bat</code> to launch local DirectML/CPU acceleration, or switch to{' '}
+                  On Windows on ARM this backend may require compatible Python packages. Browser AI does not need it. Start the Python service only if you deliberately need offline batch processing, or switch to{' '}
                   <button
                     type="button"
                     onClick={() => selectAnalysisEngine('browser')}
