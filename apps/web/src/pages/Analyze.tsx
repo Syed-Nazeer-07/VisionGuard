@@ -3,7 +3,7 @@ import { useSearchParams, Link } from 'react-router-dom';
 import {
   Upload, CheckCircle2, Loader2,
   AlertTriangle, Film, Play, Pause, Square, RotateCcw, X,
-  Maximize2, Minimize2, Clock, Eye
+  Maximize2, Minimize2, Clock, Eye, Activity
 } from 'lucide-react';
 import Hls from 'hls.js';
 import { cn } from '../lib/utils';
