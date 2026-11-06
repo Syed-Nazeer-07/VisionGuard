@@ -149,10 +149,18 @@ export function Monitor() {
                     <span className="font-semibold truncate">{cam.name}</span>
                     <span className="block opacity-70">{cameraSourceLabel(cam)} · Preview only</span>
                   </div>
-                  <Link to={`/app/scene-setup/${encodeURIComponent(cam.id)}`}
-                    title="Configure camera scene" className="absolute bottom-2 right-2 p-1.5 bg-slate-900/80 text-white rounded-lg">
-                    <Settings2 className="w-4 h-4" />
-                  </Link>
+                  <div className="absolute bottom-2 right-2 flex items-center gap-2">
+                    {getCameraPlaybackSource(cam).playable && (
+                      <Link to={`/app/camera-inference/${encodeURIComponent(cam.id)}`}
+                        title="Run local browser YOLO detection on this HLS camera" className="flex items-center gap-1.5 p-1.5 bg-blue-700/90 hover:bg-blue-600 text-white rounded-lg text-xs font-semibold">
+                        <Activity className="w-4 h-4" /> AI Detect
+                      </Link>
+                    )}
+                    <Link to={`/app/scene-setup/${encodeURIComponent(cam.id)}`}
+                      title="Configure camera scene" className="p-1.5 bg-slate-900/80 text-white rounded-lg">
+                      <Settings2 className="w-4 h-4" />
+                    </Link>
+                  </div>
                 </div>
               ))}
               {filteredCameras.length === 0 && <div className="p-8 text-sm text-slate-500">No matching camera feeds.</div>}
