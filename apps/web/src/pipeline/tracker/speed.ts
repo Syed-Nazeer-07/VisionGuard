@@ -11,7 +11,13 @@ export interface SpeedResult {
 }
 
 export class SpeedEstimator {
-  private history = new Map<number, { lastWorldPt: Point, lastTime: number, speeds: number[], overspeedCount: number, isStationary: boolean }>();
+  private history = new Map<number, {
+    lastWorldPt: Point; lastTime: number; speeds: number[];
+    overspeedCount: number; isStationary: boolean; lastResult: SpeedResult | null
+  }>();
+  // Avoid treating a 1–2 pixel bounding-box wobble between 30 FPS frames
+  // as large real-world acceleration. Measure over >= 120ms of video time.
+  private readonly minMeasurementIntervalSeconds = 0.12;
   private speedLimit: number;
   private tolerance: number;
   private hMatrix: number[] | null = null;
@@ -59,7 +65,7 @@ export class SpeedEstimator {
     const state = this.history.get(trackId);
 
     if (!state) {
-      this.history.set(trackId, { lastWorldPt: worldPt, lastTime: mediaTime, speeds: [], overspeedCount: 0, isStationary: true });
+      this.history.set(trackId, { lastWorldPt: worldPt, lastTime: mediaTime, speeds: [], overspeedCount: 0, isStationary: true, lastResult: null });
       return null;
     }
 
@@ -72,11 +78,14 @@ export class SpeedEstimator {
       state.speeds = [];
       state.isStationary = true;
       state.overspeedCount = 0;
+      state.lastResult = null;
       return null;
     }
 
-    // Identical frame or negligible advance
-    if (dt <= 0.001) return null;
+    // Hold the previous *measured* speed during sub-120ms frames instead
+    // of deriving implausible km/h from detector bounding-box jitter.
+    // No result is emitted until a valid observed displacement is measured.
+    if (dt < this.minMeasurementIntervalSeconds) return state.lastResult;
 
     const dx = worldPt.x - state.lastWorldPt.x;
     const dy = worldPt.y - state.lastWorldPt.y;
@@ -137,7 +146,7 @@ export class SpeedEstimator {
     state.lastWorldPt = worldPt;
     state.lastTime = mediaTime;
 
-    return {
+    state.lastResult = {
       speed: medianSpeed,
       velocity: directionalVelocityKmh,
       vx: vxKmh,
@@ -145,6 +154,7 @@ export class SpeedEstimator {
       isOverspeed: state.overspeedCount >= 3,
       isEstimated: true
     };
+    return state.lastResult;
   }
 
   remove(trackId: number) {
