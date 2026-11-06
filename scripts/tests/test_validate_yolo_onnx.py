@@ -47,12 +47,15 @@ def make_fixture(path: Path, *, input_shape=(1, 3, 640, 640),
             "external_weights", TensorProto.FLOAT, [1],
             bytes.fromhex("0000803f"), raw=True
         )
+        tensor.ClearField("raw_data")
+        tensor.data_location = TensorProto.EXTERNAL
+        tensor.external_data.add(key="location", value="external.bin")
         graph.initializer.append(tensor)
-        onnx.save_model(
-            model, path, save_as_external_data=True,
-            all_tensors_to_one_file=True, size_threshold=0,
-            location="external.bin"
-        )
+        # Serialize directly: onnx.save_model may normalize tiny unused
+        # initializers back to inline data instead of keeping our intended
+        # external-data reference in this synthetic graph.
+        path.write_bytes(model.SerializeToString())
+        (path.parent / "external.bin").write_bytes(bytes.fromhex("0000803f"))
         return
     onnx.save(model, path)
 
