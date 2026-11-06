@@ -29,8 +29,10 @@ tracker restarts IDs for every new run. The new migration keys tracks by
   Existing surviving rows are kept intact.
 - Browser/backend multi-step History persistence is not transactional.
 - Backend speed episode counts are not yet reviewable incident rows.
-- Legacy tracking records without an analysis_run_id remain readable and
-  are protected by source-scoped partial unique indexes.
+- Legacy tracking records without an analysis_run_id remain readable.
+  They are not uniquely keyed by source: the existing FK uses ON DELETE SET NULL,
+  and source-scoped partial unique indexes could block deletion of multiple
+  runs using the same numerical track ID.
 - Analytics needs run-scoped aggregation to avoid interpreting track rows
   from multiple runs as unique physical vehicles; the existing Analytics
   page already offers latest-run and selected-run scoping.
