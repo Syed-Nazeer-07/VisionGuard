@@ -18,7 +18,9 @@ import {
   diagnosePipeline
 } from '../pipeline/worker/frameSync';
 import { InferenceCoordinator } from '../pipeline/worker/inferenceCoordinator';
-import type { ResultMessage, WorkerOutputMessage, CalibrationData } from '../pipeline/types';
+import type { ResultMessage, WorkerOutputMessage, CalibrationData, Point } from '../pipeline/types';
+import { validateVideoCalibration } from '../pipeline/tracker/calibrationValidation';
+import { VideoCalibrationOverlay } from '../components/analysis/VideoCalibrationOverlay';
 import type { ViolationCandidate, ViolationMetadata } from '../pipeline/violations/types';
 import { db, type VideoAsset } from '../services/db';
 import { requestOcr } from '../pipeline/plate/service';
@@ -282,6 +284,71 @@ export default function Analyze() {
 
   // Speed estimation ground-plane calibration state (loaded from surveyed video assets if available)
   const [calibration, setCalibration] = useState<CalibrationData | null>(null);
+  // The video-frame callback can outlive a render. Always read the current
+  // calibration instead of a stale closure captured before the editor saved.
+  const calibrationRef = useRef<CalibrationData | null>(null);
+  calibrationRef.current = calibration;
+  const [calibrationOpen, setCalibrationOpen] = useState(false);
+  const [calibrationPoints, setCalibrationPoints] = useState<Point[]>([]);
+  const [calibrationForm, setCalibrationForm] = useState({
+    referenceWidth: '', referenceHeight: '', speedLimit: '60', tolerance: '5'
+  });
+  const [calibrationSaving, setCalibrationSaving] = useState(false);
+  const [calibrationIssue, setCalibrationIssue] = useState<string | null>(null);
+
+  const openVideoCalibration = () => {
+    if (!sourceInfo || runStateRef.current === 'ANALYZING' || runStateRef.current === 'STARTING') return;
+    videoRef.current?.pause();
+    setCalibrationPoints(calibration?.calibrationArea?.map(p => ({ ...p })) ?? []);
+    setCalibrationForm({
+      referenceWidth: calibration?.referenceWidth?.toString() ?? '',
+      referenceHeight: calibration?.referenceHeight?.toString() ?? '',
+      speedLimit: calibration?.speedLimit?.toString() ?? '60',
+      tolerance: calibration?.tolerance?.toString() ?? '5'
+    });
+    setCalibrationIssue(null);
+    setCalibrationOpen(true);
+  };
+
+  const saveVideoCalibration = async () => {
+    if (!sourceInfo || calibrationSaving) return;
+    const data: CalibrationData = {
+      referenceWidth: Number(calibrationForm.referenceWidth),
+      referenceHeight: Number(calibrationForm.referenceHeight),
+      speedLimit: Number(calibrationForm.speedLimit),
+      tolerance: Number(calibrationForm.tolerance),
+      calibrationArea: calibrationPoints.map(point => ({ ...point }))
+    };
+    if (!calibrationForm.referenceWidth.trim() || !calibrationForm.referenceHeight.trim()) {
+      setCalibrationIssue('Enter actual surveyed reference dimensions in metres.');
+      return;
+    }
+    const issue = validateVideoCalibration(data);
+    if (issue) { setCalibrationIssue(issue); return; }
+    setCalibrationSaving(true);
+    setCalibrationIssue(null);
+    try {
+      if (!sourceInfo.isLocalOnly && sourceInfo.id) {
+        const { data: record, error: readError } = await supabase.from('video_assets')
+          .select('metadata').eq('id', sourceInfo.id).maybeSingle();
+        if (readError || !record) throw new Error(readError?.message || 'Video asset is unavailable');
+        const previous = record.metadata && typeof record.metadata === 'object' && !Array.isArray(record.metadata)
+          ? record.metadata : {};
+        const { data: updated, error: writeError } = await supabase.from('video_assets')
+          .update({ metadata: { ...previous, calibration: data } })
+          .eq('id', sourceInfo.id).select('id').maybeSingle();
+        if (writeError || !updated) throw new Error(writeError?.message || 'Camera calibration was not saved');
+      }
+      setCalibration(data);
+      calibrationRef.current = data;
+      setCalibrationOpen(false);
+      setContentNote('Measured reference saved. Restart analysis to compute estimated km/h. Validate measured speeds against ground truth before use.');
+    } catch (error) {
+      setCalibrationIssue(`Could not save calibration: ${describeError(error)}`);
+    } finally {
+      setCalibrationSaving(false);
+    }
+  };
 
   // Helper to change engine explicitly (persisted to storage)
   const selectAnalysisEngine = (engine: 'backend' | 'browser') => {
@@ -872,8 +939,8 @@ export default function Analyze() {
           sourceHeight: bitmap.height,
           confidenceThreshold: confTh,
           iouThreshold: iouTh,
-          calibration: (calibration && calibration.calibrationArea?.length === 4)
-            ? calibration
+          calibration: (calibrationRef.current && calibrationRef.current.calibrationArea?.length === 4)
+            ? calibrationRef.current
             : {
                 referenceWidth: 2,
                 referenceHeight: 2,
@@ -3029,6 +3096,64 @@ export default function Analyze() {
           </div>
         )}
 
+        {sourceInfo && (
+          <section aria-label="Vehicle speed calibration" className="border border-slate-200 bg-white rounded-xl p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-900">Speed reference</h2>
+                <p className="text-xs text-slate-600 mt-1">
+                  {calibration ? 'Reference configured · estimated km/h requires independent validation'
+                    : 'No surveyed ground-plane reference · km/h unavailable'}
+                </p>
+              </div>
+              <button type="button" disabled={runState === 'ANALYZING' || runState === 'STARTING'}
+                onClick={calibrationOpen ? () => setCalibrationOpen(false) : openVideoCalibration}
+                className="px-3 py-2 border border-indigo-200 bg-indigo-50 text-indigo-800 text-xs rounded-lg font-semibold disabled:opacity-50">
+                {calibrationOpen ? 'Close calibration' : calibration ? 'Edit reference' : 'Calibrate speed'}
+              </button>
+            </div>
+            {calibrationOpen && (
+              <div className="border-t border-slate-100 pt-3 space-y-3">
+                <p className="text-xs leading-relaxed text-slate-600">
+                  Pause on a clear frame and select the four corners of a measured road-plane rectangle:
+                  top-left, top-right, bottom-right, bottom-left. Enter its real width and length in metres.
+                  Do not estimate these dimensions from the image alone.
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {([
+                    ['referenceWidth', 'Road width (m)'],
+                    ['referenceHeight', 'Road length (m)'],
+                    ['speedLimit', 'Speed limit (km/h)'],
+                    ['tolerance', 'Tolerance (km/h)']
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="block text-xs text-slate-600">
+                      <span className="font-semibold">{label}</span>
+                      <input type="number" min={key === 'tolerance' ? 0 : 0.01} step="any"
+                        value={calibrationForm[key]}
+                        onChange={event => setCalibrationForm(prev => ({ ...prev, [key]: event.target.value }))}
+                        className="mt-1 block w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20" />
+                    </label>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-slate-500">{calibrationPoints.length} of 4 corners selected</span>
+                  <button type="button" onClick={() => { setCalibrationPoints([]); setCalibrationIssue(null); }}
+                    className="text-xs text-slate-600 hover:text-indigo-700 underline">Reset points</button>
+                  <button type="button" onClick={() => setCalibrationPoints(prev => prev.slice(0, -1))}
+                    disabled={calibrationPoints.length === 0}
+                    className="text-xs text-slate-600 hover:text-indigo-700 underline disabled:opacity-50">Undo point</button>
+                  <button type="button" onClick={() => void saveVideoCalibration()} disabled={calibrationSaving}
+                    className="ml-auto px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold disabled:opacity-50">
+                    {calibrationSaving ? 'Saving…' : 'Save measured reference'}
+                  </button>
+                </div>
+                {calibrationIssue && <p role="alert" className="text-xs text-rose-700">{calibrationIssue}</p>}
+                <p className="text-[11px] text-amber-800">Speed estimates are not certified measurements and must not be used for enforcement.</p>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Main Analysis Workspace: Video Viewport and Playback Controls */}
         <div className="w-full flex flex-col gap-2">
             <div
@@ -3080,6 +3205,11 @@ export default function Analyze() {
                   ref={canvasRef}
                   className="absolute inset-0 w-full h-full pointer-events-none z-20"
                 />
+                {calibrationOpen && (
+                  <VideoCalibrationOverlay videoRef={videoRef} points={calibrationPoints}
+                    onPoint={point => { setCalibrationPoints(prev => [...prev, point]); setCalibrationIssue(null); }}
+                    fit={isFullscreen ? 'cover' : 'contain'} />
+                )}
               </div>
 
               {sourceInfo && (
