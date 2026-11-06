@@ -13,15 +13,20 @@ export type CameraPlaybackState = 'playing' | 'error';
 export function CameraStream({
   camera,
   onPlayback,
+  onVideoElement,
   controls = false,
 }: {
   camera: CameraSourceRecord;
   onPlayback?: (state: CameraPlaybackState, reason?: string) => void;
+  /** Expose the decoded media element to the in-browser inference pipeline. */
+  onVideoElement?: (video: HTMLVideoElement | null) => void;
   controls?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const notifyRef = useRef(onPlayback);
   notifyRef.current = onPlayback;
+  const elementRef = useRef(onVideoElement);
+  elementRef.current = onVideoElement;
   const [state, setState] = useState<'loading' | 'playing' | 'error'>('loading');
   const [message, setMessage] = useState<string | null>(null);
   const playback = getCameraPlaybackSource(camera);
@@ -34,6 +39,7 @@ export function CameraStream({
     setMessage(null);
     const video = videoRef.current;
     if (!video) return;
+    elementRef.current?.(video);
     let hls: Hls | null = null;
     let disposed = false;
     let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -84,6 +90,7 @@ export function CameraStream({
 
     return () => {
       disposed = true;
+      elementRef.current?.(null);
       if (timeout) clearTimeout(timeout);
       video.removeEventListener('playing', playing);
       video.removeEventListener('error', mediaError);
@@ -105,7 +112,7 @@ export function CameraStream({
 
   return (
     <div className="absolute inset-0 bg-slate-950">
-      <video ref={videoRef} className="w-full h-full object-contain" muted playsInline autoPlay controls={controls || state === 'error'} />
+      <video ref={videoRef} crossOrigin="anonymous" className="w-full h-full object-contain" muted playsInline autoPlay controls={controls || state === 'error'} />
       {state === 'loading' && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-slate-200 bg-black/30 text-xs">
           <Loader2 className="w-4 h-4 animate-spin" /> Connecting to HLS feed…
