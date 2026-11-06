@@ -1,0 +1,51 @@
+name: Export YOLO11n ONNX (manual, license acknowledgement required)
+
+on:
+  workflow_dispatch:
+    inputs:
+      accept_upstream_license:
+        description: 'I have reviewed and accepted the Ultralytics weights/code license for my intended use'
+        type: choice
+        options:
+          - 'no'
+          - 'yes'
+        default: 'no'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  export-model:
+    if: ${{ inputs.accept_upstream_license == 'yes' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU-only export dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "ultralytics>=8.3,<9" "onnx>=1.16,<2" "onnxruntime>=1.20,<2"
+      - name: Fetch approved upstream weights and export static ONNX
+        run: |
+          python scripts/export_yolo11n.py --weights yolo11n.pt \
+            --download-upstream --acknowledge-license \
+            --output apps/web/public/models/yolo11n.onnx
+      - name: Validate exact model contract and run CPU inference smoke test
+        run: |
+          python scripts/validate_yolo_onnx.py --json > model-manifest.json
+          python scripts/smoke_yolo_onnx.py
+          cat model-manifest.json
+      - name: Preserve model for manual deployment (no Git commit)
+        uses: actions/upload-artifact@v4
+        with:
+          name: visionguard-yolo11n-onnx
+          path: |
+            apps/web/public/models/yolo11n.onnx
+            model-manifest.json
+          if-no-files-found: error
+          retention-days: 7
