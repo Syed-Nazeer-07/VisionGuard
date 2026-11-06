@@ -4,7 +4,7 @@ import { Activity, AlertCircle, Camera, CheckCircle2, Loader2, Search, Settings2
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { CameraStream } from '../components/cameras/CameraStream';
-import { cameraSourceLabel, getCameraPlaybackSource, type CameraSourceRecord } from '../services/cameraSources';
+import { cameraSourceLabel, getCameraPlaybackSource, selectCameraTiles, type CameraSourceRecord } from '../services/cameraSources';
 
 interface CameraRow extends CameraSourceRecord {
   id: string;
@@ -63,9 +63,7 @@ export function Monitor() {
     return matchesSearch && (statusFilter === 'all' || cam.status === statusFilter);
   }), [cameras, search, statusFilter]);
   const selected = filteredCameras.find(cam => cam.id === selectedId);
-  const visibleCameras = (selected
-    ? [selected, ...filteredCameras.filter(cam => cam.id !== selected.id)]
-    : filteredCameras).slice(0, layout);
+  const visibleCameras = selectCameraTiles(filteredCameras, selected?.id ?? null, layout);
   const select = (cam: CameraRow) => setParams({ camera: cam.id });
 
   if (loading) return (
