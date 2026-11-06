@@ -2,6 +2,11 @@
 -- Run with: psql -X -v ON_ERROR_STOP=1 -f supabase/tests/run_track_history_integration.sql
 \set ON_ERROR_STOP on
 
+CREATE TABLE public.analysis_runs (id UUID PRIMARY KEY);
+INSERT INTO public.analysis_runs(id) VALUES
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+
 CREATE TABLE public.tracked_objects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   video_id UUID,
@@ -14,6 +19,10 @@ ALTER TABLE public.tracked_objects
   ADD CONSTRAINT tracked_objects_video_id_track_id_key UNIQUE (video_id, track_id);
 ALTER TABLE public.tracked_objects
   ADD CONSTRAINT tracked_objects_camera_id_track_id_key UNIQUE (camera_id, track_id);
+
+ALTER TABLE public.tracked_objects
+  ADD CONSTRAINT tracked_objects_analysis_run_id_fkey
+  FOREIGN KEY (analysis_run_id) REFERENCES public.analysis_runs(id) ON DELETE SET NULL;
 
 -- Seed one old run plus an unrelated NULL-run legacy record.
 INSERT INTO public.tracked_objects (video_id, analysis_run_id, track_id, metadata)
@@ -59,6 +68,20 @@ BEGIN
 END $$;
 
 \i supabase/tests/run_track_history_assertions.sql
+
+-- Deleting two different runs must not collide on the same source/track ID
+-- when the existing foreign key turns both sets of rows into NULL-run data.
+DELETE FROM public.analysis_runs
+WHERE id IN ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+             'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb');
+DO $
+BEGIN
+  IF (SELECT COUNT(*) FROM public.tracked_objects
+      WHERE video_id = '11111111-1111-1111-1111-111111111111'
+        AND analysis_run_id IS NULL AND track_id = 1) <> 2 THEN
+    RAISE EXCEPTION 'Deleting runs damaged or rejected surviving history';
+  END IF;
+END $;
 
 -- Re-applying the additive migration must remain safe.
 \i supabase/migrations/20261106020000_run_scoped_tracking.sql
