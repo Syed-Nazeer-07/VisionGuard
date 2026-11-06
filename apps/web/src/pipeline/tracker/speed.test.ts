@@ -105,6 +105,38 @@ describe('SpeedEstimator', () => {
     expect(est.update(5, { x: 0.505, y: 0.5, w: 0.1, h: 0.1 }, 0.17)).toEqual(measured);
   });
 
+  it('invalidates old speed when the reference or calibration is removed', () => {
+    const est = new SpeedEstimator(60, 5);
+    est.setHomography(SCALE_H);
+    expect(est.update(8, { x: .3, y: .4, w: .1, h: .1 }, 0)).toBeNull();
+    expect(est.update(8, { x: .4, y: .4, w: .1, h: .1 }, 1)?.speed).toBeCloseTo(36, 1);
+
+    est.setHomography([...SCALE_H]); // same numbers, but a new surveyed reference
+    expect(est.update(8, { x: .4, y: .4, w: .1, h: .1 }, 2)).toBeNull();
+    est.setHomography(null);
+    expect(est.update(8, { x: .6, y: .4, w: .1, h: .1 }, 3)).toBeNull();
+  });
+
+  it('discards an impossible track teleport instead of displaying stale km/h', () => {
+    const est = new SpeedEstimator(100, 5);
+    est.setHomography(SCALE_H);
+    est.update(3, { x: .1, y: .4, w: .1, h: .1 }, 0);
+    expect(est.update(3, { x: .2, y: .4, w: .1, h: .1 }, 1)?.speed).toBeCloseTo(36, 1);
+    // 70 metres in 0.15 seconds = 466 m/s; likely an ID switch.
+    expect(est.update(3, { x: .9, y: .4, w: .1, h: .1 }, 1.15)).toBeNull();
+    // The previous 36 km/h value must not be reused while waiting for a new sample.
+    expect(est.update(3, { x: .901, y: .4, w: .1, h: .1 }, 1.2)).toBeNull();
+  });
+
+  it('ignores nonfinite inputs or projective-horizon points', () => {
+    const est = new SpeedEstimator(60, 5);
+    est.setHomography([1, 0, 0, 0, 1, 0, -1, 0, 1]); // denominator = 0 at x=1
+    expect(est.update(12, { x: 1, y: .5, w: .1, h: .1 }, 0)).toBeNull();
+    expect(est.update(12, { x: Number.NaN, y: .5, w: .1, h: .1 }, 1)).toBeNull();
+    expect(est.update(12, { x: .5, y: .5, w: .1, h: .1 }, 2)).toBeNull(); // fresh baseline
+    expect(est.update(12, { x: .5, y: .5, w: 0, h: .1 }, 3)).toBeNull();
+  });
+
   it('reset clears track history', () => {
     const est = new SpeedEstimator(60, 5);
     est.setHomography(SCALE_H);
