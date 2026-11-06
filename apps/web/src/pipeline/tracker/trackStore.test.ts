@@ -51,6 +51,54 @@ describe('TrackStateStore', () => {
     expect(rendered[0].trackId).toBe(1);
   });
 
+  it('does not create phantom tracks from a tracker prediction with no detection', () => {
+    store.updateFromInference([{
+      ...mockTrack(22, 480, 240), observationType: 'predicted', timeSinceUpdate: 1
+    }], 1.0, 1, 1000);
+    expect(store.size).toBe(0);
+    expect(store.getTracksToRender(1.05, false, 1050)).toEqual([]);
+  });
+
+  it('never resets the last *observed* position or freshness on predicted updates', () => {
+    store.updateFromInference([mockTrack(3, 100, 200)], 1.0, 1, 1000);
+    store.updateFromInference([mockTrack(3, 110, 200)], 1.1, 1, 1100);
+    const beforePrediction = store.getTracksToRender(1.1, false, 1100)[0].x;
+
+    // The backend reported an implausible predicted box. The renderer must
+    // retain the last measured position, not jump to that phantom prediction.
+    store.updateFromInference([{
+      ...mockTrack(3, 950, 750), observationType: 'predicted', timeSinceUpdate: 1
+    }], 1.2, 1, 1200);
+    const shown = store.getTracksToRender(1.2, false, 1200)[0];
+    expect(shown.x).toBeGreaterThanOrEqual(beforePrediction);
+    expect(shown.x).toBeLessThan(130);
+
+    // A new true detection estimates velocity from original 110px at 1.1s,
+    // not 950px at 1.2s. ID and measured history are preserved.
+    store.updateFromInference([mockTrack(3, 120, 200)], 1.3, 1, 1300);
+    expect(store.getTracksToRender(1.3, false, 1300)[0].x).toBeGreaterThan(110);
+    expect(store.getTracksToRender(1.3, false, 1300)[0].x).toBeLessThan(130);
+  });
+
+  it('expires after the last real detection even if predicted boxes keep arriving', () => {
+    store.updateFromInference([mockTrack(4)], 1.0, 1, 1000);
+    for (let step = 1; step <= 8; step++) {
+      store.updateFromInference([{
+        ...mockTrack(4, 100 + step * 50), observationType: 'predicted',
+        timeSinceUpdate: step
+      }], 1 + step * 0.16, 1, 1000 + step * 160);
+    }
+    expect(store.size).toBe(0);
+  });
+
+  it('ignores interpolated frames when determining observation freshness', () => {
+    store.updateFromInference([mockTrack(7, 220, 140)], 0.5, 1, 500);
+    store.updateFromInference([{
+      ...mockTrack(7, 420, 140), observationType: 'interpolated', timeSinceUpdate: 0
+    }], 0.6, 1, 600);
+    expect(store.getTracksToRender(0.6, false, 600)[0].x).toBe(220);
+  });
+
   it('projects motion using consecutive measured boxes rather than frame-based Kalman velocity', () => {
     store.updateFromInference([mockTrack(1, 100, 200, 9000, 0)], 1.0, 1, 1000);
     store.updateFromInference([mockTrack(1, 110, 200, 9000, 0)], 1.1, 1, 1100);
