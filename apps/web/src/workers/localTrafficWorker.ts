@@ -111,7 +111,7 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
     // continue assigning stable IDs once matching succeeds.
     const observedTracks = tracker.update(boxes)
       .filter(track => track.timeSinceUpdate === 0 &&
-        (track.state === 'Confirmed' || track.hitCount >= 2 || track.prob >= 0.58));
+        (track.state === 'Confirmed' || (track.hitCount ?? 0) >= 2 || track.prob >= 0.58));
     const tracks: LiveTrack[] = observedTracks.map(track => {
       const previous = observations.get(track.trackId);
       const velocity = calculateMotion(previous, track, message.mediaTime);
