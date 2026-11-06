@@ -14,6 +14,7 @@ import { supabase } from '../lib/supabase'
 import type { VideoAsset, AnalysisRun } from '../services/db'
 import { fallbackVideoNumbers, videoDisplayName } from '../lib/videoAssets'
 import { formatDistanceToNow, format } from 'date-fns'
+import { FirstRunDashboard } from '../components/dashboard/FirstRunDashboard'
 
 interface TrackedObjectSummary {
   id: string
@@ -250,89 +251,9 @@ export function Dashboard() {
     )
   }
 
-  // Proper first-run onboarding empty state when no videos or incidents exist
+  // A purpose-built, visually consistent first-run experience.
   if (videos.length === 0 && incidents.length === 0) {
-    return (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-10 flex flex-col items-center justify-center text-center max-w-3xl mx-auto my-8">
-        <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto mb-5 border border-indigo-100 shadow-xs">
-          <Activity className="w-8 h-8 text-indigo-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Welcome to VisionGuard Traffic Intelligence</h2>
-        <p className="text-slate-600 text-sm max-w-lg mb-8 leading-relaxed">
-          Your traffic surveillance platform is online and ready. Follow the 4-step workflow below to analyze footage and generate operational insights.
-        </p>
-
-        {/* 4-Step First-Run Guide Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5 text-left w-full mb-8">
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">1</span>
-                <span className="font-bold text-xs text-slate-900">Upload Video</span>
-              </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                Provide an MP4 or WebM highway/intersection recording in Live Analysis.
-              </p>
-            </div>
-            <span className="text-[10px] text-indigo-600 font-semibold mt-3">Drag & drop or browse</span>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">2</span>
-                <span className="font-bold text-xs text-slate-900">Save to History</span>
-              </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                Toggle "Save to History" to persist detections, tracks, and evidence artifacts.
-              </p>
-            </div>
-            <span className="text-[10px] text-indigo-600 font-semibold mt-3">Enables cross-session review</span>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">3</span>
-                <span className="font-bold text-xs text-slate-900">Configure & Run</span>
-              </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                Analyze traffic footage with YOLO11n on WebGPU or Local Backend.
-              </p>
-            </div>
-            <span className="text-[10px] text-indigo-600 font-semibold mt-3">DirectML GPU or CPU</span>
-          </div>
-
-          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="w-5 h-5 rounded-full bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">4</span>
-                <span className="font-bold text-xs text-slate-900">Review & Report</span>
-              </div>
-              <p className="text-[11px] text-slate-500 leading-relaxed">
-                Inspect incidents in Video Review, manage cases, and export PDF traffic reports.
-              </p>
-            </div>
-            <span className="text-[10px] text-indigo-600 font-semibold mt-3">Full evidence audit trail</span>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Link 
-            to="/app/analyze"
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-sm flex items-center gap-2 cursor-pointer"
-          >
-            <Upload className="w-4 h-4" /> Start First Video Analysis
-          </Link>
-          <Link 
-            to="/app/videos"
-            className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-xl text-xs font-semibold transition-all shadow-2xs flex items-center gap-2 cursor-pointer"
-          >
-            <Film className="w-4 h-4 text-slate-500" /> Open Video History
-          </Link>
-        </div>
-      </div>
-    )
+    return <FirstRunDashboard />;
   }
 
   return (
