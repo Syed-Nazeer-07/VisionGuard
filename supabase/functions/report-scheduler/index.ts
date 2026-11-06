@@ -11,8 +11,29 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  // This endpoint uses the service-role key. A project anon JWT alone must never
+  // authorize the invocation. Provision a 32+ character secret independently
+  // from SUPABASE_SERVICE_ROLE_KEY and provide it only to the trusted scheduler.
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
+      status: 405,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+  const secret = Deno.env.get('REPORT_SCHEDULER_SECRET') ?? ''
+  const supplied = req.headers.get('x-visionguard-scheduler-key') ?? ''
+  // Length-independent comparison to avoid leaking the secret's matching prefix.
+  const left = new TextEncoder().encode(secret)
+  const right = new TextEncoder().encode(supplied)
+  let difference = left.length ^ right.length
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    difference |= (left[i] ?? 0) ^ (right[i] ?? 0)
+  }
+  if (left.length < 32 || difference !== 0) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
 
   try {
