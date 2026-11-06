@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getCameraPlaybackSource, cameraSourceHost } from './cameraSources';
+import { getCameraPlaybackSource, cameraSourceHost, selectCameraTiles } from './cameraSources';
 
 describe('browser camera capabilities', () => {
   it('allows valid HLS manifests with query tokens without exposing them in labels', () => {
@@ -25,5 +25,19 @@ describe('browser camera capabilities', () => {
     expect(getCameraPlaybackSource({ stream_url: 'https://camera.test/live.m3u8' }).playable).toBe(true);
     expect(getCameraPlaybackSource(null).playable).toBe(false);
     expect(getCameraPlaybackSource({ source_type: 'hls' }).playable).toBe(false);
+  });
+});
+
+describe('camera grid uniqueness', () => {
+  const cams = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+  it('does not repeat cameras to fill empty grid slots', () => {
+    expect(selectCameraTiles([{ id: 'a' }], null, 9)).toEqual([{ id: 'a' }]);
+  });
+  it('selects a requested camera first without losing other feeds', () => {
+    expect(selectCameraTiles(cams, 'c', 4).map(cam => cam.id)).toEqual(['c', 'a', 'b', 'd']);
+    expect(selectCameraTiles(cams, 'c', 1).map(cam => cam.id)).toEqual(['c']);
+  });
+  it('drops accidental duplicated database IDs', () => {
+    expect(selectCameraTiles([{ id: 'a' }, { id: 'a' }, { id: 'b' }], null, 9).map(c => c.id)).toEqual(['a', 'b']);
   });
 });
