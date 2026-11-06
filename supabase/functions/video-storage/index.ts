@@ -394,33 +394,49 @@ Deno.serve(async (req) => {
 
       case 'delete-video': {
         const asset = await loadAsset(db, videoId)
-        // RLS decides: only the uploader or a Supervisor/Admin can delete the row.
-        const { data: deleted, error: delErr } = await db.from('video_assets').delete().eq('id', asset.id).select('id')
-        if (delErr) throw new HttpError(500, `Delete failed: ${delErr.message}`)
-        if (!deleted || deleted.length === 0) throw new HttpError(403, 'Not permitted to delete this video (only the uploader or a Supervisor/Admin can)')
-
-        if (asset.storage_provider !== 'b2') return json({ deleted: true, objectsRemoved: 0 })
-        const cfg = b2Config()
-        const meta = asset.metadata ?? {}
-        let removed = 0
-        const warnings: string[] = []
-        // Unfinished multipart upload: abort it so its parts stop consuming storage.
-        if (!asset.storage_path && typeof meta.b2_upload_id === 'string' && typeof meta.b2_object_key === 'string') {
-          const url = objectUrl(cfg, meta.b2_object_key)
-          url.searchParams.set('uploadId', meta.b2_upload_id)
-          await s3(cfg, 'DELETE', url).catch(e => warnings.push(String(e instanceof Error ? e.message : e)))
-        }
-        // Original footage and every per-run analysis artifact are both in
-        // this private versioned B2 bucket. Remove ALL versions, not only
-        // the latest object, to avoid accumulating B2 storage charges.
-        for (const prefix of [`videos/${asset.id}/`, `artifacts/${asset.id}/`]) {
-          try {
-            removed += await purgeObjectVersions(cfg, prefix)
-          } catch (e) {
-            warnings.push(String(e instanceof Error ? e.message : e))
+        // Authorization must occur BEFORE making any irreversible B2 call.
+        // Merely being able to SELECT a video doesn't grant permission to
+        // delete it: Operators can review videos but not remove originals.
+        if (asset.uploaded_by !== userId) {
+          const { data: role, error: roleError } = await db.rpc('auth_user_role')
+          if (roleError || (role !== 'Admin' && role !== 'Supervisor')) {
+            throw new HttpError(403, 'Only the uploader or a Supervisor/Admin can delete this video')
           }
         }
-        return json({ deleted: true, objectsRemoved: removed, warnings })
+
+        let removed = 0
+        if (asset.storage_provider === 'b2') {
+          const cfg = b2Config()
+          const meta = asset.metadata ?? {}
+
+          // Keep video_assets row intact while cleaning bytes. If Backblaze
+          // is unavailable, return an error and retain a retriable DB record
+          // instead of silently orphaning potentially billable objects.
+          if (!asset.storage_path && typeof meta.b2_upload_id === 'string' && typeof meta.b2_object_key === 'string') {
+            const uploadPath = `videos/${asset.id}/`
+            if (!meta.b2_object_key.startsWith(uploadPath)) {
+              throw new HttpError(409, 'Multipart session object path is inconsistent with the video')
+            }
+            const url = objectUrl(cfg, meta.b2_object_key)
+            url.searchParams.set('uploadId', meta.b2_upload_id)
+            await s3(cfg, 'DELETE', url)
+          }
+
+          // Backblaze keeps historical object versions. Purge both original
+          // media and per-run gzip artifacts before cascading metadata.
+          removed += await purgeObjectVersions(cfg, `videos/${asset.id}/`)
+          removed += await purgeObjectVersions(cfg, `artifacts/${asset.id}/`)
+        }
+
+        // RLS is still authoritative: if policy forbids deletion, return
+        // explicit denial rather than pretending cleanup was successful.
+        const { data: deleted, error: delErr } = await db.from('video_assets')
+          .delete().eq('id', asset.id).select('id')
+        if (delErr) throw new HttpError(500, `Delete failed: ${delErr.message}`)
+        if (!deleted || deleted.length === 0) {
+          throw new HttpError(403, 'Video deletion was denied by database policy')
+        }
+        return json({ deleted: true, objectsRemoved: removed, warnings: [] })
       }
 
       default:
