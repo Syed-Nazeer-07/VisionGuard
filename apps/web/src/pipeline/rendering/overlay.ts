@@ -20,6 +20,8 @@ function checkCollision(r1: LabelRect, r2: LabelRect): boolean {
 
 export interface OverlayOptions {
   demoSpeed?: boolean;
+  /** Show raw detector confidence for verifying bad boxes on real footage. */
+  showConfidence?: boolean;
 }
 
 export function drawBoundingBoxes(
@@ -31,7 +33,7 @@ export function drawBoundingBoxes(
   videoHeight: number,
   isCover: boolean = false,
   timeDelta: number = 0,
-  _options?: OverlayOptions
+  options?: OverlayOptions
 ): { rendered: number, stale: number } {
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
   let rendered = 0;
@@ -127,7 +129,8 @@ export function drawBoundingBoxes(
     // Format label:
     // Supported vehicles: `#<id> <VEHICLE> · <speed> km/h` when genuinely calibrated, or cleanly `#<id> <VEHICLE>`
     // People/Pedestrians: `#<id> PERSON` (NEVER display speed labels for people/pedestrians)
-    const hasCalibratedSpeed = !isPerson && track.speed !== undefined && track.speed !== null;
+    const hasCalibratedSpeed = !isPerson && typeof track.speed === 'number' &&
+      Number.isFinite(track.speed) && track.speed >= 0;
 
     let label: string;
     if (isPerson) {
@@ -137,6 +140,12 @@ export function drawBoundingBoxes(
       label = `#${track.trackId} ${vehicleType} · ${displaySpeed} km/h`;
     } else {
       label = `#${track.trackId} ${vehicleType}`;
+    }
+
+    // Optional scores make it possible to distinguish weak false positives
+    // from confident, repeatable model mistakes on the user's traffic clip.
+    if (options?.showConfidence && Number.isFinite(track.prob)) {
+      label += ` · ${Math.round(track.prob * 100)}%`;
     }
 
     ctx.font = isConfirmed ? 'bold 12px sans-serif' : '11px sans-serif';
