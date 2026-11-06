@@ -3,7 +3,7 @@ import { CheckCircle2, Film, Loader2, Pause, Play, RotateCcw, Upload, X } from '
 import { localAnalysisStorage, type LocalAnalysis, type LocalFrame, type LocalTrack } from '../services/localAnalysisStorage';
 
 const MODEL = '/models/yolo11s.onnx';
-const STEP = 0.20; // Analyze at 5 samples/second; playback is always at the video's native rate.
+const STEP = 0.10; // 10 observed frames/second; interpolate each confirmed track during native-rate playback.
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
 
 type WorkerReply =
@@ -160,6 +160,19 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
       void localAnalysisStorage.savePosition(video.currentTime).catch(() => {});
     }
   }, [active, status]);
+
+  useEffect(() => {
+    const pauseWhenHidden = () => {
+      if (!document.hidden) return;
+      const video = videoRef.current;
+      if (video && !video.paused) video.pause();
+      if (video && Number.isFinite(video.currentTime)) {
+        void localAnalysisStorage.savePosition(video.currentTime).catch(() => {});
+      }
+    };
+    document.addEventListener('visibilitychange', pauseWhenHidden);
+    return () => document.removeEventListener('visibilitychange', pauseWhenHidden);
+  }, []);
 
   const onUpload = async (file?: File) => {
     if (!file || status === 'processing') return;
