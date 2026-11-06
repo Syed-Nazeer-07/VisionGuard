@@ -45,6 +45,12 @@ the production database until an operator applies the migration.
 | Viewer modifies another user's evidence row | Denied |
 | Viewer updates an existing object in evidence bucket | Denied |
 | Viewer uploads into legacy videos bucket under a different video ID | Denied |
+| Video owner uploads original video to video-id/original.mp4 | Allowed |
+| Video owner uploads artifact to artifacts/video-id/owned-run-id.json.gz | Allowed |
+| Viewer uploads artifact using another user's video ID | Denied |
+| Viewer uploads artifact using a run ID for a different video | Denied |
+| Owner re-uploads an existing run artifact (upsert UPDATE) | Allowed |
+| Viewer deletes another user's archived run artifact | Denied |
 | Viewer deletes video belonging to another user | Denied |
 | Operator can operate on videos and evidence as permitted | Allowed |
 | Supervisor/Admin can manage video ownership and video deletion | Allowed |
@@ -76,3 +82,17 @@ cannot substitute for multi-account RLS tests.
   a secure secret; it is not automatically deployed by this PR.
 - Local-only browser demo mode uses mocked database behavior and does not test
   actual RLS.
+
+## Saved analysis artifact compatibility
+
+Artifacts are uploaded to the existing `videos` Supabase bucket at the path
+`artifacts/<video-uuid>/<run-uuid>.json.gz`. The RLS helper
+`public.can_manage_video_storage_object` checks the caller's asset ownership
+(or Supervisor/Admin role) **and** that the referenced run belongs to that
+same video. A per-file rule only checking `video_assets.storage_path` would
+break backend History saving and review. Re-test storage INSERT, UPDATE
+(upsert), DELETE, and download for both original videos and artifacts.
+
+This PR still leaves the bucket publicly readable; this is an **authorization
+of writes**, not private-footage protection. Coordinate Phase 3 and Phase 4
+deployment with these storage rules on staging.
