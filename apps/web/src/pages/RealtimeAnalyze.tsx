@@ -1,18 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Film, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
+import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
 import {
   projectLiveTracks, type LiveTrack
 } from '../pipeline/tracker/liveProjection';
 
 const MODEL_PATH = '/models/yolo11s.onnx';
 const MIN_CAPTURE_INTERVAL = 0.12;
+const OPTICAL_INTERVAL = 0.085;
+const HISTORY_WINDOW = 3.5;
 const MAX_CAPTURE_WIDTH = 640;
 const WORKER_TIMEOUT_MS = 20_000;
 
 type WorkerEvent =
   | { type: 'ready'; provider: string; fallbackReason?: string }
-  | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; inferenceMs: number; provider: string }
+  | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
   | { type: 'skipped'; requestId: number; generation: number }
   | { type: 'error'; requestId: number; generation: number; message: string };
 
@@ -46,6 +49,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const generationRef = useRef(0);
   const lastCapturedTimeRef = useRef(-Infinity);
   const latestRef = useRef<Observation | null>(null);
+  const grayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const grayHistoryRef = useRef<GrayFrame[]>([]);
+  const flowTracksRef = useRef<LiveTrack[]>([]);
+  const lastOpticalSampleRef = useRef(-Infinity);
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const firstFrameResolveRef = useRef<(() => void) | null>(null);
   const paintCountRef = useRef(0);
@@ -62,6 +69,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [inferenceMs, setInferenceMs] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(0);
   const [analyzedFrames, setAnalyzedFrames] = useState(0);
+  const [detectionCount, setDetectionCount] = useState<number | null>(null);
+  const [fallbackReason, setFallbackReason] = useState('');
   const [storage, setStorage] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [error, setError] = useState('');
 
@@ -75,6 +84,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const resetTracks = useCallback(() => {
     generationRef.current += 1;
     latestRef.current = null;
+    flowTracksRef.current = [];
+    grayHistoryRef.current = [];
+    lastOpticalSampleRef.current = -Infinity;
     lastCapturedTimeRef.current = -Infinity;
     setVisibleCount(0);
     // Do not release an in-flight request here. It must finish or time out;
@@ -112,6 +124,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         readyRef.current = true;
         setDetector('ready');
         setProvider(message.provider);
+        setFallbackReason(message.fallbackReason || '');
         return;
       }
       if (message.type === 'error' && message.requestId === -1) {
@@ -131,9 +144,35 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         const video = videoRef.current;
         if (!video || video.seeking || !activeRef.current) return;
         // Results belong to the exact original media time, not wall-clock time.
-        latestRef.current = { time: message.mediaTime, tracks: message.tracks };
         setInferenceMs(Math.round(message.inferenceMs));
+        setDetectionCount(message.detectionCount);
         setAnalyzedFrames(count => count + 1);
+
+        // The detection corresponds to a PAST decoded frame. Replaying cheap
+        // optical tracking over cached displayed frames catches those boxes up
+        // to the video that the user is seeing NOW. We never paint a raw
+        // 900ms-old detection onto a later video frame.
+        const history = grayHistoryRef.current;
+        let anchor = -1;
+        let closestDistance = Infinity;
+        for (let i = 0; i < history.length; i++) {
+          const distance = Math.abs(history[i].time - message.mediaTime);
+          if (distance < closestDistance) {
+            anchor = i;
+            closestDistance = distance;
+          }
+        }
+        if (anchor < 0 || closestDistance > 0.14) {
+          flowTracksRef.current = [];
+          latestRef.current = null;
+          return;
+        }
+        let corrected = message.tracks;
+        for (let i = anchor + 1; i < history.length && corrected.length; i++) {
+          corrected = advanceOpticalTracks(corrected, history[i - 1], history[i]);
+        }
+        flowTracksRef.current = corrected;
+        latestRef.current = { time: history[history.length - 1].time, tracks: corrected };
       } else if (message.type === 'error') {
         setError('Frame inference error: ' + message.message);
       }
@@ -165,6 +204,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setPosition(0);
     setError('');
     setAnalyzedFrames(0);
+    setDetectionCount(null);
     setInferenceMs(null);
     setUrl(nextUrl);
   }, [resetTracks]);
@@ -292,8 +332,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
 
-  // Video advances at native speed. YOLO sees the most recent decoded frame
-  // whenever the worker is idle; there is NEVER any seek+inference scan.
+  // Video advances at native speed. Grayscale visual tracking updates between
+  // sparse YOLO observations, so slow WASM results are applied to the CURRENT
+  // image instead of disappearing before they can be rendered.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !url) return;
@@ -302,9 +343,33 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     let fallbackId: number | null = null;
 
     const maybeInfer = (mediaTime: number) => {
-      if (stopped || !activeRef.current || !readyRef.current || busyRef.current ||
+      if (stopped || !activeRef.current ||
           !video.videoWidth || !video.videoHeight || video.paused || video.seeking ||
           video.ended || video.readyState < 2 || !Number.isFinite(mediaTime)) return;
+
+      // Optical tracking uses tiny grayscale thumbnails (~320x180), keeping
+      // moving boxes aligned while YOLO11s/WASM is taking ~1s per inference.
+      if (mediaTime - lastOpticalSampleRef.current >= OPTICAL_INTERVAL) {
+        lastOpticalSampleRef.current = mediaTime;
+        if (!grayCanvasRef.current) grayCanvasRef.current = document.createElement('canvas');
+        try {
+          const current = takeGrayFrame(video, mediaTime, grayCanvasRef.current);
+          if (current) {
+            const history = grayHistoryRef.current;
+            const previous = history[history.length - 1];
+            if (previous && flowTracksRef.current.length) {
+              flowTracksRef.current = advanceOpticalTracks(flowTracksRef.current, previous, current);
+              latestRef.current = { time: current.time, tracks: flowTracksRef.current };
+            }
+            history.push(current);
+            while (history.length && mediaTime - history[0].time > HISTORY_WINDOW) history.shift();
+          }
+        } catch (e) {
+          setError('Visual tracker could not read the video frame: ' + String(e));
+        }
+      }
+
+      if (!readyRef.current || busyRef.current) return;
       if (mediaTime - lastCapturedTimeRef.current < MIN_CAPTURE_INTERVAL) return;
       lastCapturedTimeRef.current = mediaTime;
       const worker = workerRef.current;
@@ -367,8 +432,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     };
   }, [url, clearInFlight]);
 
-  // Draw positions on EVERY animation frame, independent of slower model FPS.
-  // A track is hidden after 550ms of media age or when it exits the image.
+  // Paint each display frame using optical positions from the most recent
+  // decoded video frame; hide boxes immediately when tracking loses them.
   useEffect(() => {
     let animation = 0;
     let lastUI = 0;
@@ -523,7 +588,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   {readyVideo ? (playing ? 'LIVE PLAYBACK' : 'PAUSED') : 'OPENING VIDEO'}
                 </span>
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-medium text-white">
-                  {detector === 'ready' ? (visibleCount ? 'Tracking ' + visibleCount + ' vehicles' : 'Detector active') :
+                  {detector === 'ready' ? (visibleCount ? 'Tracking ' + visibleCount + ' vehicles'
+                      : detectionCount === null ? 'Scanning vehicles...' :
+                        detectionCount > 0 ? 'YOLO sees ' + detectionCount + ' candidates' : 'No vehicles detected') :
                     detector === 'loading' ? 'Preparing YOLO11s...' :
                     detector === 'error' ? 'Detector unavailable' : 'Detector starting'}
                 </span>
@@ -573,7 +640,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
             {inferenceMs === null ? '—' : inferenceMs + ' ms'}
           </div>
-          <div className="text-xs text-slate-500">{provider ? provider.toUpperCase() : 'Preparing'} · {analyzedFrames} sampled frames</div>
+          <div className="text-xs text-slate-500">{provider ? provider.toUpperCase() : 'Preparing'} · {analyzedFrames} sampled frames · {detectionCount ?? '—'} raw vehicles</div>
+          {provider === 'wasm' && fallbackReason && <div className="mt-1 text-[11px] leading-4 text-amber-700" title={fallbackReason}>WebGPU unavailable; using slower CPU/WASM</div>}
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="text-xs font-medium text-slate-500">On-screen motion speed</div>
@@ -583,7 +651,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       </div>
 
       <p className="text-xs leading-5 text-slate-500">
-        Vehicle classes: bicycle, car, motorcycle, bus, train and truck. Boxes are repainted with the display, projected between model detections, and removed when stale or out of view.
+        Vehicle classes: bicycle, car, motorcycle, bus, train and truck. Boxes use low-resolution optical frame tracking between YOLO detections, and disappear when visual matching fails or vehicles exit the scene.
         {storage === 'saving' ? ' Saving the selected video locally...' : storage === 'saved' ? ' Video selection saved locally.' : ''}
       </p>
     </div>
