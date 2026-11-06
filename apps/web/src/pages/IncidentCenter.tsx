@@ -1062,6 +1062,33 @@ export function IncidentCenter() {
                   </div>
                 )}
 
+                {/* A frame reference is traceable to the archived analysis,
+                    but is not a captured image or an independently verified offence. */}
+                {selectedIncident.metadata?.source_engine === 'backend'
+                  && selectedIncident.metadata?.evidence_kind === 'video_frame_reference' && (
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-1.5">
+                    <div className="flex items-center gap-2 font-bold text-amber-950">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      Unverified Speeding Candidate
+                    </div>
+                    <p className="text-[11px] text-amber-900">
+                      Ground-plane speed estimate; the configured limit and tolerance are not
+                      independently verified local speed regulations. Confirm calibration and
+                      replay the original source footage before taking action.
+                    </p>
+                    <div className="text-[11px] text-amber-800 font-medium">
+                      Frame #{String(selectedIncident.metadata.frame_id ?? '?')}
+                      {' · '}t={Number(selectedIncident.metadata.media_time ?? 0).toFixed(2)}s
+                      {' · '}Threshold: {String(selectedIncident.metadata.speed_limit ?? '?')}
+                      + {String(selectedIncident.metadata.speed_tolerance ?? '?')} km/h tolerance
+                    </div>
+                    <p className="text-[10px] text-amber-700">
+                      Evidence: archived detection-frame coordinates and source video.
+                      No independent snapshot or number-plate recognition has been saved.
+                    </p>
+                  </div>
+                )}
+
                 {/* Key Contextual Attributes */}
                 <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
                   <div>
