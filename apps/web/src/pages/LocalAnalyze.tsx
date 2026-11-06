@@ -82,6 +82,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const workerInitializationRef = useRef<Promise<void> | null>(null);
   const workerReadyRef = useRef(false);
   const loadTimeoutRef = useRef<number | null>(null);
+  const loadStartedAtRef = useRef(0);
   const selectedFileVersionRef = useRef(0);
   const storageQueueRef = useRef<Promise<void>>(Promise.resolve());
   const previewReadyResolveRef = useRef<(() => void) | null>(null);
@@ -99,6 +100,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const [status, setStatus] = useState<Status>('empty');
   const [modelStatus, setModelStatus] = useState('YOLO11s · loads when analysis starts');
   const [videoLoadStatus, setVideoLoadStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [videoOpenMs, setVideoOpenMs] = useState<number | null>(null);
   const [storageStatus, setStorageStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [provider, setProvider] = useState('');
   const [error, setError] = useState('');
@@ -110,6 +112,8 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
 
   const beginVideoLoad = useCallback(() => {
     if (loadTimeoutRef.current !== null) window.clearTimeout(loadTimeoutRef.current);
+    loadStartedAtRef.current = performance.now();
+    setVideoOpenMs(null);
     setVideoLoadStatus('loading');
     loadTimeoutRef.current = window.setTimeout(() => {
       setVideoLoadStatus(current => current === 'loading' ? 'error' : current);
@@ -461,6 +465,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     selectedFileVersionRef.current += 1;
     setStatus('empty');
     setVideoLoadStatus('idle');
+    setVideoOpenMs(null);
     setStorageStatus('idle');
     previewDecodedRef.current = false;
     previewReadyResolveRef.current?.();
@@ -501,6 +506,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
         <div className="flex flex-wrap gap-2 text-xs font-medium text-slate-600">
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{modelStatus}</span>
           {provider && <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">Accelerator: {provider.toUpperCase()}</span>}
+          {videoOpenMs !== null && <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-emerald-800">Video opened in {(videoOpenMs / 1000).toFixed(2)}s</span>}
           <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">{storageStatus === 'saving' ? 'Saving locally...' : storageStatus === 'saved' ? 'Saved on this device' : storageStatus === 'error' ? 'Local save failed' : 'Local-only · no upload'}</span>
         </div>
         {error && <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</div>}
@@ -523,6 +529,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
                       window.clearTimeout(loadTimeoutRef.current);
                       loadTimeoutRef.current = null;
                     }
+                    setVideoOpenMs(Math.round(performance.now() - loadStartedAtRef.current));
                     setVideoLoadStatus('ready');
                     setError(current => current.startsWith('Video could not become ready within 10 seconds.') ? '' : current);
                     // Restore position after the first frame is available; early seeking
