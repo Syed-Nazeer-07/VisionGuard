@@ -3050,6 +3050,7 @@ export default function Analyze() {
               </button>
             </div>
             {analysisEngine === 'browser' && (
+              <>
               <label title="Adapt video playback to the real inference throughput so bounding boxes stay aligned. Disable for normal 1× video playback."
                 className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-700 select-none cursor-pointer shrink-0">
                 <input type="checkbox" checked={syncPlayback}
@@ -3065,6 +3066,7 @@ export default function Analyze() {
                   className="accent-indigo-600 w-3.5 h-3.5" />
                 Show detection confidence
               </label>
+              </>
             )}
           </div>
 
