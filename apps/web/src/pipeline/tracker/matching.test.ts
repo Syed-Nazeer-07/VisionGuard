@@ -43,8 +43,19 @@ describe('classGroup and matching gating', () => {
     expect(classGroup(5)).toBe(2); // bus
     expect(classGroup(7)).toBe(2); // truck
     expect(classGroup(0)).toBe(0); // person
-    expect(classGroup(1)).toBe(1); // bicycle
-    expect(classGroup(3)).toBe(3); // motorcycle
+    expect(classGroup(1)).toBe(3); // bicycle: shared two-wheeler association group
+    expect(classGroup(3)).toBe(3); // motorcycle: avoids new ID on one-frame class flip
+  });
+
+  it('associates a bicycle/motorcycle class flip without swapping to a person', () => {
+    const track = {
+      getState: () => ({ cx: 100, cy: 100, w: 38, h: 34 }),
+      classId: 3
+    };
+    const bike = { x: 101, y: 100, w: 38, h: 34, prob: 0.4, classId: 1, className: 'bicycle' };
+    const person = { x: 101, y: 100, w: 38, h: 34, prob: 0.9, classId: 0, className: 'person' };
+    expect(matchDetectionsToTracks([bike], [track], 0.2).matches).toEqual([[0, 0]]);
+    expect(matchDetectionsToTracks([person], [track], 0.2).matches).toEqual([]);
   });
 
   it('permits car-to-truck association while rejecting person-to-car association', () => {
