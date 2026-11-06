@@ -76,6 +76,34 @@ async function seek(video: HTMLVideoElement, time: number, signal: AbortSignal):
   });
 }
 
+/**
+ * Capture a frame without letting a hung media decoder block analysis forever.
+ * Late ImageBitmaps are closed so timing out cannot leak video-frame memory.
+ */
+function captureVideoFrame(video: HTMLVideoElement, signal: AbortSignal): Promise<ImageBitmap> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(new Error('Analysis cancelled')); return; }
+    let settled = false;
+    const finish = (error?: Error, bitmap?: ImageBitmap) => {
+      if (settled) { bitmap?.close(); return; }
+      settled = true;
+      window.clearTimeout(timeout);
+      signal.removeEventListener('abort', onAbort);
+      if (error) reject(error);
+      else if (bitmap) resolve(bitmap);
+    };
+    const onAbort = () => finish(new Error('Analysis cancelled'));
+    const timeout = window.setTimeout(
+      () => finish(new Error('Video frame decoding took too long; try a browser-compatible H.264 MP4 clip.')),
+      12000
+    );
+    signal.addEventListener('abort', onAbort, { once: true });
+    void createImageBitmap(video).then(bitmap => finish(undefined, bitmap), err => {
+      finish(err instanceof Error ? err : new Error(String(err)));
+    });
+  });
+}
+
 export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -348,7 +376,15 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     return new Promise<LocalTrack[]>((resolve, reject) => {
       const timeout = window.setTimeout(() => {
         replyRef.current = null;
-        reject(new Error('YOLO11s did not respond to the frame'));
+        // A GPU inference can occasionally hang after model initialization.
+        // Terminate its worker so a subsequent retry starts a clean session.
+        if (workerRef.current === worker) {
+          worker.terminate();
+          workerRef.current = null;
+          workerReadyRef.current = false;
+          setModelStatus('Detector stalled — retry analysis');
+        }
+        reject(new Error('YOLO11s frame inference exceeded 30 seconds. The stalled worker was reset; retry or use a shorter H.264 clip.'));
       }, 30000);
       replyRef.current = reply => {
         if (!('requestId' in reply) || reply.requestId !== id) return;
@@ -396,7 +432,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
         await seek(video, time, controller.signal);
         if (controller.signal.aborted) throw new Error('Analysis cancelled');
         if (i === 0) setAnalysisPhase('Running the first YOLO inference...');
-        const bitmap = await createImageBitmap(video);
+        const bitmap = await captureVideoFrame(video, controller.signal);
         const tracks = await infer(bitmap, time);
         frames.push({ time, tracks });
         progressRef.current = (i + 1) / count;
