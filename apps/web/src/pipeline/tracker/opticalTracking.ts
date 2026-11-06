@@ -93,23 +93,17 @@ export function advanceOpticalTracks(
     let bestScore = Infinity;
     let bestX = x;
     let bestY = y;
-    for (let dy = -maxSearch; dy <= maxSearch; dy += 2) {
-      for (let dx = -maxSearch; dx <= maxSearch; dx += 2) {
+    // Search every thumbnail pixel. A two-pixel stride skipped the true
+    // translation for odd search radii and latched onto repetitive road
+    // textures instead, causing visibly misaligned boxes.
+    for (let dy = -maxSearch; dy <= maxSearch; dy += 1) {
+      for (let dx = -maxSearch; dx <= maxSearch; dx += 1) {
         const nx = x + predX + dx;
         const ny = y + predY + dy;
         const score = difference(previous, current, x, y, nx, ny, radiusX, radiusY);
         if (score < bestScore) { bestScore = score; bestX = nx; bestY = ny; }
       }
     }
-    // Fine subgrid refinement avoids visibly snapping by two thumbnail pixels.
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const nx = bestX + dx; const ny = bestY + dy;
-        const score = difference(previous, current, x, y, nx, ny, radiusX, radiusY);
-        if (score < bestScore) { bestScore = score; bestX = nx; bestY = ny; }
-      }
-    }
-
     // Bad/ambiguous template match: safer to hide than to show a wrong box.
     if (bestScore > 34 || !Number.isFinite(bestScore)) continue;
     const nextX = bestX / scaleX;
