@@ -369,7 +369,7 @@ export function AppLayout() {
               <div style={location.pathname === '/app/analyze'
                 ? { display: 'block' }
                 : { position: 'absolute', left: '-200vw', top: 0, width: '100%', visibility: 'hidden', pointerEvents: 'none' }}>
-                <LocalAnalyze />
+                <LocalAnalyze active={location.pathname === '/app/analyze'} />
               </div>
               {location.pathname !== '/app/analyze' && <Outlet />}
             </ErrorBoundary>
