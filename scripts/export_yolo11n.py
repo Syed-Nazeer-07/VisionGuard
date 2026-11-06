@@ -13,7 +13,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from scripts.validate_yolo_onnx import DEFAULT_MODEL, ModelValidationError, validate_model
+from validate_yolo_onnx import DEFAULT_MODEL, ModelValidationError, validate_model
 
 
 def main(argv: list[str] | None = None) -> int:
