@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { CameraStream } from './CameraStream';
+import { getCameraPlaybackSource } from '../../services/cameraSources';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -9,10 +11,10 @@ import { useAuthStore } from '../../store/auth';
 import { cn } from '../../lib/utils';
 
 const SOURCE_TYPES = [
-  { id: 'rtsp', label: 'RTSP Stream', icon: Server, desc: 'Connect to an IP camera via RTSP (MediaMTX / go2rtc)' },
+  { id: 'rtsp', label: 'RTSP Stream', icon: Server, desc: 'Requires an external RTSP-to-HLS/WebRTC gateway, not included yet.' },
   { id: 'hls', label: 'HLS Stream', icon: Video, desc: 'Connect to an HLS (.m3u8) feed' },
-  { id: 'youtube_live', label: 'YouTube Live', icon: PlaySquare, desc: 'Ingest from YouTube Live via yt-dlp' },
-  { id: 'uploaded_video', label: 'Uploaded Video', icon: UploadCloud, desc: 'Upload an MP4 file for testing/simulation' },
+  { id: 'youtube_live', label: 'YouTube Live', icon: PlaySquare, desc: 'YouTube ingestion is not implemented. Requires a server gateway.' },
+  { id: 'uploaded_video', label: 'Uploaded Video', icon: UploadCloud, desc: 'Not implemented: use Video Analysis for uploaded clips.' },
 ] as const;
 
 const wizardSchema = z.object({
@@ -48,6 +50,10 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
   const [step, setStep] = useState(1);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
+  const [testRequest, setTestRequest] = useState<string | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   
   const { register, handleSubmit, watch, formState: { errors } } = useForm<WizardForm>({
     resolver: zodResolver(wizardSchema),
@@ -58,7 +64,7 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
       description: initialData?.description || '',
       latitude: initialData?.latitude || undefined,
       longitude: initialData?.longitude || undefined,
-      source_type: initialData?.source_type || 'rtsp',
+      source_type: initialData?.source_type || 'hls',
       source_url: initialData?.source_url || initialData?.stream_url || '',
       storage_path: initialData?.storage_path || '',
     },
@@ -68,27 +74,39 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
   const sourceType = watch('source_type');
   const sourceUrl = watch('source_url');
   
-  const handleTestConnection = async () => {
-    setIsTesting(true);
+  useEffect(() => {
+    setTestRequest(null);
     setTestResult(null);
-    // Simulate connection testing
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Simple validation logic for testing
-    if (sourceType === 'rtsp' && !sourceUrl?.startsWith('rtsp://')) {
-      setTestResult('error');
-    } else if (sourceType === 'hls' && !sourceUrl?.endsWith('.m3u8')) {
-      setTestResult('error');
-    } else if (sourceType === 'youtube_live' && !sourceUrl?.includes('youtube.com')) {
-      setTestResult('error');
-    } else {
-      setTestResult('success');
-    }
-    
+    setTestError(null);
     setIsTesting(false);
+  }, [sourceType, sourceUrl]);
+
+  const handleTestConnection = () => {
+    setTestResult(null);
+    setTestError(null);
+    const source = getCameraPlaybackSource({ source_type: sourceType, source_url: sourceUrl });
+    if (!source.playable) {
+      setTestResult('error');
+      setTestError(source.reason);
+      setTestRequest(null);
+      return;
+    }
+    // Only the video element's real 'playing' event indicates success.
+    setTestRequest(source.url);
+    setIsTesting(true);
   };
 
   const onSubmit = async (data: WizardForm) => {
+    setSaveError(null);
+    if (data.source_type === 'uploaded_video') {
+      setSaveError('Camera video upload simulation is not implemented; use Video Analysis.');
+      return;
+    }
+    if (data.source_type === 'hls') {
+      const check = getCameraPlaybackSource({ source_type: 'hls', source_url: data.source_url });
+      if (!check.playable) { setSaveError(check.reason); return; }
+    }
+    setIsSaving(true);
     try {
       const payload = {
         camera_identifier: data.camera_identifier,
@@ -99,24 +117,32 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
         longitude: data.longitude,
         source_type: data.source_type,
         source_url: data.source_url,
-        stream_url: data.source_url, // For backwards compatibility
+        stream_url: data.source_url,
         storage_path: data.storage_path,
-        stream_status: testResult === 'success' ? 'online' : 'unknown',
-        status: testResult === 'success' ? 'online' : 'warning',
-        health_score: testResult === 'success' ? 100 : 50,
-        last_health_check: new Date().toISOString(),
+        // A browser preview is not continuous server-side health monitoring.
+        stream_status: 'unknown',
+        status: 'warning',
+        health_score: null,
+        last_health_check: null
       };
-
-      if (initialData) {
-        await supabase.from('cameras').update(payload).eq('id', initialData.id);
-        await supabase.from('audit_logs').insert([{ user_id: user?.id, action: `Updated Camera ${data.camera_identifier}` }]);
-      } else {
-        await supabase.from('cameras').insert([{ ...payload, created_by: user?.id }]);
-        await supabase.from('audit_logs').insert([{ user_id: user?.id, action: `Created Camera ${data.camera_identifier}` }]);
+      const result = initialData
+        ? await supabase.from('cameras').update(payload).eq('id', initialData.id).select('id').maybeSingle()
+        : await supabase.from('cameras').insert([{ ...payload, created_by: user?.id }]).select('id').maybeSingle();
+      if (result.error || !result.data) {
+        throw new Error(result.error?.message ?? 'Camera record could not be saved (check permissions).');
+      }
+      if (user?.id) {
+        const { error: auditError } = await supabase.from('audit_logs').insert([{
+          user_id: user.id, action: `${initialData ? 'Updated' : 'Created'} Camera ${data.camera_identifier}`
+        }]);
+        if (auditError) console.warn('Camera audit log unavailable:', auditError);
       }
       onSuccess();
     } catch (err) {
-      console.error(err);
+      console.error('Camera setup could not be saved:', err);
+      setSaveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -194,7 +220,7 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
                       sourceType === type.id ? "border-blue-600 bg-blue-50/50" : "border-slate-200 bg-white hover:border-slate-300"
                     )}
                   >
-                    <input type="radio" value={type.id} {...register('source_type')} className="mt-1" />
+                    <input type="radio" value={type.id} {...register('source_type')} disabled={type.id === 'uploaded_video'} className="mt-1" />
                     <div>
                       <div className="flex items-center gap-2">
                         <type.icon className={cn("w-4 h-4", sourceType === type.id ? "text-blue-600" : "text-slate-500")} />
@@ -219,13 +245,13 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
                   {sourceType === 'rtsp' && (
                     <div className="mt-3 p-3 bg-slate-100 rounded-lg text-[11px] text-slate-600 flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 shrink-0 text-slate-500" />
-                      <p><strong>RTSP Architecture:</strong> VisionGuard uses MediaMTX / go2rtc internally to ingest and re-stream RTSP feeds to WebRTC for low-latency viewing and frame extraction.</p>
+                      <p><strong>RTSP Architecture:</strong> A separate RTSP-to-HLS/WebRTC gateway is needed. Direct RTSP playback is not supported.</p>
                     </div>
                   )}
                   {sourceType === 'youtube_live' && (
                     <div className="mt-3 p-3 bg-slate-100 rounded-lg text-[11px] text-slate-600 flex items-start gap-2">
                       <AlertCircle className="w-4 h-4 shrink-0 text-slate-500" />
-                      <p><strong>YouTube Ingestion:</strong> VisionGuard uses yt-dlp to extract the raw stream manifest. No headless browser is required.</p>
+                      <p><strong>YouTube Ingestion:</strong> YouTube ingestion is not implemented; saving a URL does not enable live monitoring.</p>
                     </div>
                   )}
                 </div>
@@ -272,28 +298,29 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
 
                 {testResult === 'success' && (
                   <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-700 text-[12px] flex items-center gap-2 mb-4 font-medium">
-                    <Check className="w-4 h-4" /> Stream connected successfully!
+                    <Check className="w-4 h-4" /> HLS video started in this browser (not a continuous uptime check).
                   </div>
                 )}
                 {testResult === 'error' && (
                   <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-red-700 text-[12px] flex items-center gap-2 mb-4 font-medium">
-                    <AlertCircle className="w-4 h-4" /> Invalid stream URL or connection timeout.
+                    <AlertCircle className="w-4 h-4" /> {testError || 'The HLS video could not be played.'}
                   </div>
                 )}
 
                 <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center relative">
-                  {testResult === 'success' ? (
-                    <div className="absolute inset-0 bg-slate-800 flex items-center justify-center">
-                       <Video className="w-8 h-8 text-white/20 animate-pulse" />
-                       <div className="absolute bottom-4 left-4 flex items-center gap-2">
-                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                         <span className="text-[10px] text-white/80 font-bold uppercase tracking-widest">Live Feed</span>
-                       </div>
-                    </div>
+                  {testRequest ? (
+                    <CameraStream camera={{ source_type: 'hls', source_url: testRequest }} controls
+                      onPlayback={(status, reason) => {
+                        setIsTesting(false);
+                        setTestResult(status === 'playing' ? 'success' : 'error');
+                        setTestError(reason ?? null);
+                      }} />
                   ) : (
-                    <div className="text-white/40 text-[12px] font-medium flex flex-col items-center gap-2">
-                      <Video className="w-8 h-8 opacity-50" />
-                      No video preview available
+                    <div className="text-white/60 text-xs text-center p-4">
+                      <Video className="w-8 h-8 opacity-50 mx-auto mb-2" />
+                      {sourceType === 'hls'
+                        ? 'Test Connection attempts real HLS playback, including network and codecs.'
+                        : 'This source type cannot play directly in the browser.'}
                     </div>
                   )}
                 </div>
@@ -321,12 +348,14 @@ export function CameraCreationWizard({ initialData, onSuccess, onCancel }: Props
         ) : (
           <button
             onClick={handleSubmit(onSubmit)}
-            className="px-4 py-2 bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 rounded-lg transition-colors flex items-center gap-2"
+            disabled={isSaving}
+            className="px-4 py-2 disabled:opacity-50 bg-emerald-600 text-white text-[13px] font-bold hover:bg-emerald-700 rounded-lg transition-colors flex items-center gap-2"
           >
-            <Check className="w-4 h-4" />
-            Complete Setup
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {isSaving ? 'Saving…' : 'Save Camera'}
           </button>
         )}
+        {saveError && <p role="alert" className="mt-2 text-xs text-red-700">{saveError}</p>}
       </div>
     </div>
   );
