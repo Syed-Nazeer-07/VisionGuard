@@ -47,6 +47,13 @@ class Settings(BaseModel):
     # Maximum concurrent background jobs (1 = strictly safe local concurrency)
     MAX_CONCURRENT_JOBS: int = int(os.getenv("VISIONGUARD_MAX_CONCURRENT_JOBS", "1"))
     
+    # Exact trusted remote storage hostnames. EMPTY by default: arbitrary
+    # URLs from an unauthenticated local API must never become an SSRF proxy.
+    REMOTE_VIDEO_ALLOWED_HOSTS: List[str] = [
+        host.strip().lower() for host in
+        os.getenv("VISIONGUARD_ALLOWED_VIDEO_HOSTS", "").split(",") if host.strip()
+    ]
+
     # Temporary artifact retention period in hours
     LOCAL_RETENTION_HOURS: int = int(os.getenv("VISIONGUARD_RETENTION_HOURS", "24"))
 
