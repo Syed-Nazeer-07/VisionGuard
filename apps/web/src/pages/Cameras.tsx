@@ -10,6 +10,7 @@ import { useAuthStore } from '../store/auth'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CameraCreationWizard } from '../components/cameras/CameraCreationWizard'
 import { useNavigate } from 'react-router-dom'
+import { cameraSourceHost } from '../services/cameraSources'
 
 export function Cameras() {
   const { role, user } = useAuthStore()
@@ -19,6 +20,8 @@ export function Cameras() {
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list')
   const [activeFilter, setActiveFilter] = useState('All')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [error, setError] = useState<string | null>(null)
   
   // Drawer States
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -44,8 +47,8 @@ export function Cameras() {
       .eq('is_deleted', false)
       .order('created_at', { ascending: false })
       
-    if (error) console.error(error)
-    if (data) setCameras(data)
+    if (error) setError(`Camera directory could not be loaded: ${error.message}`)
+    else { setError(null); setCameras(data || []) }
     setLoading(false)
   }
 
@@ -68,27 +71,27 @@ export function Cameras() {
   }
 
   const handleDelete = async (cam: any) => {
+    if (role !== 'Admin') return setError('Only Admin can delete cameras.')
+    if (!window.confirm(`Delete ${cam.name}? Related camera data may be affected.`)) return
     try {
-      if (typeof window !== 'undefined' && window.confirm && !window.confirm(`Are you sure you want to delete ${cam.name}?`)) {
-        return
+      const { data, error: deleteError } = await supabase.from('cameras')
+        .update({ is_deleted: true }).eq('id', cam.id).select('id').maybeSingle()
+      if (deleteError || !data) throw new Error(deleteError?.message || 'Camera not found or access denied')
+      if (user?.id) {
+        const { error: auditError } = await supabase.from('audit_logs')
+          .insert([{ user_id: user.id, action: `Deleted Camera ${cam.camera_identifier || cam.id}` }])
+        if (auditError) console.warn('Camera deletion audit log unavailable:', auditError)
       }
-    } catch {
-      // In iframe sandbox where window.confirm may be restricted, continue deletion
-    }
-    try {
-      await supabase.from('cameras').update({ is_deleted: true }).eq('id', cam.id)
-      await supabase.from('audit_logs').insert([{ user_id: user?.id, action: `Deleted Camera ${cam.camera_identifier || cam.id}` }])
       setIsDetailsOpen(false)
-    } catch (err) {
-      console.error(err)
-    }
+      setSelectedCamera(null)
+      await fetchCameras()
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
   }
 
-  const filteredCameras = cameras.filter(c => {
-    if (activeFilter === 'Online') return c.status === 'online'
-    if (activeFilter === 'Offline') return c.status === 'offline'
-    if (activeFilter === 'Warning') return c.status === 'warning'
-    return true
+  const filteredCameras = cameras.filter(cam => {
+    if (activeFilter !== 'All' && cam.status !== activeFilter.toLowerCase()) return false
+    const q = searchQuery.toLowerCase().trim()
+    return [cam.name, cam.camera_identifier, cam.location].some(value => (value || '').toLowerCase().includes(q))
   })
 
   // Permission Checks
@@ -141,7 +144,7 @@ export function Cameras() {
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input 
                 type="text" 
-                placeholder="Search cameras..." 
+                placeholder="Search cameras..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} aria-label="Search cameras" 
                 className="w-48 xl:w-64 pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-[13px] text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
               />
             </div>
@@ -157,6 +160,9 @@ export function Cameras() {
           </div>
         </div>
 
+        {error && <div role="alert" className="p-3 bg-red-50 border-b border-red-200 text-red-700 text-sm">
+          {error} <button onClick={() => void fetchCameras()} className="underline ml-2">Retry</button>
+        </div>}
         {/* Content */}
         <div className="flex-1 overflow-auto relative">
           {loading ? (
@@ -235,9 +241,9 @@ export function Cameras() {
                     <td className="px-5 py-3 text-right">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button 
-                          onClick={() => navigate(`/app/analyze?camera=${cam.id}`)}
+                          onClick={() => navigate(`/app/monitor?camera=${encodeURIComponent(cam.id)}`)}
                           className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                          title="Launch Live AI Analysis"
+                          title="Open HLS preview (AI inference not connected)"
                         >
                           <Play className="w-4 h-4 text-emerald-600" />
                         </button>
@@ -373,13 +379,18 @@ export function Cameras() {
                     
                     {/* Live Preview Button */}
                     <button 
-                      onClick={() => navigate(`/app/analyze?camera=${selectedCamera.id}`)}
+                      onClick={() => navigate(`/app/monitor?camera=${encodeURIComponent(selectedCamera.id)}`)}
                       className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 p-3 rounded-lg text-[13px] font-bold text-slate-900 shadow-sm hover:border-blue-300 transition-colors cursor-pointer group"
                     >
                       <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
                         <Play className="w-4 h-4 ml-0.5" />
                       </div>
                       Watch Live Stream
+                    </button>
+
+                    <button onClick={() => navigate(`/app/scene-setup/${encodeURIComponent(selectedCamera.id)}`)}
+                      className="w-full inline-flex justify-center px-3 py-2 rounded-lg font-bold text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100">
+                      Configure Scene Geometry
                     </button>
 
                     {/* Info Card */}
@@ -407,7 +418,7 @@ export function Cameras() {
                         <div className="overflow-hidden">
                           <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Source URL</div>
                           <div className="text-[13px] font-medium text-slate-900 truncate" title={selectedCamera.source_url || selectedCamera.stream_url}>
-                            {selectedCamera.source_url || selectedCamera.stream_url || 'N/A'}
+                            {cameraSourceHost(selectedCamera)}
                           </div>
                         </div>
                       </div>
