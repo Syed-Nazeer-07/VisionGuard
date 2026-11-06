@@ -38,6 +38,8 @@ const PRIMARY_NAV = [
 
 // Secondary operations and tools grouped under "More"
 const SECONDARY_NAV = [
+  { name: 'Cameras', path: '/app/cameras', icon: Camera, roles: ['Viewer', 'Operator', 'Supervisor', 'Admin'] },
+  { name: 'Monitor', path: '/app/monitor', icon: MonitorPlay, roles: ['Viewer', 'Operator', 'Supervisor', 'Admin'] },
   { name: 'Analytics', path: '/app/analytics', icon: BarChart3, roles: ['Viewer', 'Operator', 'Supervisor', 'Admin'] },
   { name: 'Reports', path: '/app/reports', icon: FileText, roles: ['Viewer', 'Operator', 'Supervisor', 'Admin'] },
 ]
