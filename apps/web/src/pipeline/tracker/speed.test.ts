@@ -92,6 +92,19 @@ describe('SpeedEstimator', () => {
     expect(result!.speed).toBeGreaterThan(30);
   });
 
+
+  it('does not turn 33ms detection-box jitter into implausible speed readings', () => {
+    const est = new SpeedEstimator(60, 5);
+    est.setHomography(SCALE_H);
+    expect(est.update(5, { x: 0.5, y: 0.5, w: 0.1, h: 0.1 }, 0)).toBeNull();
+    expect(est.update(5, { x: 0.502, y: 0.5, w: 0.1, h: 0.1 }, 0.033)).toBeNull();
+    expect(est.update(5, { x: 0.498, y: 0.5, w: 0.1, h: 0.1 }, 0.066)).toBeNull();
+    const measured = est.update(5, { x: 0.504, y: 0.5, w: 0.1, h: 0.1 }, 0.14);
+    expect(measured).not.toBeNull();
+    expect(measured!.speed).toBe(0);
+    expect(est.update(5, { x: 0.505, y: 0.5, w: 0.1, h: 0.1 }, 0.17)).toEqual(measured);
+  });
+
   it('reset clears track history', () => {
     const est = new SpeedEstimator(60, 5);
     est.setHomography(SCALE_H);
