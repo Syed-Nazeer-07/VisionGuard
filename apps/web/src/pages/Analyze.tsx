@@ -273,7 +273,7 @@ export default function Analyze() {
   const analysisEngineRef = useRef(analysisEngine);
   analysisEngineRef.current = analysisEngine;
   const [syncPlayback, setSyncPlayback] = useState<boolean>(
-    () => localStorage.getItem('visionguard_sync_playback') !== 'false'
+    () => localStorage.getItem('visionguard_sync_playback') === 'true'
   );
   const syncPlaybackRef = useRef(syncPlayback);
   syncPlaybackRef.current = syncPlayback;
@@ -283,11 +283,16 @@ export default function Analyze() {
 
   useEffect(() => {
     localStorage.setItem('visionguard_sync_playback', String(syncPlayback));
-    if (!syncPlayback && videoRef.current) {
+    if (videoRef.current && !syncPlayback) {
       videoRef.current.playbackRate = 1;
       setEffectivePlaybackRate(1);
     }
   }, [syncPlayback]);
+  // A previous build turned slowdown ON by default. Restore regular 1×
+  // playback on every fresh source, including previously saved sessions.
+  useEffect(() => {
+    if (videoRef.current && !syncPlayback) videoRef.current.playbackRate = 1;
+  }, [sourceInfo?.id, syncPlayback]);
   const [backendHealth, setBackendHealth] = useState<BackendHealth | null>(null);
   const [backendAvailable, setBackendAvailable] = useState<boolean>(false);
   const [backendJob, setBackendJob] = useState<BackendJobStatus | null>(null);
@@ -3042,7 +3047,7 @@ export default function Analyze() {
                 <input type="checkbox" checked={syncPlayback}
                   onChange={event => setSyncPlayback(event.target.checked)}
                   className="accent-indigo-600 w-3.5 h-3.5" />
-                Sync video to AI
+                Slow playback to AI FPS (optional)
                 <span className="font-mono text-indigo-700">{effectivePlaybackRate.toFixed(2)}×</span>
               </label>
             )}
