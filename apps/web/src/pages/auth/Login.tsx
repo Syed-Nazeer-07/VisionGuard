@@ -214,7 +214,7 @@ export function Login() {
           </Link>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/60 text-xs font-mono text-emerald-400">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>SYSTEM ONLINE</span>
+            <span>SECURE ACCESS</span>
           </div>
         </div>
 
@@ -235,13 +235,13 @@ export function Login() {
           {/* Surveillance Telemetry HUD Card */}
           <div className="rounded-xl bg-slate-900/80 backdrop-blur-md border border-slate-800 p-4 shadow-xl max-w-[480px]">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 mb-3 text-xs font-mono text-slate-400">
-              <span className="text-slate-200 font-medium">CAM-09B · INTERSTATE ARTERIAL</span>
-              <span className="text-emerald-400">FPS: 29.8 · 1080p</span>
+              <span className="text-slate-200 font-medium">COMPUTER VISION ENGINE</span>
+              <span className="text-indigo-300">Preview of capabilities</span>
             </div>
             <div className="grid grid-cols-3 gap-3 text-center">
               <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
                 <div className="text-[11px] text-slate-400 uppercase">Detection</div>
-                <div className="text-sm font-bold text-white mt-0.5">YOLO11-Nano</div>
+                <div className="text-sm font-bold text-white mt-0.5">YOLO</div>
               </div>
               <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
                 <div className="text-[11px] text-slate-400 uppercase">Tracking</div>
@@ -249,7 +249,7 @@ export function Login() {
               </div>
               <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
                 <div className="text-[11px] text-slate-400 uppercase">Velocity</div>
-                <div className="text-sm font-bold text-indigo-300 mt-0.5">Calibrated</div>
+                <div className="text-sm font-bold text-indigo-300 mt-0.5">Needs setup</div>
               </div>
             </div>
           </div>
@@ -258,7 +258,7 @@ export function Login() {
           <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-[13px] font-medium text-slate-300">
             <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Multi-Camera Ingest</span>
             <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> WebGPU & Local Backend</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Sub-Second Incident Alerting</span>
+            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Human-reviewed Events</span>
           </div>
         </div>
 
