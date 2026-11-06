@@ -4,7 +4,9 @@ import { localAnalysisStorage, type LocalAnalysis, type LocalFrame, type LocalTr
 
 const MODEL = '/models/yolo11s.onnx';
 const VIDEO_LOAD_TIMEOUT_MS = 10_000;
-const STEP = 0.10; // 10 observed frames/second; interpolate each confirmed track during native-rate playback.
+// 5 sampled frames/second instead of 10. Each sample triggers an expensive
+// video seek AND an ONNX inference. Playback still interpolates at display FPS.
+const STEP = 0.20;
 const VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
 
 type WorkerReply =
@@ -105,6 +107,11 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
   const [provider, setProvider] = useState('');
   const [error, setError] = useState('');
   const [progress, setProgress] = useState(0);
+  const [processedFrames, setProcessedFrames] = useState(0);
+  const [plannedFrames, setPlannedFrames] = useState(0);
+  const [analysisPhase, setAnalysisPhase] = useState('Waiting to start...');
+  const [analysisElapsedSeconds, setAnalysisElapsedSeconds] = useState(0);
+  const analysisStartedRef = useRef(0);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -260,6 +267,10 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     setAnalysis(null);
     analysisRef.current = null;
     setProgress(0);
+    setProcessedFrames(0);
+    setPlannedFrames(0);
+    setAnalysisElapsedSeconds(0);
+    setAnalysisPhase('Waiting to start...');
     setPosition(0);
     loadedPositionRef.current = 0;
     // The video itself uses a local blob URL immediately. No upload, copy,
@@ -353,12 +364,17 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     setPlaying(false);
     setError('');
     setProgress(0);
+    setProcessedFrames(0);
+    setAnalysisElapsedSeconds(0);
+    setAnalysisPhase('Preparing detector...');
+    analysisStartedRef.current = performance.now();
     setStatus('processing');
     analysisRef.current = null;
     setAnalysis(null);
     const frames: LocalFrame[] = [];
     const end = video.duration;
     const count = Math.ceil(end / STEP);
+    setPlannedFrames(count);
     try {
       await ensureWorkerReady();
       if (controller.signal.aborted) throw new Error('Analysis cancelled');
@@ -366,18 +382,27 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
       for (let i = 0; i < count; i++) {
         if (controller.signal.aborted) throw new Error('Analysis cancelled');
         const time = Math.min(end - 0.001, i * STEP);
+        if (i === 0 || i % 10 === 0) setAnalysisPhase('Decoding video at ' + readableTime(time));
         await seek(video, time, controller.signal);
         if (controller.signal.aborted) throw new Error('Analysis cancelled');
+        if (i === 0) setAnalysisPhase('Running the first YOLO inference...');
         const bitmap = await createImageBitmap(video);
         const tracks = await infer(bitmap, time);
         frames.push({ time, tracks });
         progressRef.current = (i + 1) / count;
-        if (i % 5 === 0 || i === count - 1) setProgress(Math.round(progressRef.current * 100));
+        // Never round early progress to 0%: show exact observed work, not a spinner.
+        setProgress(progressRef.current * 100);
+        setProcessedFrames(i + 1);
+        if (i === 0 || i % 10 === 0) {
+          setAnalysisPhase('Detecting and tracking vehicles');
+          setAnalysisElapsedSeconds((performance.now() - analysisStartedRef.current) / 1000);
+        }
       }
       const result: LocalAnalysis = {
         name, width: video.videoWidth, height: video.videoHeight, duration: end,
         model: 'YOLO11s', frames, completedAt: Date.now()
       };
+      setAnalysisPhase('Saving completed results locally...');
       await localAnalysisStorage.saveAnalysis(result);
       analysisRef.current = result;
       setAnalysis(result);
@@ -386,6 +411,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
       setPosition(0);
       await localAnalysisStorage.savePosition(0);
     } catch (e) {
+      setAnalysisPhase(controller.signal.aborted ? 'Analysis cancelled' : 'Analysis failed');
       setStatus(controller.signal.aborted ? 'ready' : 'error');
       if (!controller.signal.aborted) setError('Analysis failed: ' + String(e));
     } finally {
@@ -573,12 +599,22 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
                 {status === 'processing' && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-[#0b1225] px-6 text-center text-white">
                     <Loader2 className="animate-spin text-indigo-300" size={36} />
-                    <div className="text-lg font-semibold">{workerReadyRef.current ? 'Analyzing vehicle movements' : 'Preparing YOLO11s detector'}</div>
-                    <div className="max-w-sm text-sm text-slate-300">{modelStatus === 'YOLO11s ready' ? 'Processing original frames. Playback starts only after full analysis.' : 'First-time model initialization is separate from the video loading time.'}</div>
+                    <div className="text-lg font-semibold">{analysisPhase}</div>
+                    <div className="max-w-sm text-sm text-slate-300">{modelStatus === 'YOLO11s ready'
+                      ? 'Processing sampled frames. Playback begins after complete analysis.'
+                      : 'Preparing the detection model before processing frames.'}</div>
+                    <div aria-live="polite" className="text-sm text-slate-200">
+                      {plannedFrames > 0 ? processedFrames.toLocaleString() + ' of ' + plannedFrames.toLocaleString() + ' frames analyzed' : 'Preparing frame count'}
+                    </div>
                     <div className="h-2 w-full max-w-sm overflow-hidden rounded-full bg-white/20">
                       <div className="h-full rounded-full bg-indigo-400 transition-[width]" style={{ width: progress + '%' }} />
                     </div>
-                    <strong>{progress}%</strong>
+                    <strong>{progress.toFixed(1)}%</strong>
+                    {processedFrames > 0 && analysisElapsedSeconds > 0 && (
+                      <span className="text-xs text-slate-300">
+                        Approx. {Math.ceil(analysisElapsedSeconds * (plannedFrames - processedFrames) / processedFrames)}s remaining at current average throughput (estimate)
+                      </span>
+                    )}
                     <button type="button" onClick={() => abortRef.current?.abort()} className="rounded-lg border border-white/30 px-4 py-2 text-sm">Cancel analysis</button>
                   </div>
                 )}
