@@ -280,6 +280,7 @@ export default function Analyze() {
   const [syncPlayback, setSyncPlayback] = useState<boolean>(
     () => localStorage.getItem('visionguard_sync_playback_user_opt_in_v2') === 'true'
   );
+  const [showDetectionScores, setShowDetectionScores] = useState(false);
   const syncPlaybackRef = useRef(syncPlayback);
   syncPlaybackRef.current = syncPlayback;
   const [effectivePlaybackRate, setEffectivePlaybackRate] = useState(1);
@@ -794,7 +795,7 @@ export default function Analyze() {
       const srcH = video.videoHeight;
       const stats = drawBoundingBoxes(
         ctx, tracksToRender, canvas.width, canvas.height,
-        srcW, srcH, isCover, 0
+        srcW, srcH, isCover, 0, { showConfidence: showDetectionScores }
       );
       latestOverlayStatsRef.current = stats;
 
@@ -3056,6 +3057,13 @@ export default function Analyze() {
                   className="accent-indigo-600 w-3.5 h-3.5" />
                 Slow playback to AI FPS (optional)
                 <span className="font-mono text-indigo-700">{effectivePlaybackRate.toFixed(2)}×</span>
+              </label>
+              <label title="Append YOLO confidence to each box to diagnose incorrect classifications."
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-700 select-none cursor-pointer shrink-0">
+                <input type="checkbox" checked={showDetectionScores}
+                  onChange={event => setShowDetectionScores(event.target.checked)}
+                  className="accent-indigo-600 w-3.5 h-3.5" />
+                Show detection confidence
               </label>
             )}
           </div>
