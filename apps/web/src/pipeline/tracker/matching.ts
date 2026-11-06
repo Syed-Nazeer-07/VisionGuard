@@ -24,6 +24,9 @@ export function getIOU(box1: {x: number, y: number, w: number, h: number}, box2:
  */
 export function classGroup(classId: number): number {
   if (classId === 2 || classId === 5 || classId === 7) return 2;
+  // Tiny two-wheelers often alternate bicycle/motorcycle predictions
+  // across frames. Match these as a group, but never with pedestrians.
+  if (classId === 1 || classId === 3) return 3;
   return classId;
 }
 
