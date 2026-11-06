@@ -271,7 +271,9 @@ Deno.serve(async (req) => {
 
       case 'delete-artifact': {
         const asset = await loadAsset(db, videoId)
-        requireAssetOwner(asset, userId)
+        // Authorized Supervisors/Admins can manage case retention even
+        // when they are not the original uploader.
+        await requireArtifactReader(db, asset, userId)
         const key = await loadArtifactRun(db, videoId, body.runId)
         const cfg = b2Config()
         const removed = await purgeObjectVersions(cfg, key)
