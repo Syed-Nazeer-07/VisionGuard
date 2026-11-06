@@ -180,6 +180,16 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     };
   }, [attachVideo]);
 
+  // Keep the elapsed clock running even when the very first GPU inference is
+  // still compiling. A static 0% spinner used to look like a frozen app.
+  useEffect(() => {
+    if (status !== 'processing') return;
+    const interval = window.setInterval(() => {
+      setAnalysisElapsedSeconds((performance.now() - analysisStartedRef.current) / 1000);
+    }, 500);
+    return () => window.clearInterval(interval);
+  }, [status]);
+
   useEffect(() => {
     if (active || status === 'processing') return;
     const video = videoRef.current;
@@ -604,7 +614,13 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
                       ? 'Processing sampled frames. Playback begins after complete analysis.'
                       : 'Preparing the detection model before processing frames.'}</div>
                     <div aria-live="polite" className="text-sm text-slate-200">
-                      {plannedFrames > 0 ? processedFrames.toLocaleString() + ' of ' + plannedFrames.toLocaleString() + ' frames analyzed' : 'Preparing frame count'}
+                      {plannedFrames > 0 ? processedFrames.toLocaleString() + ' of ' + plannedFrames.toLocaleString() + ' sampled frames analyzed' : 'Preparing frame count'}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      Elapsed {Math.floor(analysisElapsedSeconds)}s
+                      {processedFrames === 0 && analysisElapsedSeconds > 10
+                        ? ' · First inference can take longer while shaders compile'
+                        : ''}
                     </div>
                     <div className="h-2 w-full max-w-sm overflow-hidden rounded-full bg-white/20">
                       <div className="h-full rounded-full bg-indigo-400 transition-[width]" style={{ width: progress + '%' }} />
