@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Film, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { activityLedger } from '../services/activityLedger';
+import { streamCatalog, type StreamSource } from '../services/streamCatalog';
+import Hls from 'hls.js';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
 import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
@@ -38,6 +40,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const currentFileRef = useRef<File | null>(null);
   const currentHandleRef = useRef<FileSystemFileHandle | null>(null);
   const [saveVideo, setSaveVideo] = useState(false);
+  const [streams, setStreams] = useState<StreamSource[]>([]);
+  const [streamSource, setStreamSource] = useState<StreamSource | null>(null);
+  const [showStreamForm, setShowStreamForm] = useState(false);
+  const [streamLabel, setStreamLabel] = useState('');
+  const [streamUrlInput, setStreamUrlInput] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -253,16 +260,53 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     } else activeRunRef.current = '';
   }, [resetTracks]);
 
+  const chooseStream = (source: StreamSource) => {
+    videoRef.current?.pause();
+    uploadGenerationRef.current += 1;
+    resetTracks();
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    urlRef.current = null;
+    currentFileRef.current = null;
+    currentHandleRef.current = null;
+    setReadyVideo(false);
+    setOpenedSeconds(null);
+    setDuration(0);
+    setPosition(0);
+    setFilename(source.name);
+    setUrl(source.url);
+    setStreamSource(source);
+    setStorage('not-saved');
+    setError('');
+    loadStartRef.current = performance.now();
+    restoreTimeRef.current = 0;
+    if (ownerId) {
+      streamCatalog.select(ownerId, source.id);
+      activeRunRef.current = 'stream:' + source.id + ':' + new Date().toISOString().slice(0,10);
+      activityLedger.begin(ownerId, activeRunRef.current, source.name, 'live-stream');
+    }
+  };
+
   useEffect(() => {
     const preference = ownerId
       ? localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes'
       : false;
     setSaveVideo(preference);
+    if (!ownerId) { setStreams([]); return; }
+    const known = streamCatalog.list(ownerId);
+    setStreams(known);
+    const activeId = streamCatalog.active(ownerId);
+    const activeSource = known.find(source=>source.id===activeId);
+    if (activeSource && !urlRef.current && !currentFileRef.current) {
+      // One selected stream is restored on reload. Playback still requires
+      // the remote origin to supply browser-compatible media and CORS headers.
+      chooseStream(activeSource);
+    }
   }, [ownerId]);
 
   useEffect(() => {
     let alive = true;
-    if (!ownerId || localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
+    if (!ownerId || streamCatalog.active(ownerId) ||
+        localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
     const generation = uploadGenerationRef.current;
     void Promise.all([
       localAnalysisStorage.loadVideo(),
@@ -293,6 +337,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       return;
     }
     uploadGenerationRef.current += 1;
+    setStreamSource(null);
+    if (ownerId) streamCatalog.select(ownerId, null);
     currentFileRef.current = file;
     currentHandleRef.current = handle ?? null;
     const generation = uploadGenerationRef.current;
@@ -327,6 +373,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     });
   };
 
+  const addStream = () => {
+    if (!ownerId) return;
+    try {
+      const source = streamCatalog.add(ownerId, streamLabel, streamUrlInput);
+      setStreams(streamCatalog.list(ownerId));
+      setShowStreamForm(false);
+      setStreamLabel('');
+      setStreamUrlInput('');
+      chooseStream(source);
+    } catch (error) { setError(error instanceof Error ? error.message : String(error)); }
+  };
+
   const chooseVideo = async () => {
     const picker = (window as Window & {
       showOpenFilePicker?: (options?: { multiple?: boolean }) => Promise<FileSystemFileHandle[]>;
@@ -353,6 +411,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setFilename('');
     setReadyVideo(false);
     setPlaying(false);
+    setStreamSource(null);
+    if (ownerId) streamCatalog.select(ownerId, null);
     currentFileRef.current = null;
     currentHandleRef.current = null;
     activeRunRef.current = '';
@@ -368,6 +428,27 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     });
     void persistenceQueueRef.current.catch(e => setError('Could not clear local video: ' + String(e)));
   };
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !streamSource || streamSource.format !== 'hls') return;
+    if (Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      hls.attachMedia(video);
+      hls.loadSource(streamSource.url);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        void video.play().catch(() => {});
+      });
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) setError('Live stream playback error: ' + data.details +
+          '. Check the stream URL and its CORS policy.');
+      });
+      return () => { hls.destroy(); };
+    }
+    // Safari may play HLS natively.
+    if (video.canPlayType('application/vnd.apple.mpegurl')) video.src = streamSource.url;
+    else setError('HLS is not available in this browser.');
+  }, [streamSource]);
 
   useEffect(() => {
     if (active) return;
@@ -638,10 +719,48 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
             <Upload size={16} /> Choose video
           </button>
+          <button type="button" onClick={() => setShowStreamForm(v=>!v)}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+            {showStreamForm ? 'Close sources' : 'Live sources'}
+          </button>
           {url && <button type="button" aria-label="Remove video" onClick={removeVideo}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"><X size={18} /></button>}
         </div>
       </header>
+
+      {(showStreamForm || streams.length > 0) && <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div><h2 className="text-sm font-semibold text-slate-900">Live stream sources</h2>
+            <p className="mt-1 text-xs text-slate-500">Select a saved live HLS (.m3u8) or direct video URL. Selection persists for this account.</p>
+          </div>
+          <select aria-label="Choose live stream" value={streamSource?.id ?? ''}
+            onChange={event => {
+              const source = streams.find(s=>s.id===event.target.value);
+              if (source) chooseStream(source);
+            }} className="min-w-44 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+            <option value="">Select a live source</option>
+            {streams.map(source=><option key={source.id} value={source.id}>{source.name}</option>)}
+          </select>
+        </div>
+        {showStreamForm && <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+          <input aria-label="Source name" placeholder="Camera A · Main road" value={streamLabel}
+            onChange={e=>setStreamLabel(e.target.value)} maxLength={80}
+            className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm"/>
+          <input aria-label="Stream URL" placeholder="https://example.com/live/playlist.m3u8"
+            value={streamUrlInput} onChange={e=>setStreamUrlInput(e.target.value)}
+            className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm"/>
+          <button type="button" onClick={addStream} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
+            Save and select
+          </button>
+        </div>}
+        {streamSource && <button type="button" onClick={()=>{
+          if (!ownerId) return;
+          streamCatalog.remove(ownerId, streamSource.id);
+          setStreams(streamCatalog.list(ownerId));
+          removeVideo();
+        }} className="text-xs font-medium text-red-600">Remove selected source</button>}
+        <p className="text-xs text-slate-500">Browser-based analysis requires media with CORS permission. RTSP and private camera credentials require an authenticated server-side relay; they cannot be used directly.</p>
+      </section>}
 
       {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
@@ -651,7 +770,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="relative aspect-video w-full overflow-hidden bg-[#080e20]">
           {url ? (
             <>
-              <video ref={videoRef} src={url} controls autoPlay muted playsInline preload="auto"
+              <video ref={videoRef} src={streamSource?.format === 'hls' ? undefined : url}
+                crossOrigin={streamSource ? 'anonymous' : undefined}
+                controls autoPlay muted playsInline preload="auto"
                 className="h-full w-full object-contain"
                 onLoadedMetadata={event => {
                   setDuration(event.currentTarget.duration);
@@ -719,7 +840,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-slate-900">{filename}</div>
               <div className="mt-1 text-xs text-slate-500">
-                {readableTime(position)} / {readableTime(duration)} · Original video at 1×
+                {streamSource ? 'LIVE STREAM' : readableTime(position) + ' / ' + readableTime(duration)} · Playback at 1×
                 {openedSeconds !== null ? ' · Opened in ' + openedSeconds.toFixed(2) + 's' : ''}
               </div>
             </div>
@@ -737,7 +858,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
-      <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+      {!streamSource && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
         <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
           disabled={!ownerId} className="h-4 w-4 accent-indigo-600" />
         <span className="flex-1"><strong>Keep this video on this device</strong>
@@ -746,7 +867,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             {storage === 'saving' ? ' Saving…' : storage === 'saved' ? ' Video saved.' : ''}
           </span>
         </span>
-      </label>
+      </label>}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500"><Activity size={14} /> Vehicles in frame</div>
