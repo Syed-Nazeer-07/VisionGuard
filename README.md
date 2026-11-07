@@ -114,8 +114,8 @@ YOLO11s model at a public HTTPS URL when ONNX weights exceed Cloudflare's
 or Pages without a sleeping Python backend.
 
 **[Cloudflare deployment guide](docs/CLOUDFLARE_PAGES.md)** covers
-the exact build settings, R2 model CORS, Supabase login/OAuth redirects and
-real-website acceptance tests. A passing CI badge does not mean a site has
+the exact build settings, Hugging Face model hosting, the matching ONNX
+Runtime CDN, Supabase login/OAuth redirects and real-site acceptance tests. A passing CI badge does not mean a site has
 been published or that the model, authentication and uploads are verified.
 
 ### Returning to an existing clone

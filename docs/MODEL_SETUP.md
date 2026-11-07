@@ -15,8 +15,16 @@ expected standard configuration is a fixed 640 × 640 RGB input with
 `[1,84,8400]` output. Verify this contract with your specific export
 rather than assuming every YOLO ONNX graph is identical.
 
-After placing the file, restart Vite. The active analysis screen reports
-whether WebGPU or WASM was selected and why it fell back.
+Alternatively configure `VITE_YOLO_MODEL_URL` with a compatible public
+HTTPS ONNX file (for Cloudflare, the hosted model currently lives at
+`https://huggingface.co/SyedNazeer07/visionguard-yolo11s/resolve/main/yolo11s.onnx`).
+Ensure HEAD/GET and redirects permit browser CORS.
+
+After placing/configuring the file, restart Vite. The active analysis screen
+reports whether WebGPU or WASM was selected and why it fell back. The
+Cloudflare production build also uses a version-matched public jsDelivr
+ONNX Runtime WASM asset to avoid Cloudflare's 25 MiB per-file limit.
+That CDN is a runtime dependency and must be reachable for inference.
 
 ## Optional local Python backend
 

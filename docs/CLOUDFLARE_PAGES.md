@@ -18,8 +18,8 @@ In **Workers & Pages → visionguard → Settings → Build**, use:
 | Deploy command | `npx wrangler deploy` |
 | Node.js version | `22` (root `.nvmrc` included) |
 
-**The screenshot shows Build variables: None.** This will prevent the
-production deployment guard from succeeding until configured.
+The latest Cloudflare screenshot now lists the build-variable names. Check
+that each value is saved and correct; the list displays names, not values.
 
 In **Settings → Build → Build Variables and Secrets**, add the *build-time*
 settings:
@@ -29,8 +29,8 @@ settings:
   (if you are using the existing staging project)
 - `VITE_SUPABASE_ANON_KEY` — your **public** Supabase publishable key
 - `VITE_VIDEO_STORAGE_PROVIDER=b2`
-- `VITE_YOLO_MODEL_URL` — the **public HTTPS** URL of your compatible
-  licensed `yolo11s.onnx` file; see model-hosting instructions below
+- `VITE_YOLO_MODEL_URL=https://huggingface.co/SyedNazeer07/visionguard-yolo11s/resolve/main/yolo11s.onnx`
+  — your uploaded public model URL. Confirm the model's licence permits public distribution.
 
 **Build variables are different from Workers runtime Variables and Secrets.**
 Vite must see the `VITE_*` values at build time. Never expose a Google
@@ -66,28 +66,41 @@ Cloudflare Workers static assets and Pages impose a **25 MiB per-file maximum**.
 tracked in VisionGuard's Git repository, so a Git-based build cannot bundle
 untracked local ONNX files.
 
-**Recommended: an external, public HTTPS model host such as Cloudflare R2.**
+**No-billing-required model hosting: your existing public Hugging Face model.**
 
-1. Obtain a **licensed YOLO11s ONNX export** compatible with the frontend
-   640x640 COCO decoder. See [model setup](MODEL_SETUP.md).
-2. Create a **separate public R2 bucket for model weights**, not the private
-   Backblaze B2 user video bucket, and upload the ONNX model.
-3. Use a **custom domain** for production R2 traffic. The r2.dev development
-   endpoint is rate-limited and not intended for production.
-4. Configure R2 CORS to allow **GET and HEAD** from your exact website origin,
-   for example https://YOUR-SITE.pages.dev. Add localhost:3000 separately
-   only for local development as needed.
-5. Verify that both HEAD and GET succeed and return an ONNX binary response,
-   not an HTML fallback/error page.
-6. Set the public, HTTPS object URL ending in .onnx as VITE_YOLO_MODEL_URL.
+Your [uploaded YOLO11s model](https://huggingface.co/SyedNazeer07/visionguard-yolo11s)
+is already available as a public repository. Point the Cloudflare Worker
+**build variable** at the file's resolve URL:
 
-A model **no larger than 25 MiB** may alternatively be packaged under
-apps/web/public/models/yolo11s.onnx if you arrange a compliant model
-provisioning step before the Git build. The app's production guard will fail
-when neither model option is configured.
+~~~text
+VITE_YOLO_MODEL_URL=https://huggingface.co/SyedNazeer07/visionguard-yolo11s/resolve/main/yolo11s.onnx
+~~~
 
-**Public R2 weights can be downloaded by anyone.** Confirm the model license
-allows hosting/distribution and do not put secrets in model URLs.
+This 38 MB model cannot be bundled into a Cloudflare static asset because of
+the 25 MiB per-file limit. The app loads it from Hugging Face at runtime.
+Check that your export matches [the detector contract](MODEL_SETUP.md) and
+that its licence permits public distribution. Before treating deployment
+as complete, test browser **HEAD and GET** through Hugging Face's redirects,
+and ensure CORS works with your exact `workers.dev` website origin.
+
+Public Hugging Face hosting has its own availability and bandwidth policies.
+It does **not** require enabling Cloudflare R2 subscription billing.
+
+**Separately, ONNX Runtime Web's JSEP WASM is ~28 MiB.** Vite normally emits
+this as a local asset that Cloudflare would reject. The deployment script
+removes only this generated duplicate and configures the application's
+worker to load the exact installed ONNX Runtime version from the public
+jsDelivr CDN. This preserves the WebGPU/WASM execution options, but live
+network access to the CDN is required. Verify its CORS and availability;
+the CI build cannot prove those external resources will load.
+
+If you later need stronger uptime guarantees, you can migrate the public
+model and runtime to your own compatible, licensed CDN or R2 storage, with
+its own costs. Do not put original private video uploads in public storage.
+
+A model **no larger than 25 MiB** can alternatively be packaged under
+apps/web/public/models/yolo11s.onnx with an explicit provisioning step.
+The deployment guard refuses to publish if neither model option is set.
 
 ## 2. Optional alternative: create a Cloudflare Pages project
 
@@ -126,11 +139,15 @@ These VITE_* values are embedded into browser JavaScript. Never insert
 Supabase secret/service-role keys, Google OAuth client secrets, B2 application
 keys, or private signed video links.
 
-The command **npm run build:pages** builds the frontend and checks that public
-Supabase configuration and a model location are supplied, that the static
-security headers are present, and that no generated file exceeds Pages'
-25 MiB maximum. **npm run test:deploy** tests these release checks.
-Passing this guard does **not** guarantee the external model actually works.
+The command **npm run build:pages** repairs npm's missing Linux native
+Rolldown/Oxlint bindings when necessary, builds the frontend, redirects
+the oversized ONNX Runtime WASM to its matching-version public CDN,
+and verifies that every remaining file is within Cloudflare's 25 MiB
+limit. It also checks that Supabase and model URLs are configured.
+**npm run test:deploy** tests these release guards.
+
+This validates the **build output**, not the remote Hugging Face model
+response, the jsDelivr binary, Cloudflare deployment, or detector accuracy.
 
 ## 4. Configure redirects and Google login
 
@@ -156,12 +173,15 @@ The staging project previously returned **provider is not enabled**.
 
 ## 5. Deploy and verify
 
-Click **Save and Deploy** in Pages; subsequent main-branch pushes will
-automatically trigger new builds. Verify the **real HTTPS deployment**:
+With your existing Worker, trigger a **new build from the latest `main` commit**,
+rather than retrying the older failed commit. Confirm the build details show
+the new commit before checking the **real HTTPS deployment**:
 
 1. Landing, signup, confirmation, password recovery and Google OAuth.
-2. Model initialization: public ONNX HEAD and GET succeed, proper CORS,
-   binary model rather than index.html or an HTML error.
+2. Model initialization: Hugging Face ONNX HEAD and GET succeed (including
+   redirects), the jsDelivr ONNX Runtime JSEP WASM is accessible, and both
+   external requests pass CORS. No missing `/assets/*.wasm` requests should
+   be used as the production runtime source.
 3. Vehicle tracking, disappearing boxes, approximate speeds, fullscreen,
    auto-generated **pending-review** incidents, and the original video controls.
 4. Browser-tab sharing consent, focus changes and webcam permissions.
@@ -180,8 +200,9 @@ remove isolation controls merely to conceal CORS failures.
 Cloudflare Pages Free has **500 builds per month**; Workers and Pages both
 have **25 MiB per static asset** and free-tier file-count limits. Static
 Pages hosting does not put the application to sleep like an idle Python
-service. But Supabase Free can pause or hit quotas, R2 and Backblaze B2
-have their own limits/costs, and inference performance depends on each
+service. But Supabase Free can pause or hit quotas, public CDN/Hugging Face services
+have fair-use and availability limits, optional Backblaze B2 has its own
+storage costs, and inference performance depends on each
 visitor's WebGPU/WASM/browser hardware. No plan provides genuinely
 unlimited free compute, storage and database use.
 

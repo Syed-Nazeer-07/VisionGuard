@@ -27,7 +27,7 @@ and on the target Windows/Edge computer before promoting the release.
 | Account switching | Settings, YouTube links and tracked history do not leak between users |
 | Device performance | Sustainable inference speed verified on Surface Laptop 7 / Windows ARM |
 | Report clarity | Estimated speeds never described as verified offences |
-| Cloudflare Pages | Production build guard, R2 model CORS, required static headers and 25 MiB asset limit validated on deployed HTTPS site |
+| Cloudflare Workers/Pages | Production build guard, Hugging Face model/CORS, version-matched external ONNX Runtime WASM, security headers and 25 MiB limit validated on deployed HTTPS site |
 | Deployment | HTTPS, secure server-side B2 credentials, RLS, rate limits and backup/recovery policy verified |
 
 Follow the [Cloudflare Pages deployment guide](CLOUDFLARE_PAGES.md) for the precise GitHub, model/R2, OAuth and release settings. Deploying only the frontend does not activate Google OAuth or provision a model.

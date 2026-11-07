@@ -32,7 +32,7 @@ test('pins the native package to the exact installed Rolldown version', () => {
   assert.equal(installedRolldownVersion(fixture('1.3.0-rc.1')), '1.3.0-rc.1');
 });
 test('fails closed on invalid package metadata and uninstalled Rolldown', () => {
-  assert.throws(() => installedRolldownVersion(fixture('$(bad)')), /Unexpected installed Rolldown/);
+  assert.throws(() => installedRolldownVersion(fixture('$(bad)')), /Unexpected installed rolldown/);
   const root = mkdtempSync(path.join(os.tmpdir(), 'vg-binding-missing-'));
   roots.push(root);
   assert.throws(() => installedRolldownVersion(root), /npm ci/);
