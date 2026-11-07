@@ -1407,8 +1407,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
               <Film size={42} className="text-indigo-300" />
-              <div className="text-lg font-semibold">Select a traffic video</div>
-              <p className="max-w-md text-sm text-slate-300">Playback starts right away. Detection runs alongside the video, not before it.</p>
+              <div className="text-lg font-semibold">Select an analysis source</div>
+              <p className="max-w-md text-sm text-slate-300">Open a video, use a camera, or capture a tab playing YouTube Live. Detection runs alongside playback.</p>
               <button type="button" onClick={() => void chooseVideo()}
                 className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-900">Open local video</button>
             </div>
