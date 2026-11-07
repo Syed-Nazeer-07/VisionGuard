@@ -9,6 +9,7 @@ import { storageProviderFor, uploadStorageProvider } from '../services/videoStor
 import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
+import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
 import { hasAdvancedVideoFrame, isStreamStalled } from '../services/streamRecovery';
@@ -50,6 +51,10 @@ type Observation = { time: number; tracks: LiveTrack[] };
 
 export default function RealtimeAnalyze({ active = true }: { active?: boolean }) {
   const location = useLocation();
+  const qualityEnabled = new URLSearchParams(location.search).get('quality') === '1';
+  const qualityEnabledRef = useRef(false);
+  qualityEnabledRef.current = qualityEnabled;
+  const qualityFramesRef = useRef<QualityFrame[]>([]);
   const ownerId = useAuthStore(state => state.user?.id ?? null);
   const activeRunRef = useRef('');
   const currentFileRef = useRef<File | null>(null);
@@ -128,6 +133,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudPlaybackLoading, setCloudPlaybackLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const downloadQualityTrace = () => {
+    const frames = qualityFramesRef.current;
+    if (!frames.length || !currentFileRef.current) return;
+    const blob = new Blob([serializeQualityTrace(frames)], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = href;
+    anchor.download = 'visionguard-browser-tracking-unannotated.json';
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(href), 3000);
+  };
+
   const toggleFullscreen = async () => {
     try {
       if (document.fullscreenElement) {
@@ -168,6 +185,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     flowTracksRef.current = [];
     speedHistoryRef.current.clear();
     autoIncidentDetectorRef.current.reset();
+    qualityFramesRef.current = []; // A seek/source change invalidates timestamp alignment.
     detectorToStableIdRef.current.clear();
     // Preserve increasing stable IDs within this run. A seek/reconnect must
     // not reuse #1 for an entirely different vehicle in the saved ledger.
@@ -1150,6 +1168,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const offsetX = (width - frameWidth * fit) / 2;
             const offsetY = (height - frameHeight * fit) / 2;
             const tracks = projectLiveTracks(observation.tracks, observation.time, video.currentTime, frameWidth, frameHeight);
+            if (qualityEnabledRef.current && currentFileRef.current &&
+                !video.paused && !video.ended && !video.seeking) {
+              appendQualityFrame(qualityFramesRef.current, video.currentTime,
+                frameWidth, frameHeight, tracks);
+            }
             context.save();
             context.scale(dpr, dpr);
             context.beginPath();
@@ -1253,6 +1276,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             aria-expanded={showYouTubePanel} className="vg-secondary">
             {showYouTubePanel ? 'Hide YouTube links' : 'YouTube Live'}
           </button>
+          {qualityEnabled && !!currentFileRef.current && !!qualityFramesRef.current.length &&
+            <button type="button" onClick={downloadQualityTrace}
+              title="Download local-only predictions; human annotation is required"
+              className="vg-secondary">
+              Download QA trace ({qualityFramesRef.current.length})
+            </button>}
           {url && !webcamActive && !tabCaptureActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"><X size={18} /></button>}
         </div>
