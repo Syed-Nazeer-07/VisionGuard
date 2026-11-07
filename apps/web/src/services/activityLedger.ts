@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { supabase } from '../lib/supabase';
 
 export type VehicleClass = 'car' | 'bus' | 'truck' | 'motorcycle' | 'bicycle' | 'train' | 'bus/truck';
 
@@ -43,6 +44,10 @@ const pendingLoads = new Map<string, Promise<void>>();
 const listeners = new Set<() => void>();
 const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const writeTasks = new Map<string, Promise<void>>();
+const cloudTasks = new Map<string, Promise<void>>();
+const cloudLoads = new Set<string>();
+const cloudStatus = new Map<string, 'idle' | 'synced' | 'offline'>();
+
 
 const keyFor = (owner: string | null | undefined) => owner || 'signed-out';
 const getSnapshot = (owner: string) => states.get(owner) ?? EMPTY;
@@ -89,6 +94,63 @@ async function write(owner: string, records: AnalysisRecord[]): Promise<void> {
   } finally { db.close(); }
 }
 
+async function syncToCloud(owner: string, records: AnalysisRecord[]): Promise<void> {
+  if (!records.length || !navigator.onLine) {
+    if (!navigator.onLine) cloudStatus.set(owner, 'offline');
+    return;
+  }
+  // The caller only supplies an authenticated user ID. Supabase RLS separately
+  // verifies the true auth.uid() on every row read/write.
+  const rows = records.map(run => ({
+    owner_id: owner, run_id: run.id, payload: run,
+    updated_at: new Date(run.updatedAt).toISOString()
+  }));
+  // Small batches avoid API payload limits. No video bytes leave this device.
+  for (let i = 0; i < rows.length; i += 15) {
+    const { error } = await (supabase as any).from('user_analysis_records')
+      .upsert(rows.slice(i, i + 15), { onConflict: 'owner_id,run_id' });
+    if (error) throw error;
+  }
+  cloudStatus.set(owner, 'synced');
+}
+async function mergeFromCloud(owner: string): Promise<void> {
+  if (cloudLoads.has(owner)) return;
+  cloudLoads.add(owner);
+  try {
+    const { data, error } = await (supabase as any).from('user_analysis_records')
+      .select('run_id,payload,updated_at').eq('owner_id', owner).limit(150);
+    if (error) throw error;
+    const current = getSnapshot(owner);
+    const byId = new Map(current.records.map(r => [r.id, r]));
+    let changed = false;
+    for (const row of data || []) {
+      const run = row.payload as AnalysisRecord;
+      if (!run || typeof run.id !== 'string' || !run.vehicles ||
+          !Array.isArray(run.violations) || !Number.isFinite(run.updatedAt)) continue;
+      const local = byId.get(run.id);
+      if (!local || run.updatedAt > local.updatedAt) {
+        byId.set(run.id, run);
+        changed = true;
+      }
+    }
+    if (changed) {
+      const records = [...byId.values()].sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,150);
+      setState(owner, { loaded:true, records, error: current.error });
+      // Merge remote back to local browser storage without re-uploading it.
+      const prior = writeTasks.get(owner) ?? Promise.resolve();
+      const queued = prior.catch(()=>{}).then(()=>write(owner,records));
+      writeTasks.set(owner,queued);
+      await queued;
+    }
+    cloudStatus.set(owner,'synced');
+  } catch (e) {
+    // Local analysis works offline. Surface a warning without discarding data.
+    cloudStatus.set(owner, 'offline');
+    const state = getSnapshot(owner);
+    setState(owner, { ...state, error: 'Cloud sync unavailable; activity remains saved locally. ' + String(e) });
+  } finally { cloudLoads.delete(owner); }
+}
+
 async function ensureLoaded(owner: string): Promise<void> {
   if (states.get(owner)?.loaded) return;
   const inProgress = pendingLoads.get(owner);
@@ -102,6 +164,8 @@ async function ensureLoaded(owner: string): Promise<void> {
       const byId = new Map(records.map(r => [r.id, r]));
       for (const updated of pending?.records ?? []) byId.set(updated.id, updated);
       setState(owner, { loaded: true, records: [...byId.values()].sort((a,b) => b.updatedAt-a.updatedAt), error: null });
+      // Do not delay UI hydration on a network call.
+      void mergeFromCloud(owner);
     } catch (error) {
       setState(owner, { loaded: true, records: states.get(owner)?.records ?? [], error: String(error) });
     }
@@ -119,9 +183,14 @@ function persist(owner: string) {
     const prior = writeTasks.get(owner) ?? Promise.resolve();
     const next = prior.catch(() => {}).then(() => write(owner, records));
     writeTasks.set(owner, next);
-    void next.catch(error => {
+    void next.then(() => {
+      const priorCloud = cloudTasks.get(owner) ?? Promise.resolve();
+      const cloud = priorCloud.catch(()=>{}).then(() => syncToCloud(owner, getSnapshot(owner).records));
+      cloudTasks.set(owner, cloud);
+      return cloud;
+    }).catch(error => {
       const state = getSnapshot(owner);
-      setState(owner, { ...state, error: 'Analysis history could not be saved: ' + String(error) });
+      setState(owner, { ...state, error: 'Local or cloud activity save warning: ' + String(error) });
     });
   }, 900));
 }
@@ -190,7 +259,15 @@ export const activityLedger = {
     const queued = prior.catch(() => {}).then(() => write(owner, getSnapshot(owner).records));
     writeTasks.set(owner, queued);
     await queued;
+    const priorCloud = cloudTasks.get(owner) ?? Promise.resolve();
+    const cloud = priorCloud.catch(()=>{}).then(()=>syncToCloud(owner, getSnapshot(owner).records));
+    cloudTasks.set(owner,cloud);
+    try { await cloud; } catch (error) {
+      const state = getSnapshot(owner);
+      setState(owner, { ...state, error: 'Cloud backup unavailable; saved locally. ' + String(error) });
+    }
   },
+  cloudState(ownerId: string) { return cloudStatus.get(keyFor(ownerId)) ?? 'idle'; },
   addReviewedViolation(ownerId: string, runId: string, event: ViolationRecord) {
     if (!ownerId || !event.evidenceNote.trim()) return;
     change(keyFor(ownerId), records => records.map(run =>
