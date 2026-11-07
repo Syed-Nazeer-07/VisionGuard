@@ -80,6 +80,26 @@ describe('persistent crowded vehicle tracking', () => {
     expect(gone).toHaveLength(0);
   });
 
+  it('drops predicted-only boxes when the next YOLO result also misses', () => {
+    const ghost: PersistentTrack = {
+      ...car(270, 120, 11), id: 11, lastDetectedAt: 2,
+      lastOpticalAt: 2, speedKmh: null, speedIsEstimate: true,
+      isPredicted: true, vx: 120, vy: 0
+    };
+    const result = reconcileVehicles([ghost], [], 2.18, 12);
+    expect(result.tracks).toEqual([]);
+  });
+
+  it('keeps a recently optically confirmed car through a single YOLO miss', () => {
+    const real: PersistentTrack = {
+      ...car(170, 120, 14), id: 14, lastDetectedAt: 2,
+      lastOpticalAt: 2.24, speedKmh: 0, speedIsEstimate: true,
+      isPredicted: false, vx: 0, vy: 0
+    };
+    const result = reconcileVehicles([real], [], 2.30, 15);
+    expect(result.tracks.map(t => t.id)).toEqual([14]);
+  });
+
   it('does not freeze a box at the edge after the vehicle exits', () => {
     const before: PersistentTrack = {
       ...car(300, 120, 9), id: 9, lastDetectedAt: 2,
