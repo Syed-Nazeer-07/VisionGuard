@@ -34,6 +34,11 @@ function toRow(owner: string, source: StreamSource) {
 function cleanUrl(raw: string): string {
   const value = raw.trim();
   const url = new URL(value);
+  const host = url.hostname.toLowerCase();
+  if (host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com') ||
+      host === 'youtube-nocookie.com' || host.endsWith('.youtube-nocookie.com')) {
+    throw new Error('YouTube page links are not direct video URLs. Open the YouTube Live video in another tab, then use Analyze browser tab.');
+  }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') {
     throw new Error('Browser analysis requires an HTTP(S) video or HLS URL. RTSP needs a secure HLS conversion server.');
   }
