@@ -1,7 +1,59 @@
-# Deploy VisionGuard on Cloudflare Pages
+# Deploy VisionGuard on Cloudflare (Workers or Pages)
+
+## Your existing `visionguard` Cloudflare Worker
+
+**Keep your existing project.** The dashboard shows **Workers Builds** with
+`npx wrangler deploy`. VisionGuard now has a root `wrangler.jsonc` configured
+to publish `./apps/web/dist` as static assets and serve React Router paths
+with `single-page-application` fallback. The existing `_headers` security
+rules also apply to Worker static assets.
+
+In **Workers & Pages → visionguard → Settings → Build**, use:
+
+| Cloudflare setting | Value |
+| --- | --- |
+| Production branch | `main` |
+| Root directory | `/` |
+| Build command | `npm run build:pages` |
+| Deploy command | `npx wrangler deploy` |
+| Node.js version | `22` (root `.nvmrc` included) |
+
+**The screenshot shows Build variables: None.** This will prevent the
+production deployment guard from succeeding until configured.
+
+In **Settings → Build → Build Variables and Secrets**, add the *build-time*
+settings:
+
+- `NODE_VERSION=22`
+- `VITE_SUPABASE_URL=https://wpkwxlhwjkgtvyersust.supabase.co`
+  (if you are using the existing staging project)
+- `VITE_SUPABASE_ANON_KEY` — your **public** Supabase publishable key
+- `VITE_VIDEO_STORAGE_PROVIDER=b2`
+- `VITE_YOLO_MODEL_URL` — the **public HTTPS** URL of your compatible
+  licensed `yolo11s.onnx` file; see model-hosting instructions below
+
+**Build variables are different from Workers runtime Variables and Secrets.**
+Vite must see the `VITE_*` values at build time. Never expose a Google
+OAuth secret, Supabase service-role key or B2 application key as `VITE_*`.
+
+When the build succeeds, your current Worker will use a `workers.dev`
+domain, not `pages.dev`. Add your exact deployed domain to Supabase
+Authentication → URL Configuration for `/login` and `/reset-password`,
+and to your model host's CORS configuration.
+
+If the build still fails, scroll to the **bottom of the build log** for its
+first error after `npm run build:pages`. The screenshot's top portion
+only shows dependency installation and does not expose the actual error.
+
+Cloudflare references:
+[Workers build configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/),
+[Workers static asset SPA routing](https://developers.cloudflare.com/workers/static-assets/routing/single-page-application/),
+[Workers static response headers](https://developers.cloudflare.com/workers/static-assets/headers/).
+
+---
 
 VisionGuard's React/Vite frontend and YOLO11s browser inference can run on
-Cloudflare Pages. This does **not** host the optional Python/FastAPI backend,
+Cloudflare Workers static assets or Pages. This does **not** host the optional Python/FastAPI backend,
 which is unnecessary for the core browser analysis flow.
 
 **Current status:** Repository deployment configuration is prepared. A
@@ -10,7 +62,7 @@ external model and Supabase account. A green CI run is not a deployed website.
 
 ## 1. Host the YOLO11s model
 
-Cloudflare Pages imposes a **25 MiB per-file maximum**. Model weights are not
+Cloudflare Workers static assets and Pages impose a **25 MiB per-file maximum**. Model weights are not
 tracked in VisionGuard's Git repository, so a Git-based build cannot bundle
 untracked local ONNX files.
 
@@ -37,9 +89,10 @@ when neither model option is configured.
 **Public R2 weights can be downloaded by anyone.** Confirm the model license
 allows hosting/distribution and do not put secrets in model URLs.
 
-## 2. Create the Cloudflare Pages project
+## 2. Optional alternative: create a Cloudflare Pages project
 
-Go to [Cloudflare Dashboard](https://dash.cloudflare.com/) →
+If you prefer Pages instead of keeping the existing Worker, go to
+[Cloudflare Dashboard](https://dash.cloudflare.com/) →
 **Workers & Pages → Create → Pages → Connect to Git**, and select the
 **Syed-Nazeer-07/VisionGuard** GitHub repository.
 
@@ -81,8 +134,9 @@ Passing this guard does **not** guarantee the external model actually works.
 
 ## 4. Configure redirects and Google login
 
-After your first deploy, Cloudflare gives you the actual site URL, e.g.
-https://YOUR-SITE.pages.dev. In **Supabase → Authentication → URL
+After deployment, use your actual Worker URL, for example
+https://visionguard.YOUR-ACCOUNT.workers.dev, or the Pages URL if you
+created a separate Pages project. In **Supabase → Authentication → URL
 Configuration**, set that site's URL and allow:
 
 - https://YOUR-SITE.pages.dev/login (signup confirmation and OAuth)
@@ -123,8 +177,8 @@ remove isolation controls merely to conceal CORS failures.
 
 ## Limits, availability and costs
 
-Cloudflare Pages Free has **500 builds per month**, **25 MiB per static
-asset** and **20,000 static files** under current published limits. Static
+Cloudflare Pages Free has **500 builds per month**; Workers and Pages both
+have **25 MiB per static asset** and free-tier file-count limits. Static
 Pages hosting does not put the application to sleep like an idle Python
 service. But Supabase Free can pause or hit quotas, R2 and Backblaze B2
 have their own limits/costs, and inference performance depends on each

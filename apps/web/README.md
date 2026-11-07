@@ -19,4 +19,4 @@ The live analysis page uses `public/models/yolo11s.onnx`. Model weights are **no
 
 **Configuration:** Copy `.env.example` to `.env.local` in this **same directory** (not only at repo root) and supply your public Supabase URL/publishable key. Original video cloud uploads use the Backblaze B2 server-side signing service. Do not put private keys in `VITE_*` variables.
 
-See [Cloudflare Pages setup](../../docs/CLOUDFLARE_PAGES.md), [live video usage](../../docs/LIVE_ANALYSIS.md) and [Google OAuth setup](../../docs/GOOGLE_SIGN_IN.md).
+See [Cloudflare Workers/Pages setup](../../docs/CLOUDFLARE_PAGES.md), [live video usage](../../docs/LIVE_ANALYSIS.md) and [Google OAuth setup](../../docs/GOOGLE_SIGN_IN.md).

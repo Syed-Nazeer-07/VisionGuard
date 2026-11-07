@@ -106,14 +106,14 @@ Restart Vite after changing environment variables. These are **browser-public** 
 
 **Backblaze B2** is the optional destination for original cloud-saved video files. B2 requires a separately configured, authenticated server-side signing function and credentials. **Supabase Storage is not used for the original video files** in this workflow. For Google OAuth, follow the [Google sign-in guide](docs/GOOGLE_SIGN_IN.md).
 
-### Deploy the browser app on Cloudflare Pages
+### Deploy the browser app on Cloudflare
 
 VisionGuard includes a production build guard and support for hosting its
 YOLO11s model at a public HTTPS URL when ONNX weights exceed Cloudflare's
-25 MiB static-file limit. This lets the browser workflow run on static Pages
-hosting without a sleeping Python backend.
+25 MiB static-file limit. This lets the browser workflow run on Cloudflare Workers static assets
+or Pages without a sleeping Python backend.
 
-**[Cloudflare Pages deployment guide](docs/CLOUDFLARE_PAGES.md)** covers
+**[Cloudflare deployment guide](docs/CLOUDFLARE_PAGES.md)** covers
 the exact build settings, R2 model CORS, Supabase login/OAuth redirects and
 real-website acceptance tests. A passing CI badge does not mean a site has
 been published or that the model, authentication and uploads are verified.

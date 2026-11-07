@@ -2,7 +2,7 @@ import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, truncateSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, truncateSync, readFileSync } from 'node:fs';
 import { inspectPagesBuild, PAGES_MAX_FILE_BYTES } from './verify-pages-build.mjs';
 
 const roots = [];
@@ -55,4 +55,13 @@ test('requires the Cloudflare response header rules in the output', () => {
   const f = fixture();
   rmSync(path.join(f.dist, '_headers'));
   assert.throws(() => inspectPagesBuild(f), /security headers/);
+});
+
+test('existing Cloudflare Worker serves the Vite SPA assets on Node 22', () => {
+  const config = JSON.parse(readFileSync(path.resolve('wrangler.jsonc'), 'utf8'));
+  assert.equal(config.name, 'visionguard');
+  assert.equal(config.assets.directory, './apps/web/dist');
+  assert.equal(config.assets.not_found_handling, 'single-page-application');
+  assert.equal(config.workers_dev, true);
+  assert.equal(readFileSync(path.resolve('.nvmrc'), 'utf8').trim(), '22');
 });
