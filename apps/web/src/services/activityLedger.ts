@@ -48,7 +48,18 @@ const listeners = new Set<() => void>();
 const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const writeTasks = new Map<string, Promise<void>>();
 const cloudTasks = new Map<string, Promise<void>>();
+const cloudPushTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const lastCloudPush = new Map<string, number>();
+const CLOUD_PUSH_INTERVAL_MS = 15_000;
+/** Live inference can stop directly after a throttled local write.
+ * Queue the remainder of the rate-limit interval rather than losing that
+ * final revision until someone manually refreshes the page.
+ */
+export function cloudPushDelay(now: number, lastPushAt: number | undefined): number {
+  if (lastPushAt === undefined || !Number.isFinite(lastPushAt) ||
+      !Number.isFinite(now) || now < lastPushAt) return 0;
+  return Math.max(0, CLOUD_PUSH_INTERVAL_MS - (now - lastPushAt));
+}
 const lastCloudPull = new Map<string, number>();
 const CLOUD_FOCUS_REFRESH_MS = 30_000;
 
@@ -278,6 +289,27 @@ async function ensureLoaded(owner: string): Promise<void> {
   try { await load; } finally { pendingLoads.delete(owner); }
 }
 
+function scheduleCloudPush(owner: string) {
+  if (supabaseConfig.isMock || !navigator.onLine || cloudPushTimers.has(owner)) return;
+  const delay = cloudPushDelay(Date.now(), lastCloudPush.get(owner));
+  const timer = setTimeout(() => {
+    cloudPushTimers.delete(owner);
+    if (!navigator.onLine) { cloudStatus.set(owner, 'offline'); return; }
+    lastCloudPush.set(owner, Date.now());
+    const prior = cloudTasks.get(owner) ?? Promise.resolve();
+    const running = prior.catch(() => {}).then(() =>
+      syncToCloud(owner, getSnapshot(owner).records));
+    cloudTasks.set(owner, running);
+    void running.catch(error => {
+      lastCloudPush.set(owner, 0);
+      const state = getSnapshot(owner);
+      setState(owner, { ...state,
+        error: 'Cloud backup unavailable; activity remains saved locally. ' + String(error) });
+    });
+  }, delay);
+  cloudPushTimers.set(owner, timer);
+}
+
 function persist(owner: string) {
   // Debounce-by-reset could indefinitely defer persistence when inference
   // keeps running. Schedule a write at least once each interval instead.
@@ -289,18 +321,12 @@ function persist(owner: string) {
     const next = prior.catch(() => {}).then(() => write(owner, records));
     writeTasks.set(owner, next);
     void next.then(() => {
-      // Keep live playback and tracking responsive: do NOT make a network
-      // round-trip after each sampled video frame. Local writes stay fast;
-      // remote sync runs at most every 15s, plus explicit pause/visibility flush.
-      if (Date.now() - (lastCloudPush.get(owner) ?? 0) < 15_000) return;
-      lastCloudPush.set(owner, Date.now());
-      const priorCloud = cloudTasks.get(owner) ?? Promise.resolve();
-      const cloud = priorCloud.catch(()=>{}).then(() => syncToCloud(owner, getSnapshot(owner).records));
-      cloudTasks.set(owner, cloud);
-      return cloud.catch(error => { lastCloudPush.set(owner, 0); throw error; });
+      // Delay network work, never the local IndexedDB write. A timer ensures
+      // the last observation is synced even when playback immediately stops.
+      scheduleCloudPush(owner);
     }).catch(error => {
       const state = getSnapshot(owner);
-      setState(owner, { ...state, error: 'Local or cloud activity save warning: ' + String(error) });
+      setState(owner, { ...state, error: 'Local activity save failed: ' + String(error) });
     });
   }, 1500));
 }
@@ -438,6 +464,8 @@ export const activityLedger = {
   },
   async flush(ownerId: string) {
     const owner = keyFor(ownerId);
+    const queuedCloud = cloudPushTimers.get(owner);
+    if (queuedCloud) { clearTimeout(queuedCloud); cloudPushTimers.delete(owner); }
     const timer = writeTimers.get(owner);
     if (timer) { clearTimeout(timer); writeTimers.delete(owner); }
     const prior = writeTasks.get(owner) ?? Promise.resolve();

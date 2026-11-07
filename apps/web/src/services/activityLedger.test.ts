@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeIncidentReviewStatus, clearResolvedCloudWarning, countRepeatedTracks, isRepeatedVehicleTrack, mergeEstimatedSpeeds, nextActivityRevision, shouldRefreshCloudOnFocus, summarizeActivity, type AnalysisRecord } from './activityLedger';
+import { changeIncidentReviewStatus, clearResolvedCloudWarning, countRepeatedTracks, isRepeatedVehicleTrack, cloudPushDelay, mergeEstimatedSpeeds, nextActivityRevision, shouldRefreshCloudOnFocus, summarizeActivity, type AnalysisRecord } from './activityLedger';
 
 function record(id: string, vehicles: Record<string, { id:number; type:string;confidence:number;firstSeenAt:number;lastSeenAt:number;observations:number;estimatedSpeedKmh:number|null }>): AnalysisRecord {
   return {
@@ -159,5 +159,17 @@ describe('conservative vehicle counts', () => {
   });
   it('preserves per-session counts without claiming global reidentification', () => {
     expect(summarizeActivity([record('one',{'1':a}),record('two',{'1':a})]).vehicles).toBe(2);
+  });
+});
+
+describe('eventual cloud upload after live analysis stops', () => {
+  it('does not discard the last edit when a 15-second throttle is active', () => {
+    expect(cloudPushDelay(13_000, 10_000)).toBe(12_000);
+    expect(cloudPushDelay(25_000, 10_000)).toBe(0);
+  });
+  it('runs immediately after a missing or invalid last push timestamp', () => {
+    expect(cloudPushDelay(10_000, undefined)).toBe(0);
+    expect(cloudPushDelay(10_000, Number.NaN)).toBe(0);
+    expect(cloudPushDelay(10_000, 11_000)).toBe(0);
   });
 });
