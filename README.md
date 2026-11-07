@@ -509,9 +509,20 @@ npm install
 
 ### Configure environment variables
 
-Review the example environment files in the repository. Create the appropriate local environment files and fill in the credentials for your own Supabase project and other enabled services.
+**Important for this monorepo:** Vite runs from `apps/web`, not the repository root. Create `apps/web/.env.local` from `apps/web/.env.example`. A `.env` file placed only in the repository root is not automatically loaded by this workspace.
 
-Do not commit secrets. Do not copy production credentials into a public repository.
+On Windows PowerShell:
+
+```powershell
+Copy-Item apps/web/.env.example apps/web/.env.local
+notepad apps/web/.env.local
+```
+
+Fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` using the **public publishable key** from your Supabase project. Save the file, stop any old Vite server, and run `npm run dev` again. Vite reads these variables when it starts.
+
+**Architecture:** the Supabase connection supplies authentication, owner-only metadata and B2 signed-upload authorization. **New original videos always upload to Backblaze B2**, not Supabase Storage. Local AI playback does not require Supabase or B2.
+
+Never put a `service_role`, `sb_secret_*` or Backblaze B2 secret in a `VITE_*` variable. Do not commit `.env.local`.
 
 ### Start the frontend
 
@@ -541,14 +552,17 @@ If the frontend reports that it cannot connect to `localhost` or `127.0.0.1`, en
 
 ### Frontend
 
-Use the variable names documented in the repository's frontend environment example. Supabase-based frontends commonly use values such as:
+Create **`apps/web/.env.local`** (the folder matters):
 
 ```env
-VITE_SUPABASE_URL=https://<your-project>.supabase.co
-VITE_SUPABASE_ANON_KEY=<your-public-anon-key>
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_YOUR_PUBLIC_KEY
+VITE_VIDEO_STORAGE_PROVIDER=b2
 ```
 
-Confirm the actual variable names in the checked-out source before configuring them. Only values intended for browser use should use the `VITE_` prefix.
+The existing variable name `VITE_SUPABASE_ANON_KEY` accepts a modern Supabase publishable key (`sb_publishable_...`). The key is public and browser-safe; never substitute a secret or service-role key.
+
+If your upload displays **"B2 video storage is unavailable in demo mode"**, this means Vite did not receive its Supabase Auth URL/key. Check the exact `apps/web/.env.local` location and **restart Vite**, then sign in to that same Supabase project. It does **not** mean videos should be moved into Supabase Storage.
 
 ### Backblaze B2 Edge Function
 
