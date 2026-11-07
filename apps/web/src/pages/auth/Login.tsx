@@ -75,35 +75,9 @@ export function Login() {
     
     sessionStorage.removeItem('visionguard_logged_out');
     
-    const isMock = !import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder');
-    if (isMock) {
-      setTimeout(() => {
-        const demoUser = {
-          id: 'demo-admin-id',
-          email: data.email || 'admin@transport.gov',
-          user_metadata: { full_name: 'System Administrator' },
-          app_metadata: {},
-          aud: 'authenticated',
-          created_at: new Date().toISOString()
-        } as any;
-        const demoSession = {
-          access_token: 'demo-token',
-          token_type: 'bearer',
-          user: demoUser
-        } as any;
-        const demoProfile = {
-          id: 'demo-admin-id',
-          email: data.email || 'admin@transport.gov',
-          role: 'Admin',
-          status: 'Active',
-          name: 'System Administrator',
-          organization: 'Department of Transportation'
-        };
-        localStorage.setItem('visionguard_demo_session', JSON.stringify({ session: demoSession, profile: demoProfile, settings: {} }));
-        useAuthStore.getState().setAuth(demoSession, demoProfile, {});
-        setIsLoading(false);
-        navigate('/app', { replace: true });
-      }, 300);
+    if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
+      setIsLoading(false);
+      setError('Authentication is not configured. Set up the Supabase Auth environment and retry. Demo admin sign-in is disabled for security.');
       return;
     }
 
@@ -131,16 +105,9 @@ export function Login() {
     setError(null);
     setSuccessMsg(null);
     
-    const isMock = !import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder');
-    if (isMock) {
-      setTimeout(() => {
-        setIsLoading(false);
-        setSuccessMsg('Registration successful! Please sign in.');
-        setTimeout(() => {
-          setMode('login');
-          setSuccessMsg(null);
-        }, 1500);
-      }, 300);
+    if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
+      setIsLoading(false);
+      setError('Registration requires configured Supabase Auth. Local mock administrator accounts are not supported.');
       return;
     }
 
@@ -151,8 +118,7 @@ export function Login() {
         options: {
           data: {
             full_name: data.fullName,
-            organization: data.organization,
-            role: 'Viewer'
+            organization: data.organization
           }
         }
       });
@@ -249,7 +215,7 @@ export function Login() {
               </div>
               <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
                 <div className="text-[11px] text-slate-400 uppercase">Velocity</div>
-                <div className="text-sm font-bold text-indigo-300 mt-0.5">Calibrated</div>
+                <div className="text-sm font-bold text-indigo-300 mt-0.5">Calibration required</div>
               </div>
             </div>
           </div>
@@ -393,7 +359,7 @@ export function Login() {
                       </div>
                       <input
                         type="email"
-                        placeholder="admin@transport.gov"
+                        placeholder="you@example.com"
                         {...registerLogin('email')}
                         className={cn(
                           "w-full pl-10 pr-4 py-3 bg-white border rounded-lg outline-none transition-all text-[14px] text-gray-900 placeholder:text-gray-400 shadow-sm",
