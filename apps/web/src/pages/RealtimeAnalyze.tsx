@@ -864,18 +864,22 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 }}
                 onPause={event => {
                   setPlaying(false);
-                  void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId ?? undefined).catch(() => {});
+                  if (!streamSource) void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId ?? undefined).catch(() => {});
+                  if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
                 onSeeking={resetTracks}
                 onEnded={() => {
                   setPlaying(false);
                   latestRef.current = null;
                   setVisibleCount(0);
+                  if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
                 onError={() => {
                   firstFrameResolveRef.current?.();
                   firstFrameResolveRef.current = null;
-                  setError('The browser cannot decode this video. Try converting it to H.264 MP4.');
+                  setError(streamSource
+                    ? 'This stream cannot be played. Check its URL, media codec, availability and CORS headers.'
+                    : 'The browser cannot decode this video. Try converting it to H.264 MP4.');
                 }}
               />
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
