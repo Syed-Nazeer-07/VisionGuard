@@ -309,10 +309,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     const activeId = streamCatalog.active(ownerId);
     const activeSource = known.find(source=>source.id===activeId);
     if (activeSource && !urlRef.current && !currentFileRef.current) {
-      // One selected stream is restored on reload. Playback still requires
-      // the remote origin to supply browser-compatible media and CORS headers.
+      // The saved choice remains selected after refresh.
       chooseStream(activeSource);
     }
+    const startedGeneration = uploadGenerationRef.current;
+    let mounted = true;
+    void streamCatalog.refresh(ownerId).then(remote => {
+      if (!mounted) return;
+      setStreams(remote);
+      const selected = remote.find(source=>source.id===streamCatalog.active(ownerId));
+      if (selected && !currentFileRef.current &&
+          startedGeneration === uploadGenerationRef.current) chooseStream(selected);
+    }).catch(error => {
+      if (mounted) setError('Live sources available on this device; cloud sync unavailable: ' + String(error));
+    });
+    return () => { mounted = false; };
   }, [ownerId]);
 
   useEffect(() => {
@@ -400,6 +411,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setStreamLabel('');
       setStreamUrlInput('');
       chooseStream(source);
+      void streamCatalog.saveRemote(ownerId, source).catch(error => {
+        setError('Source saved locally, but cross-device sync failed: ' + String(error));
+      });
     } catch (error) { setError(error instanceof Error ? error.message : String(error)); }
   };
 
@@ -804,9 +818,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         </div>}
         {streamSource && <button type="button" onClick={()=>{
           if (!ownerId) return;
-          streamCatalog.remove(ownerId, streamSource.id);
+          const sourceId = streamSource.id;
+          streamCatalog.remove(ownerId, sourceId);
           setStreams(streamCatalog.list(ownerId));
           removeVideo();
+          void streamCatalog.removeRemote(ownerId, sourceId).catch(error => {
+            setError('Stream removed here, but cloud removal is pending: ' + String(error));
+          });
         }} className="text-xs font-medium text-red-600">Remove selected source</button>}
         <p className="text-xs text-slate-500">Browser-based analysis requires media with CORS permission. RTSP and private camera credentials require an authenticated server-side relay; they cannot be used directly.</p>
       </section>}
