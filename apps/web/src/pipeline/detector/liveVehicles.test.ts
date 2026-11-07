@@ -48,6 +48,26 @@ describe('live YOLO11 source-space vehicle decoding', () => {
     expect(decodeTrafficVehicles(weakCar, 1280, 720, .5, 0, 140)).toEqual([]);
   });
 
+  it('retains a real motorcycle after hundreds of duplicate high-score car anchors', () => {
+    const tensor = new Float32Array(84 * ANCHORS);
+    for (let anchor = 0; anchor < 350; anchor++) {
+      tensor[anchor] = 240;
+      tensor[ANCHORS + anchor] = 320;
+      tensor[2 * ANCHORS + anchor] = 155;
+      tensor[3 * ANCHORS + anchor] = 75;
+      tensor[(4 + 2) * ANCHORS + anchor] = 0.91 - anchor * 0.0002;
+    }
+    const bikeIndex = 400;
+    tensor[bikeIndex] = 480;
+    tensor[ANCHORS + bikeIndex] = 320;
+    tensor[2 * ANCHORS + bikeIndex] = 25;
+    tensor[3 * ANCHORS + bikeIndex] = 36;
+    tensor[(4 + 3) * ANCHORS + bikeIndex] = 0.39;
+    const boxes = decodeTrafficVehicles(tensor, 640, 640, 1, 0, 0);
+    expect(boxes.filter(box => box.className === 'car')).toHaveLength(1);
+    expect(boxes.filter(box => box.className === 'motorcycle')).toHaveLength(1);
+  });
+
   it('does not mislabel high-confidence pedestrians as motorcycles', () => {
     const tensor = outputFor(3, .34);
     tensor[(4 + 0) * ANCHORS] = .93;
