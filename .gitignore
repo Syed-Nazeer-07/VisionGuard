@@ -16,6 +16,9 @@ build/
 # ONNX Runtime artifacts are served from node_modules by vite.config.ts; never commit copies
 apps/web/public/ort-wasm-*
 
+# Supabase CLI linked-project state (local machine only)
+supabase/.temp/
+
 # Backend local runtime directories
 backend/.venv/
 backend/uploads/
