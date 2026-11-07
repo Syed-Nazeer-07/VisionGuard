@@ -5,34 +5,37 @@ video files, permission-granted device cameras, and user-approved browser
 tab video. There is **no automated YouTube URL extraction**, Puppeteer
 service, public-camera directory, or source-recorder in this version.
 
-## YouTube Live
+## YouTube and browser tab analysis
 
-1. Open **Live analysis**, then **YouTube Live**.
-2. Paste a YouTube watch/live/channel-live page link and select
-   **Open YouTube**. The page opens in a new tab. Start video playback there.
-3. Return to VisionGuard. Select **Analyze browser tab**.
-4. In the Edge or Chrome sharing picker, choose **Microsoft Edge Tab**
-   or **Chrome Tab**, then choose the tab that plays the video.
-   Do **not** choose Entire Screen or Window: when you switch back to
-   VisionGuard, those would display VisionGuard instead of the video.
-5. Your approved tab capture is analyzed locally by YOLO11s. Stop it with
-   **Stop tab capture**, the browser's sharing indicator, or the workspace's
-   **Stop** control.
-6. An optional **Keep sharing on other VisionGuard pages** checkbox keeps
-   the already-approved tab connected while you view the dashboard,
-   history or reports. Inference pauses away from Live Analysis and
-   resumes when you return. A visible header indicator with a Stop control
-   remains present throughout the workspace.
+**No YouTube URL or copy/paste is needed.** VisionGuard does not download,
+scrape, embed, or analyze a video directly from its YouTube page link.
+The former YouTube URL form was only a bookmark launcher, so it has been
+removed from the interface.
 
-Chrome and Edge may focus the video tab when sharing begins. Returning to
-VisionGuard should **not** discard that permission. VisionGuard attempts to
-resume its preview if the browser paused it.
+1. Open and play a permitted YouTube video/live stream in a separate
+   Microsoft Edge or Chrome tab. You can use VisionGuard's small
+   **Open YouTube** shortcut or navigate to YouTube normally.
+2. Return to VisionGuard → **Live analysis** → **Analyze tab**.
+3. In the browser's Share picker, choose the **Edge Tab / Chrome Tab**
+   category, select the already-playing YouTube tab and click **Share**.
+   Never choose Entire Screen or Window: those can show VisionGuard
+   itself when you switch back.
+4. VisionGuard analyzes the browser-approved tab video locally with YOLO11s.
+   **Stop tab capture** (or the browser's sharing control) ends capture.
+   **Keep sharing on other VisionGuard pages** can retain the existing
+   user-approved connection while you navigate within the app.
+
+**Why the tab picker is still needed:** browsers require a user gesture
+and explicit consent before another site can read tab pixels. VisionGuard
+cannot read the YouTube video from a URL or silently select/capture a tab.
+A pasted YouTube URL cannot grant that permission.
+
+Chrome/Edge may focus the shared YouTube tab when sharing begins. Returning
+to VisionGuard should not revoke sharing; the app attempts to resume the
+preview if the browser paused it.
 
 ## What is and isn't persistent
 
-- **Recent YouTube links:** up to six links are saved *on this device* and
-  separated by signed-in account. They survive refreshes and can be opened
-  again. A video link is not a downloaded video.
 - **Keep sharing on other pages:** this preference is saved locally per
   account. The current capture stays active only after explicit user consent
   and while that same VisionGuard browser tab remains open. The header

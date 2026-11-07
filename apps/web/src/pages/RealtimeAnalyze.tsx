@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Activity, AlertTriangle, Camera, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
-import { YouTubeLivePanel } from '../components/analysis/YouTubeLivePanel';
+import { Activity, AlertTriangle, Camera, ExternalLink, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
@@ -66,7 +65,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudStarting, setCloudStarting] = useState(false);
   const [cloudError, setCloudError] = useState('');
   const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
-  const [showYouTubePanel, setShowYouTubePanel] = useState(false);
   const [keepTabConnected, setKeepTabConnected] = useState(false);
   const lastPresentedAtRef = useRef(0);
   const lastDecodedMediaTimeRef = useRef<number | null>(null);
@@ -467,7 +465,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           resetTracks();
           setUrl('');
           setStreamHealth('idle');
-          setError('Browser tab sharing ended. The YouTube link is still in Recent links; select Analyze browser tab to reconnect.');
+          setError('Tab sharing ended. Click Analyze tab and choose the video tab again.');
           if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
         };
       }
@@ -1244,7 +1242,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       <header className="vg-page-header">
         <div>
           <h1>Live analysis</h1>
-          <p>Analyze files, YouTube tabs, or a browser camera</p>
+          <p>Analyze video, camera or a YouTube tab — no link to paste</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
@@ -1266,19 +1264,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             onClick={() => tabCaptureActive ? removeVideo() : void startTabCapture()}
             disabled={tabCaptureStarting}
             className="vg-secondary"
-            title="Choose the tab playing YouTube Live or another authorized stream">
+            title="Choose the already-open YouTube or video tab in your browser's Share dialog">
             <MonitorPlay size={16}/>
-            {tabCaptureStarting ? 'Choosing tab…' : tabCaptureActive ? 'Stop tab capture' : 'Analyze browser tab'}
+            {tabCaptureStarting ? 'Choose a tab…' : tabCaptureActive ? 'Stop tab capture' : 'Analyze tab'}
           </button>
           {(webcamActive || tabCaptureActive) && saveVideo && <button type="button"
             onClick={() => void reopenSavedVideo()}
             className="vg-secondary">
             <Film size={16}/> Saved video
           </button>}
-          <button type="button" onClick={() => setShowYouTubePanel(value => !value)}
-            aria-expanded={showYouTubePanel} className="vg-secondary">
-            {showYouTubePanel ? 'Hide YouTube links' : 'YouTube Live'}
-          </button>
+          <a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer"
+            title="Optional: browse YouTube in a separate tab. Open a video, then select Analyze tab."
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold text-slate-500 transition-colors hover:text-[#2356a8]">
+            Open YouTube <ExternalLink size={13}/>
+          </a>
           {qualityEnabled && !!currentFileRef.current && !!qualityFramesRef.current.length &&
             <button type="button" onClick={downloadQualityTrace}
               title="Download local-only predictions; human annotation is required"
@@ -1289,8 +1288,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"><X size={18} /></button>}
         </div>
       </header>
-
-      {showYouTubePanel && <YouTubeLivePanel ownerId={ownerId} onOpen={() => setError('')} />}
 
       {tabCaptureActive && <div className="vg-panel flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -1412,7 +1409,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
               <Film size={42} className="text-indigo-300" />
               <div className="text-lg font-semibold">Select an analysis source</div>
-              <p className="max-w-md text-sm text-slate-300">Choose video, camera, or browser tab above.</p>
+              <p className="max-w-md text-sm text-slate-300">Choose video, camera, or tab above.</p>
+              <p className="max-w-md text-xs leading-5 text-slate-400">YouTube: play it in another tab → Analyze tab → Share that tab.</p>
             </div>
           )}
         </div>

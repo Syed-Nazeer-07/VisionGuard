@@ -14,7 +14,7 @@ and on the target Windows/Edge computer before promoting the release.
 | Local video | Playback starts and tracking boxes follow road users |
 | Fullscreen | Fullscreen player includes video **and** overlay; Escape exits |
 | Scene exits | Boxes disappear promptly; quantify lingering frames after annotated exits using [browser QA](BROWSER_TRACKING_EVALUATION.md) |
-| YouTube tab | User-approved Edge-tab capture survives focus changes |
+| YouTube tab | No URL form; select **Analyze tab** and approve an existing YouTube tab; capture survives focus changes |
 | Capture privacy | Global Stop button ends sharing; webcam releases on page hide |
 | Live session history | Tracks persist across dashboard, history, analytics and reports |
 | Review flags | Sustained high-speed estimates and stopped vehicles amid moving traffic automatically create review candidates, alongside manual flags; confirm they appear in Incidents and report exports |

@@ -51,9 +51,9 @@ VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime
 
 ### Browser tabs and YouTube Live
 
-Open an authorized YouTube video/live page in Edge or Chrome, start playback, then return to VisionGuard and choose **Analyze browser tab**. Select the **browser tab** in the sharing picker—not your entire screen or a window—and approve sharing. VisionGuard cannot bypass browser permissions or extract a YouTube stream simply from its URL.
+Play an authorized YouTube video/live stream in another Edge or Chrome tab, then select **Analyze tab** in VisionGuard and share the playing **browser tab** (not Entire Screen or Window). **No YouTube URL needs to be copied or pasted into VisionGuard.** The optional **Open YouTube** shortcut just opens youtube.com; it does not download or analyze a video. Browser permission remains mandatory.
 
-Recent YouTube **links** are saved per account on that browser, but **not video bytes or sharing permissions**. You can optionally keep an already-approved tab capture connected while visiting other VisionGuard pages; a visible **Stop** control remains available. Browser-tab capture may pause or be throttled by the browser and must be reauthorized after a new browser session. Device cameras are released when hidden.
+You can optionally keep an already-approved tab capture connected while visiting other VisionGuard pages; a visible **Stop** control remains available. Browser-tab capture may pause or be throttled by the browser and must be reauthorized after a new browser session. Device cameras are released when hidden.
 
 See the [live analysis guide](docs/LIVE_ANALYSIS.md) for the complete workflow and troubleshooting.
 
@@ -138,7 +138,6 @@ Review or commit any local modifications before pulling if Git reports a conflic
 | Opted-in local video | Browser-local storage | **Keep this video on this device** depends on browser storage quotas and permissions |
 | Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2**; requires server-side configuration and may incur storage costs |
 | Account credentials and preferences | Supabase Auth / PostgreSQL when configured | Protected by server-side access policies |
-| Recent YouTube URLs | Browser localStorage, scoped by account | Up to six links; never a background capture permission or a download of the video |
 
 The active video/capture component resets when the signed-in account changes, keeping in-memory capture and tracker state from crossing between users.
 
