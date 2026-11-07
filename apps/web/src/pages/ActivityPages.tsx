@@ -74,7 +74,9 @@ export function ActivityDashboard() {
       <Stat label="Unique tracked vehicles" number={stats.vehicles} note="Across recorded sessions"/>
       <Stat label="Analysis sessions" number={stats.runs} note="Videos and live sources"/>
       <Stat label="Inference frames" number={stats.analyzedFrames} note="Completed detector observations"/>
-      <Stat label="Review flags" number={stats.violations} note="Awaiting evidence verification"/>
+      <Stat label="Review flags" number={stats.violations}
+        note={stats.pendingReviews + ' pending · ' +
+          (stats.reviewedFlags + stats.dismissedFlags) + ' handled'}/>
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
       <RecentRuns records={records}/>
@@ -402,8 +404,21 @@ export function ActivityVideoLibrary() {
   </main>;
 }
 
-function IncidentRow({ run, event }: { run: AnalysisRecord; event: ViolationRecord }) {
+function IncidentRow({
+  run, event, onReview,
+}: {
+  run: AnalysisRecord;
+  event: ViolationRecord;
+  onReview: (runId: string, eventId: string, status: ViolationRecord['status']) => void;
+}) {
   const automatic = event.id.startsWith('auto:');
+  const statusLabel = event.status === 'approved' ? 'Reviewed' :
+    event.status === 'rejected' ? 'Dismissed' : 'Needs review';
+  const statusClass = event.status === 'approved'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+    : event.status === 'rejected'
+      ? 'border-slate-200 bg-slate-50 text-slate-600'
+      : 'border-amber-200 bg-amber-50 text-amber-900';
   return <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 text-sm">
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2">
@@ -422,9 +437,30 @@ function IncidentRow({ run, event }: { run: AnalysisRecord; event: ViolationReco
         {event.evidenceNote}
       </p>
     </div>
-    <span className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium capitalize text-amber-900">
-      {event.status.replace('_', ' ')}
-    </span>
+    <div className="flex shrink-0 flex-col items-end gap-2">
+      <span className={'rounded-md border px-2.5 py-1 text-xs font-medium ' + statusClass}>
+        {statusLabel}
+      </span>
+      <div className="flex flex-wrap justify-end gap-1.5">
+        {event.status === 'pending_review' ? <>
+          <button type="button" onClick={() => onReview(run.id, event.id, 'approved')}
+            aria-label={'Mark ' + incidentLabel(event.type) + ' as reviewed'}
+            className="rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+            Mark reviewed
+          </button>
+          <button type="button" onClick={() => onReview(run.id, event.id, 'rejected')}
+            aria-label={'Dismiss ' + incidentLabel(event.type)}
+            className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
+            Dismiss
+          </button>
+        </> :
+          <button type="button" onClick={() => onReview(run.id, event.id, 'pending_review')}
+            aria-label={'Reopen ' + incidentLabel(event.type) + ' for review'}
+            className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
+            Reopen
+          </button>}
+      </div>
+    </div>
   </div>;
 }
 
@@ -436,10 +472,36 @@ export function ActivityIncidents() {
   const [flagType, setFlagType] = useState<'speed_estimate_review' | 'observed_event'>('observed_event');
   const [note, setNote] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | ViolationRecord['status']>('all');
   const run = records.find(r => r.id === runId) ?? records[0];
   const tracks = run ? Object.values(run.vehicles).sort((a, b) => a.id - b.id) : [];
   const chosenTrack = tracks.find(t => String(t.id) === trackId);
   const { automatic, manual } = groupIncidentRecords(records);
+  const incidents = [...automatic, ...manual];
+  const visibleAutomatic = statusFilter === 'all' ? automatic :
+    automatic.filter(item => item.event.status === statusFilter);
+  const visibleManual = statusFilter === 'all' ? manual :
+    manual.filter(item => item.event.status === statusFilter);
+  const pendingCount = incidents.filter(item => item.event.status === 'pending_review').length;
+  const reviewedCount = incidents.filter(item => item.event.status === 'approved').length;
+  const dismissedCount = incidents.filter(item => item.event.status === 'rejected').length;
+
+  const changeReview = (incidentRunId: string, eventId: string, status: ViolationRecord['status']) => {
+    if (!loaded || !userId ||
+        !activityLedger.setIncidentReviewStatus(userId, incidentRunId, eventId, status)) return;
+    setFeedback('Saving review…');
+    void activityLedger.flush(userId).then(() => {
+      // A delayed save for a previous click/account must not show false
+      // success after a different decision or a sign-in change.
+      if (useAuthStore.getState().user?.id !== userId) return;
+      const current = activityLedger.snapshot(userId).records.find(item => item.id === incidentRunId)
+        ?.violations.find(item => item.id === eventId);
+      if (current?.status === status) setFeedback('Review saved on this device.');
+    }).catch(() => {
+      if (useAuthStore.getState().user?.id === userId)
+        setFeedback('Could not save the review. Check browser storage.');
+    });
+  };
 
   const submitFlag = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -474,13 +536,24 @@ export function ActivityIncidents() {
         <h1>Incidents</h1>
         <p>Automatic observations · review required</p>
       </div>
-      <button type="button"
-        aria-controls="manual-incident-form" aria-expanded={manualOpen}
-        onClick={() => { setManualOpen(value => !value); setFeedback(''); }}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">
-        {manualOpen ? <X size={15}/> : <Plus size={15}/>}
-        {manualOpen ? 'Close' : 'Add incident'}
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        {incidents.length > 0 && <select aria-label="Filter incidents by review status"
+          value={statusFilter}
+          onChange={event => setStatusFilter(event.target.value as typeof statusFilter)}
+          className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700">
+          <option value="all">All ({incidents.length})</option>
+          <option value="pending_review">Needs review ({pendingCount})</option>
+          <option value="approved">Reviewed ({reviewedCount})</option>
+          <option value="rejected">Dismissed ({dismissedCount})</option>
+        </select>}
+        <button type="button"
+          aria-controls="manual-incident-form" aria-expanded={manualOpen}
+          onClick={() => { setManualOpen(value => !value); setFeedback(''); }}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">
+          {manualOpen ? <X size={15}/> : <Plus size={15}/>}
+          {manualOpen ? 'Close' : 'Add incident'}
+        </button>
+      </div>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     {feedback && <p role="status" className="mb-4 text-xs text-slate-600">{feedback}</p>}
@@ -540,10 +613,13 @@ export function ActivityIncidents() {
         <span className="text-xs tabular-nums text-slate-500">{automatic.length}</span>
       </div>
       {!loaded ? <p className="vg-empty-row">Loading incidents…</p> :
-        !automatic.length ? <p className="vg-empty-row">No automatic incidents recorded yet.</p> :
+        !visibleAutomatic.length ?
+          <p className="vg-empty-row">{automatic.length ? 'No detections match this filter.' :
+            'No automatic incidents recorded yet.'}</p> :
         <div className="divide-y divide-slate-100">
-          {automatic.map(({ run: item, event }) =>
-            <IncidentRow key={item.id + ':' + event.id} run={item} event={event}/>)}
+          {visibleAutomatic.map(({ run: item, event }) =>
+            <IncidentRow key={item.id + ':' + event.id} run={item} event={event}
+              onReview={changeReview}/>)}
         </div>}
     </section>
 
@@ -553,10 +629,13 @@ export function ActivityIncidents() {
         <span className="text-xs tabular-nums text-slate-500">{manual.length}</span>
       </div>
       <div className="divide-y divide-slate-100">
-        {manual.map(({ run: item, event }) =>
-          <IncidentRow key={item.id + ':' + event.id} run={item} event={event}/>)}
+        {visibleManual.length ? visibleManual.map(({ run: item, event }) =>
+          <IncidentRow key={item.id + ':' + event.id} run={item} event={event}
+            onReview={changeReview}/>) :
+          <p className="vg-empty-row">No manual incidents match this filter.</p>}
       </div>
     </section>}
-    <p className="vg-footnote">Detected patterns are review flags, not confirmed violations.</p>
+    <p className="vg-footnote">Reviewed means checked by a person—not a verified traffic offence.
+      Review decisions are saved with the incident and included in exported reports.</p>
   </main>;
 }
