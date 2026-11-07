@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Film, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
-import { reconcileVehicles, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
+import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
 import {
   projectLiveTracks, type LiveTrack
 } from '../pipeline/tracker/liveProjection';
@@ -174,9 +174,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           latestRef.current = null;
           return;
         }
-        let corrected = message.tracks;
+        // Catch delayed YOLO results up to the present video frame. One weak
+        // optical sample must not delete the entire vehicle trajectory.
+        let corrected: PersistentTrack[] = message.tracks.map(t => ({
+          ...t, lastDetectedAt: message.mediaTime, lastOpticalAt: message.mediaTime,
+          speedKmh: null, speedIsEstimate: true
+        }));
         for (let i = anchor + 1; i < history.length && corrected.length; i++) {
-          corrected = advanceOpticalTracks(corrected, history[i - 1], history[i]);
+          const advanced = advanceOpticalTracks(corrected, history[i - 1], history[i]);
+          corrected = recoverBriefOpticalMisses(
+            corrected, advanced, history[i - 1].time, history[i].time,
+            history[i].sourceWidth, history[i].sourceHeight
+          );
         }
         const latestTime = history[history.length - 1].time;
         const merged = reconcileVehicles(
@@ -375,7 +384,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const previous = history[history.length - 1];
             if (previous && flowTracksRef.current.length) {
               const advanced = advanceOpticalTracks(flowTracksRef.current, previous, current);
-              flowTracksRef.current = advanced.map(track => {
+              const continuous = recoverBriefOpticalMisses(
+                flowTracksRef.current, advanced, previous.time, current.time,
+                current.sourceWidth, current.sourceHeight
+              );
+              flowTracksRef.current = continuous.map(track => {
+                // Predicted positions are display-only; don't generate artificial
+                // km/h readings from movement we haven't observed.
+                if (track.isPredicted) return track;
                 const previousSpeed = speedHistoryRef.current.get(track.id) ?? {
                   points: [], smoothedKmh: null
                 };
