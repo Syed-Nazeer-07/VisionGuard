@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Film, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
+import { reconcileVehicles, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
 import {
   projectLiveTracks, type LiveTrack
 } from '../pipeline/tracker/liveProjection';
@@ -51,7 +52,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const latestRef = useRef<Observation | null>(null);
   const grayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const grayHistoryRef = useRef<GrayFrame[]>([]);
-  const flowTracksRef = useRef<LiveTrack[]>([]);
+  const flowTracksRef = useRef<PersistentTrack[]>([]);
+  const nextStableIdRef = useRef(1);
+  const speedHistoryRef = useRef<Map<number, SpeedHistory>>(new Map());
   const lastOpticalSampleRef = useRef(-Infinity);
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const firstFrameResolveRef = useRef<(() => void) | null>(null);
@@ -85,6 +88,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     generationRef.current += 1;
     latestRef.current = null;
     flowTracksRef.current = [];
+    speedHistoryRef.current.clear();
+    nextStableIdRef.current = 1;
     grayHistoryRef.current = [];
     lastOpticalSampleRef.current = -Infinity;
     lastCapturedTimeRef.current = -Infinity;
@@ -171,8 +176,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         for (let i = anchor + 1; i < history.length && corrected.length; i++) {
           corrected = advanceOpticalTracks(corrected, history[i - 1], history[i]);
         }
-        flowTracksRef.current = corrected;
-        latestRef.current = { time: history[history.length - 1].time, tracks: corrected };
+        const latestTime = history[history.length - 1].time;
+        const merged = reconcileVehicles(
+          flowTracksRef.current, corrected, latestTime, nextStableIdRef.current
+        );
+        nextStableIdRef.current = merged.nextId;
+        flowTracksRef.current = merged.tracks;
+        latestRef.current = { time: latestTime, tracks: merged.tracks };
       } else if (message.type === 'error') {
         setError('Frame inference error: ' + message.message);
       }
@@ -358,7 +368,19 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const history = grayHistoryRef.current;
             const previous = history[history.length - 1];
             if (previous && flowTracksRef.current.length) {
-              flowTracksRef.current = advanceOpticalTracks(flowTracksRef.current, previous, current);
+              const advanced = advanceOpticalTracks(flowTracksRef.current, previous, current);
+              flowTracksRef.current = advanced.map(track => {
+                const previousSpeed = speedHistoryRef.current.get(track.id) ?? {
+                  points: [], smoothedKmh: null
+                };
+                const speed = updateScreenSpeed(previousSpeed, track, current.time);
+                speedHistoryRef.current.set(track.id, speed.history);
+                return { ...track, speedKmh: speed.kmh, speedIsEstimate: true };
+              });
+              const activeIds = new Set(flowTracksRef.current.map(t => t.id));
+              for (const id of speedHistoryRef.current.keys()) {
+                if (!activeIds.has(id)) speedHistoryRef.current.delete(id);
+              }
               latestRef.current = { time: current.time, tracks: flowTracksRef.current };
             }
             history.push(current);
@@ -478,17 +500,24 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               context.strokeStyle = '#51f6b5';
               context.lineWidth = 2;
               context.strokeRect(x, y, w, h);
-              const classLabel = track.className.toUpperCase();
-              const motion = track.motionPxPerSec === null ? '' : '  ' + Math.round(track.motionPxPerSec) + ' px/s';
-              const label = '#' + track.id + ' ' + classLabel + motion;
-              context.font = '600 12px system-ui,sans-serif';
-              const labelW = context.measureText(label).width + 16;
-              const labelX = Math.max(offsetX + 2, Math.min(x, offsetX + frameWidth * fit - labelW - 2));
-              const labelY = y > offsetY + 22 ? y - 22 : y + 2;
-              context.fillStyle = 'rgba(7,16,34,.88)';
-              context.fillRect(labelX, labelY, labelW, 20);
+              const stable = track as PersistentTrack;
+              const classLabel = stable.className.toUpperCase();
+              // Speed is deliberately marked approximate: vehicle width is an
+              // assumed reference, not a calibrated road-plane distance.
+              const speed = stable.speedKmh === null
+                ? '— km/h'
+                : stable.speedKmh === 0 ? '0 km/h' : '≈' + Math.round(stable.speedKmh) + ' km/h';
+              const label = '#' + stable.id + ' ' + classLabel + '  ' + speed;
+              context.font = '600 11px system-ui,sans-serif';
+              const labelW = context.measureText(label).width + 12;
+              // Keep the ID, class and speed label at a FIXED offset inside the
+              // vehicle box. Never use varying above/below placements.
+              const labelX = Math.max(offsetX + 2, Math.min(x + 3, offsetX + frameWidth * fit - labelW - 2));
+              const labelY = Math.max(offsetY + 2, Math.min(y + 3, offsetY + frameHeight * fit - 18));
+              context.fillStyle = 'rgba(7,16,34,.90)';
+              context.fillRect(labelX, labelY, labelW, 18);
               context.fillStyle = '#ccffeb';
-              context.fillText(label, labelX + 8, labelY + 14);
+              context.fillText(label, labelX + 6, labelY + 13);
             }
             context.restore();
           }
@@ -644,14 +673,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           {provider === 'wasm' && fallbackReason && <div className="mt-1 text-[11px] leading-4 text-amber-700" title={fallbackReason}>WebGPU unavailable; using slower CPU/WASM</div>}
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-xs font-medium text-slate-500">On-screen motion speed</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">Shown on tracked boxes in px/s</div>
-          <div className="mt-1 text-xs leading-5 text-slate-500">Not km/h. Physical speed requires camera scale and perspective calibration.</div>
+          <div className="text-xs font-medium text-slate-500">Vehicle speed · estimated km/h</div>
+          <div className="mt-1 text-sm font-semibold text-slate-900">≈ km/h · stationary = 0 km/h</div>
+          <div className="mt-1 text-xs leading-5 text-slate-500">Auto-estimate from vehicle image size and motion. Not measured speed: camera calibration is needed for reliable km/h.</div>
         </div>
       </div>
 
       <p className="text-xs leading-5 text-slate-500">
-        Vehicle classes: bicycle, car, motorcycle, bus, train and truck. Boxes use low-resolution optical frame tracking between YOLO detections, and disappear when visual matching fails or vehicles exit the scene.
+        Vehicle classes: bicycle, car, motorcycle, bus, train and truck. Stable identities and consensus-based optical tracking run between YOLO detections. Speed is an approximate image-based estimate for a stationary camera, not a certified physical measurement.
         {storage === 'saving' ? ' Saving the selected video locally...' : storage === 'saved' ? ' Video selection saved locally.' : ''}
       </p>
     </div>
