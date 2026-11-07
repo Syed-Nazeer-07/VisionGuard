@@ -11,6 +11,8 @@ import { ResetPassword } from './pages/auth/ResetPassword'
 
 // Main Pages
 import { ActivityDashboard as Dashboard, ActivityAnalytics as Analytics, ActivityReports as Reports, ActivityVideoLibrary, ActivityIncidents } from './pages/ActivityPages'
+import { VideoLibrary as LegacyVideoLibrary } from './pages/VideoLibrary'
+import { Cases as LegacyCases } from './pages/Cases'
 import { Users } from './pages/Users'
 import { Config } from './pages/Config'
 import { AuditLogs } from './pages/AuditLogs'
@@ -75,6 +77,7 @@ function App() {
               <Route path="settings" element={<Settings />} />
               <Route path="analyze" element={null} />
               <Route path="videos" element={<ActivityVideoLibrary />} />
+              <Route path="archive-videos" element={<LegacyVideoLibrary />} />
               <Route path="video-review" element={<VideoReviewRedirect />} />
               <Route path="history" element={<Navigate to="/app/videos" replace />} />
               <Route path="alerts" element={<Navigate to="/app/cases?tab=incidents" replace />} />
@@ -87,6 +90,7 @@ function App() {
               </Route>
               <Route element={<RequireRole allowedRoles={['Viewer', 'Operator', 'Supervisor', 'Admin']} />}>
                 <Route path="cases" element={<ActivityIncidents />} />
+                <Route path="archive-cases" element={<LegacyCases />} />
               </Route>
 
               <Route element={<RequireRole allowedRoles={['Viewer', 'Operator', 'Supervisor', 'Admin']} />}>
