@@ -166,7 +166,10 @@ export function AppLayout() {
           <div style={activeAnalyze
             ? { display: 'block' }
             : { position: 'absolute', left: '-200vw', top: 0, width: '100%', visibility: 'hidden', pointerEvents: 'none' }}>
-            <RealtimeAnalyze active={activeAnalyze}/>
+            {/* Remount on account change so video, capture permissions, workers,
+                and in-memory track IDs never carry into another user's session.
+                The old component's cleanup does not delete retained files. */}
+            <RealtimeAnalyze key={user?.id ?? 'signed-out'} active={activeAnalyze}/>
           </div>
           {!activeAnalyze && <div className={MODERN_PATHS.has(location.pathname) ? '' : 'p-4 sm:p-6'}>
             <Outlet/>
