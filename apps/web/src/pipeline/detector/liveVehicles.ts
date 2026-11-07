@@ -4,6 +4,9 @@ import { LABELS } from './labels';
 export const VEHICLE_CLASS_IDS = new Set([1, 2, 3, 5, 6, 7]);
 const NUM_CLASSES = 80;
 const ANCHORS = 8400;
+// Do not change thresholds for cars, buses or trucks while recovering tiny bikes.
+const MOTORCYCLE_CONFIDENCE = 0.28;
+const BICYCLE_CONFIDENCE = 0.33;
 
 function groupOf(classId: number): number {
   return classId === 2 || classId === 5 || classId === 7 ? 2 : classId;
@@ -44,15 +47,31 @@ export function decodeTrafficVehicles(
   const candidates: BoundingBox[] = [];
   for (let i = 0; i < ANCHORS; i++) {
     let bestClass = -1;
-    let best = minimumConfidence;
+    let best = -Infinity;
+    let topClass = -1;
+    let topScore = -Infinity;
+    // Motorcycle and bicycle only: permit lower-confidence two-wheelers.
+    // This preserves the original car, bus and truck confidence behaviour.
     for (let c = 0; c < NUM_CLASSES; c++) {
       const confidence = data[(4 + c) * ANCHORS + i];
-      if (confidence > best) {
+      if (!Number.isFinite(confidence)) continue;
+      if (confidence > topScore) { topScore = confidence; topClass = c; }
+      if (VEHICLE_CLASS_IDS.has(c) && confidence > best) {
         best = confidence;
         bestClass = c;
       }
     }
-    if (!VEHICLE_CLASS_IDS.has(bestClass)) continue;
+    if (bestClass < 0) continue;
+    const required = bestClass === 3 ? MOTORCYCLE_CONFIDENCE :
+      bestClass === 1 ? BICYCLE_CONFIDENCE : minimumConfidence;
+    if (best < required) continue;
+    // Don't turn pedestrians into motorcycles. Permit ambiguity with a rider
+    // only when the two-wheeler score closely competes with the person score.
+    if (topClass !== bestClass) {
+      const riderOverlap = (bestClass === 3 || bestClass === 1) && topClass === 0 &&
+        topScore <= best * 1.12 && best >= 0.37;
+      if (!riderOverlap) continue;
+    }
     const centerX = data[i];
     const centerY = data[ANCHORS + i];
     const width = data[2 * ANCHORS + i];
@@ -66,9 +85,13 @@ export function decodeTrafficVehicles(
     const y2 = Math.min(originalHeight, (centerY + height / 2 - padH) / ratio);
     const w = x2 - x1;
     const h = y2 - y1;
-    if (w < 9 || h < 9 || w > originalWidth * 0.93 || h > originalHeight * 0.93) continue;
+    const isTwoWheeler = bestClass === 1 || bestClass === 3;
+    const minimumSize = isTwoWheeler ? 5 : 9;
+    if (w < minimumSize || h < minimumSize || w > originalWidth * 0.93 ||
+        h > originalHeight * 0.93) continue;
     const aspect = w / h;
-    if (aspect < 0.18 || aspect > 7) continue;
+    if (aspect < (isTwoWheeler ? 0.12 : 0.18) ||
+        aspect > (isTwoWheeler ? 9 : 7)) continue;
 
     candidates.push({
       x: (x1 + x2) / 2, y: (y1 + y2) / 2,
