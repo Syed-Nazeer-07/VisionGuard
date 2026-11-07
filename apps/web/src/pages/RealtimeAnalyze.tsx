@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Camera, Film, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { TrafficCameraDirectory } from '../components/analysis/TrafficCameraDirectory';
+import { hiddenPagePolicy } from '../services/captureVisibility';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { uploadStorageProvider } from '../services/videoStorage';
@@ -715,11 +716,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (document.hidden && video) {
         const account = useAuthStore.getState().user?.id;
         if (account) void activityLedger.flush(account).catch(console.warn);
-        // Selecting a YouTube/browser tab in the system share dialog often
-        // hides VisionGuard. Do not pause or end a user-approved tab capture.
-        if (captureKindRef.current === 'tab') return;
+        const policy = hiddenPagePolicy(captureKindRef.current);
+        // The browser often focuses YouTube after sharing. Tab captures must
+        // remain active; only device cameras are stopped when the app hides.
+        if (!policy.pauseMedia) return;
         video.pause();
-        if (captureKindRef.current === 'camera' && webcamRef.current) {
+        if (policy.releaseCapture && webcamRef.current) {
           // Unlike a shared tab, the device camera is released on hide.
           stopWebcam();
           setUrl('');
