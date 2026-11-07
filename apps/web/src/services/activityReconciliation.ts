@@ -167,6 +167,10 @@ export function planCloudAcknowledgements(
   acceptedRevisionAt: number;
   current: AnalysisRecord;
   resolved: ReconciledRun;
+  /** Did the database actually accept the snapshot that was sent? */
+  acceptedSent: boolean;
+  /** Later in-flight local frames are handled by the next scheduled sync. */
+  pendingLocalUpdates: boolean;
 }> {
   if (!Array.isArray(received) || received.length !== sent.length) {
     throw Error('Cloud did not acknowledge every requested analysis record.');
