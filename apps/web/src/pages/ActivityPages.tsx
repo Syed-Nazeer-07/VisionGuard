@@ -413,7 +413,7 @@ export function ActivityIncidents() {
   return <main className="vg-page">
     <header className="vg-page-header">
       <div><h1>Incidents</h1><p>Review flags linked to saved video and live sessions</p></div>
-      <Link className="vg-secondary" to="/app/archive-cases">Case archive</Link>
+      <Link className="vg-secondary" to="/app/reports">Export review flags</Link>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     <section className="vg-panel mb-5 overflow-hidden">
