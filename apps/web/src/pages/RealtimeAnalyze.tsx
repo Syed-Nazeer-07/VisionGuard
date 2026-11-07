@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Film, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
+import { activityLedger } from '../services/activityLedger';
+import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
 import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
 import {
@@ -31,6 +33,11 @@ function readableTime(value: number) {
 type Observation = { time: number; tracks: LiveTrack[] };
 
 export default function RealtimeAnalyze({ active = true }: { active?: boolean }) {
+  const ownerId = useAuthStore(state => state.user?.id ?? null);
+  const activeRunRef = useRef('');
+  const currentFileRef = useRef<File | null>(null);
+  const currentHandleRef = useRef<FileSystemFileHandle | null>(null);
+  const [saveVideo, setSaveVideo] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,7 +82,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [analyzedFrames, setAnalyzedFrames] = useState(0);
   const [detectionCount, setDetectionCount] = useState<number | null>(null);
   const [fallbackReason, setFallbackReason] = useState('');
-  const [storage, setStorage] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [storage, setStorage] = useState<'idle' | 'saving' | 'saved' | 'error' | 'not-saved'>('idle');
   const [error, setError] = useState('');
 
   const clearInFlight = useCallback(() => {
@@ -198,6 +205,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }
         flowTracksRef.current = merged.tracks;
         latestRef.current = { time: latestTime, tracks: merged.tracks };
+        const account = useAuthStore.getState().user?.id;
+        if (account && activeRunRef.current) {
+          activityLedger.observe(account, activeRunRef.current, latestTime, merged.tracks);
+        }
       } else if (message.type === 'error') {
         setError('Frame inference error: ' + message.message);
       }
@@ -232,10 +243,26 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setDetectionCount(null);
     setInferenceMs(null);
     setUrl(nextUrl);
+    const account = useAuthStore.getState().user?.id;
+    if (account) {
+      // Same source key restores the same persistent analysis across refreshes.
+      const lastModified = file instanceof File ? file.lastModified : 0;
+      const runId = ['video', name, file.size, lastModified].join(':');
+      activeRunRef.current = runId;
+      activityLedger.begin(account, runId, name, 'uploaded-video');
+    } else activeRunRef.current = '';
   }, [resetTracks]);
 
   useEffect(() => {
+    const preference = ownerId
+      ? localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes'
+      : false;
+    setSaveVideo(preference);
+  }, [ownerId]);
+
+  useEffect(() => {
     let alive = true;
+    if (!ownerId || localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
     const generation = uploadGenerationRef.current;
     void Promise.all([
       localAnalysisStorage.loadVideo(),
@@ -258,7 +285,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       firstFrameResolveRef.current?.();
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     };
-  }, [attachVideo, clearInFlight]);
+  }, [attachVideo, clearInFlight, ownerId]);
 
   const acceptFile = async (file: File, handle?: FileSystemFileHandle) => {
     if (!/\.(mp4|m4v|webm|mov|mkv)$/i.test(file.name) && !file.type.startsWith('video/')) {
@@ -266,29 +293,32 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       return;
     }
     uploadGenerationRef.current += 1;
+    currentFileRef.current = file;
+    currentHandleRef.current = handle ?? null;
     const generation = uploadGenerationRef.current;
     const decoded = new Promise<void>(resolve => {
       firstFrameResolveRef.current?.();
       firstFrameResolveRef.current = resolve;
     });
     attachVideo(file, file.name);
-    setStorage('saving');
-
-    // Never block URL creation or playback on IndexedDB or Supabase.
+    // Video is never retained unless the user explicitly opted in.
+    const shouldSave = ownerId && localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes';
+    setStorage(shouldSave ? 'saving' : 'not-saved');
     persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
       if (generation !== uploadGenerationRef.current) return;
-      if (handle) {
+      if (!shouldSave) {
+        await localAnalysisStorage.clearVideo();
+      } else if (handle) {
         await localAnalysisStorage.saveVideoHandle(handle, file.name);
       } else {
-        // Fallback file input: avoid copying gigabytes until first frame decoded.
         await decoded;
         if (generation !== uploadGenerationRef.current) return;
         await localAnalysisStorage.saveVideo(file, file.name);
       }
       if (generation !== uploadGenerationRef.current) return;
-      await localAnalysisStorage.clearAnalysis(); // obsolete offline results
+      await localAnalysisStorage.clearAnalysis();
       await localAnalysisStorage.savePosition(0);
-      if (generation === uploadGenerationRef.current) setStorage('saved');
+      setStorage(shouldSave ? 'saved' : 'not-saved');
     });
     void persistenceQueueRef.current.catch(e => {
       if (generation !== uploadGenerationRef.current) return;
@@ -323,6 +353,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setFilename('');
     setReadyVideo(false);
     setPlaying(false);
+    currentFileRef.current = null;
+    currentHandleRef.current = null;
+    activeRunRef.current = '';
     setStorage('idle');
     setPosition(0);
     setDuration(0);
@@ -349,6 +382,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     const onVisibility = () => {
       const video = videoRef.current;
       if (document.hidden && video) {
+        const account = useAuthStore.getState().user?.id;
+        if (account) void activityLedger.flush(account).catch(console.warn);
         video.pause();
         void localAnalysisStorage.savePosition(video.currentTime).catch(() => {});
       }
@@ -356,6 +391,25 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, []);
+
+  const changeSaveVideo = (checked: boolean) => {
+    if (!ownerId) return;
+    setSaveVideo(checked);
+    localStorage.setItem('visionguard:save-video:' + ownerId, checked ? 'yes' : 'no');
+    const file = currentFileRef.current;
+    const handle = currentHandleRef.current;
+    setStorage(checked && file ? 'saving' : 'not-saved');
+    persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
+      if (!checked || !file) {
+        await localAnalysisStorage.clearVideo();
+        return;
+      }
+      if (handle) await localAnalysisStorage.saveVideoHandle(handle, file.name);
+      else await localAnalysisStorage.saveVideo(file, file.name);
+    });
+    void persistenceQueueRef.current.then(() => setStorage(checked && file ? 'saved' : 'not-saved'))
+      .catch(e => { setStorage('error'); setError('Could not save video locally: ' + String(e)); });
+  };
 
   // Video advances at native speed. Grayscale visual tracking updates between
   // sparse YOLO observations, so slow WASM results are applied to the CURRENT
@@ -683,6 +737,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
+      <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+        <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
+          disabled={!ownerId} className="h-4 w-4 accent-indigo-600" />
+        <span className="flex-1"><strong>Keep this video on this device</strong>
+          <span className="block text-xs text-slate-500">
+            Optional. Off means no video file is retained; vehicle counts and analysis history still persist locally.
+            {storage === 'saving' ? ' Saving…' : storage === 'saved' ? ' Video saved.' : ''}
+          </span>
+        </span>
+      </label>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500"><Activity size={14} /> Vehicles in frame</div>
