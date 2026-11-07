@@ -246,6 +246,9 @@ export function ActivityVideoLibrary() {
       </Link>
     </div>
     <LocalScope/>
+    <p className="text-xs text-slate-600">Looking for previously uploaded cloud videos?
+      <Link className="ml-1 font-semibold text-indigo-600 hover:underline" to="/app/archive-videos">Open legacy video archive</Link>
+    </p>
     {error && <p role="alert" className="text-sm text-amber-700">{error}</p>}
     {!loaded ? <p className="text-sm text-slate-500">Restoring activity history…</p> :
       !records.length ? <EmptyState/> :
@@ -275,6 +278,9 @@ export function ActivityIncidents() {
       <p className="mt-1 text-sm text-slate-500">Evidence-backed records only — no fabricated overspeed findings</p>
     </div>
     <LocalScope/>
+    <p className="text-xs text-slate-600">Older cloud incidents and case reviews are kept separately:
+      <Link className="ml-1 font-semibold text-indigo-600 hover:underline" to="/app/archive-cases">Open legacy cases</Link>.
+    </p>
     {error && <p role="alert" className="text-sm text-amber-700">{error}</p>}
     {!loaded ? <p className="text-sm text-slate-500">Restoring incident history…</p> :
       !incidents.length ? <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
