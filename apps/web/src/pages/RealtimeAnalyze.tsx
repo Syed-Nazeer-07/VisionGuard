@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
+import { resolveDeployedModelUrl } from '../services/modelUrl';
 import { hasAdvancedVideoFrame, isStreamStalled } from '../services/streamRecovery';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
@@ -20,7 +21,7 @@ import {
 
 // A separate, public HTTPS model host (for example R2) avoids Pages' 25 MiB
 // per-asset limit. A local model remains convenient during development.
-const MODEL_PATH = import.meta.env.VITE_YOLO_MODEL_URL?.trim() || '/models/yolo11s.onnx';
+const MODEL_PATH = resolveDeployedModelUrl(import.meta.env.VITE_YOLO_MODEL_URL, import.meta.env.PROD);
 const MIN_CAPTURE_INTERVAL = 0.12;
 const OPTICAL_INTERVAL = 0.085;
 const HISTORY_WINDOW = 3.5;

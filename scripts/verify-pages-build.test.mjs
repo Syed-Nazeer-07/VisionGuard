@@ -63,5 +63,8 @@ test('existing Cloudflare Worker serves the Vite SPA assets on Node 22', () => {
   assert.equal(config.assets.directory, './apps/web/dist');
   assert.equal(config.assets.not_found_handling, 'single-page-application');
   assert.equal(config.workers_dev, true);
+  assert.equal(config.main, './worker/index.mjs');
+  assert.equal(config.assets.binding, 'ASSETS');
+  assert.deepEqual(config.assets.run_worker_first, ['/api/model/*']);
   assert.equal(readFileSync(path.resolve('.nvmrc'), 'utf8').trim(), '22');
 });

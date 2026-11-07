@@ -76,6 +76,16 @@ is already available as a public repository. Point the Cloudflare Worker
 VITE_YOLO_MODEL_URL=https://huggingface.co/SyedNazeer07/visionguard-yolo11s/resolve/main/yolo11s.onnx
 ~~~
 
+**CORS fix:** The Cloudflare Worker now streams only this fixed public
+Hugging Face model through the same-origin endpoint `/api/model/yolo11s.onnx`.
+The browser maps both a mistaken `/blob/main/` URL and a correct
+`/resolve/main/` URL to that same-origin route automatically in
+production. No additional model host, CORS dashboard edits or R2 billing
+are required for this model. The Worker uses a strict fixed upstream URL,
+rejects arbitrary URLs, and streams rather than buffering the 38 MB file.
+Cloudflare Workers Free has request limits; access to Hugging Face remains
+subject to their public download availability and policies.
+
 This 38 MB model cannot be bundled into a Cloudflare static asset because of
 the 25 MiB per-file limit. The app loads it from Hugging Face at runtime.
 Check that your export matches [the detector contract](MODEL_SETUP.md) and

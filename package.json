@@ -9,6 +9,6 @@
     "build": "npm run build -w web",
     "lint": "npm run lint -w web",
     "build:pages": "node scripts/ensure-native-build-binding.mjs && npm run build && node scripts/prepare-cloudflare-assets.mjs && node scripts/verify-pages-build.mjs",
-    "test:deploy": "node --test scripts/verify-pages-build.test.mjs scripts/ensure-native-build-binding.test.mjs scripts/prepare-cloudflare-assets.test.mjs"
+    "test:deploy": "node --test scripts/verify-pages-build.test.mjs scripts/ensure-native-build-binding.test.mjs scripts/prepare-cloudflare-assets.test.mjs && node --test worker/index.test.mjs"
   }
 }
