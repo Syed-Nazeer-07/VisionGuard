@@ -1,5 +1,5 @@
 import { env, InferenceSession, Tensor } from 'onnxruntime-web';
-import { decodeTrafficVehicles } from '../pipeline/detector/liveVehicles';
+import { correctClearFreightTrailer, decodeTrafficVehicles } from '../pipeline/detector/liveVehicles';
 import { ByteTracker } from '../pipeline/tracker/bytetrack';
 import { calculateMotion, type LiveTrack } from '../pipeline/tracker/liveProjection';
 
@@ -101,9 +101,15 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
       });
       return;
     }
-    const boxes = decodeTrafficVehicles(
+    const decoded = decodeTrafficVehicles(
       output[session.outputNames[0]].data as Float32Array,
       message.sourceWidth, message.sourceHeight,
+      processed.ratio, processed.padW, processed.padH
+    );
+    // Only correct BUS -> TRUCK when the sampled image has strong evidence of
+    // a separate dark coloured cab and bright neutral freight trailer.
+    const boxes = correctClearFreightTrailer(
+      decoded, processed.tensor.data as Float32Array,
       processed.ratio, processed.padW, processed.padH
     );
     // With slow WASM inference vehicles often move too far between detections
