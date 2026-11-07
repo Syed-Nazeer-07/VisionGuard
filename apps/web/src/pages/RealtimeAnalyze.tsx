@@ -257,7 +257,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     worker.postMessage({ type: 'init', modelPath: MODEL_PATH });
   }, [clearInFlight]);
 
-  const attachVideo = useCallback((file: Blob, name: string, savedPosition = 0) => {
+  const attachVideo = useCallback((
+    file: Blob, name: string, savedPosition = 0, restoredRunId?: string
+  ) => {
     resetTracks();
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     const nextUrl = URL.createObjectURL(file);
@@ -276,10 +278,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setUrl(nextUrl);
     const account = useAuthStore.getState().user?.id;
     if (account) {
-      // Same source key restores the same persistent analysis across refreshes.
-      const lastModified = file instanceof File ? file.lastModified : 0;
-      const runId = ['video', name, file.size, lastModified].join(':');
+      // A newly selected file starts its own session, even if the user
+      // previously analyzed a file with the same name/size. Reloading a
+      // saved video resumes the *same* session using the stored run ID.
+      const runId = restoredRunId || 'video:' + crypto.randomUUID();
       activeRunRef.current = runId;
+      localStorage.setItem('visionguard:video-run:' + account, runId);
       activityLedger.begin(account, runId, name, 'uploaded-video');
     } else activeRunRef.current = '';
   }, [resetTracks]);
@@ -437,7 +441,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         ? saved.file
         : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
       currentFileRef.current = file;
-      attachVideo(file, saved.name, savedPosition);
+      const savedRunId = localStorage.getItem('visionguard:video-run:' + ownerId) || undefined;
+      attachVideo(file, saved.name, savedPosition, savedRunId);
       setStorage('saved');
     }).catch(e => {
       if (alive && generation === uploadGenerationRef.current) {
@@ -592,6 +597,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setCloudUpload(null);
     setCloudError('');
     activeRunRef.current = '';
+    if (ownerId) localStorage.removeItem('visionguard:video-run:' + ownerId);
     setStorage('idle');
     setPosition(0);
     setDuration(0);
