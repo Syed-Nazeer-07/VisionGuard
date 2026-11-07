@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const updateProfile = useCallback((newProfileData: any) => {
     setProfile((prev: any) => {
       const merged = { ...prev, ...newProfileData }
-      if (newProfileData?.role) setRole(newProfileData.role as Role)
+      // Roles are reloaded only from the authenticated server profile.
       return merged
     })
     useAuthStore.getState().updateProfile(newProfileData)
@@ -131,9 +131,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   const { data: newProfile } = await supabase.from('profiles').insert([
                     {
                       id: currentSession.user.id,
-                      role: 'Admin',
+                      role: 'Viewer',
                       email: currentSession.user.email,
-                      name: currentSession.user.user_metadata?.full_name || 'System Administrator'
+                      name: currentSession.user.user_metadata?.full_name || 'New member'
                     }
                   ]).select().maybeSingle()
                   loadedProfile = newProfile
