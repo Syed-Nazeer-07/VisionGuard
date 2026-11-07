@@ -309,8 +309,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
     const generation = uploadGenerationRef.current;
     void Promise.all([
-      localAnalysisStorage.loadVideo(),
-      localAnalysisStorage.loadPosition()
+      localAnalysisStorage.loadVideo(ownerId ?? undefined),
+      localAnalysisStorage.loadPosition(ownerId ?? undefined)
     ]).then(([saved, savedPosition]) => {
       if (!alive || generation !== uploadGenerationRef.current || !saved) return;
       attachVideo(saved.file, saved.name, savedPosition);
@@ -353,17 +353,17 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
       if (generation !== uploadGenerationRef.current) return;
       if (!shouldSave) {
-        await localAnalysisStorage.clearVideo();
+        await localAnalysisStorage.clearVideo(ownerId ?? undefined);
       } else if (handle) {
-        await localAnalysisStorage.saveVideoHandle(handle, file.name);
+        await localAnalysisStorage.saveVideoHandle(handle, file.name, ownerId ?? undefined);
       } else {
         await decoded;
         if (generation !== uploadGenerationRef.current) return;
-        await localAnalysisStorage.saveVideo(file, file.name);
+        await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined);
       }
       if (generation !== uploadGenerationRef.current) return;
-      await localAnalysisStorage.clearAnalysis();
-      await localAnalysisStorage.savePosition(0);
+      await localAnalysisStorage.clearAnalysis(ownerId ?? undefined);
+      await localAnalysisStorage.savePosition(0, ownerId ?? undefined);
       setStorage(shouldSave ? 'saved' : 'not-saved');
     });
     void persistenceQueueRef.current.catch(e => {
@@ -422,9 +422,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setError('');
     // Serialize deletion after any pending previous file save.
     persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
-      await localAnalysisStorage.clearVideo();
-      await localAnalysisStorage.clearPosition();
-      await localAnalysisStorage.clearAnalysis();
+      await localAnalysisStorage.clearVideo(ownerId ?? undefined);
+      await localAnalysisStorage.clearPosition(ownerId ?? undefined);
+      await localAnalysisStorage.clearAnalysis(ownerId ?? undefined);
     });
     void persistenceQueueRef.current.catch(e => setError('Could not clear local video: ' + String(e)));
   };
@@ -455,7 +455,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     const video = videoRef.current;
     video?.pause();
     if (video && Number.isFinite(video.currentTime)) {
-      void localAnalysisStorage.savePosition(video.currentTime).catch(() => {});
+      void localAnalysisStorage.savePosition(video.currentTime, ownerId ?? undefined).catch(() => {});
     }
   }, [active]);
 
@@ -466,7 +466,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         const account = useAuthStore.getState().user?.id;
         if (account) void activityLedger.flush(account).catch(console.warn);
         video.pause();
-        void localAnalysisStorage.savePosition(video.currentTime).catch(() => {});
+        void localAnalysisStorage.savePosition(video.currentTime, ownerId ?? undefined).catch(() => {});
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -482,11 +482,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setStorage(checked && file ? 'saving' : 'not-saved');
     persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
       if (!checked || !file) {
-        await localAnalysisStorage.clearVideo();
+        await localAnalysisStorage.clearVideo(ownerId ?? undefined);
         return;
       }
-      if (handle) await localAnalysisStorage.saveVideoHandle(handle, file.name);
-      else await localAnalysisStorage.saveVideo(file, file.name);
+      if (handle) await localAnalysisStorage.saveVideoHandle(handle, file.name, ownerId ?? undefined);
+      else await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined);
     });
     void persistenceQueueRef.current.then(() => setStorage(checked && file ? 'saved' : 'not-saved'))
       .catch(e => { setStorage('error'); setError('Could not save video locally: ' + String(e)); });
@@ -692,7 +692,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }
         if (urlRef.current && time - lastSaved > 2000 && !video.paused && Number.isFinite(video.currentTime)) {
           lastSaved = time;
-          void localAnalysisStorage.savePosition(video.currentTime).catch(() => {});
+          void localAnalysisStorage.savePosition(video.currentTime, ownerId ?? undefined).catch(() => {});
         }
       }
       animation = requestAnimationFrame(render);
@@ -797,7 +797,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 }}
                 onPause={event => {
                   setPlaying(false);
-                  void localAnalysisStorage.savePosition(event.currentTarget.currentTime).catch(() => {});
+                  void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId ?? undefined).catch(() => {});
                 }}
                 onSeeking={resetTracks}
                 onEnded={() => {
