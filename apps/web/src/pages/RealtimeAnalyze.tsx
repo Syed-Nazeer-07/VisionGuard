@@ -546,6 +546,63 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     return () => { alive = false; };
   }, [attachVideo, ownerId]);
 
+  // Deep links from the B2 archive must really open the stored video,
+  // not silently discard ?video=<id> and show the previous local clip.
+  useEffect(() => {
+    const videoId = new URLSearchParams(location.search).get('video');
+    if (!active || !ownerId || !videoId) return;
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(videoId)) {
+      setError('The saved-video link is invalid.');
+      return;
+    }
+    let alive = true;
+    const request = ++uploadGenerationRef.current;
+    setCloudPlaybackLoading(true);
+    setError('');
+    void (async () => {
+      const { data, error: queryError } = await supabase.from('video_assets')
+        .select('id,filename,storage_path,storage_provider,uploaded_by')
+        .eq('id',videoId).eq('uploaded_by',ownerId).maybeSingle();
+      if (queryError) throw queryError;
+      if (!data) throw Error('Saved video not found in your account.');
+      if (!data.storage_path) throw Error('This video has no completed cloud file yet.');
+      const videoUrl = await storageProviderFor(data).getVideoUrl({
+        id:data.id, storage_path:data.storage_path
+      });
+      if (!alive || request !== uploadGenerationRef.current || !activeRef.current) return;
+      videoRef.current?.pause();
+      stopWebcam();
+      resetTracks();
+      nextStableIdRef.current = 1;
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+      currentFileRef.current = null;
+      currentHandleRef.current = null;
+      setCloudPlaybackActive(true);
+      setStorage('not-saved');
+      setFilename(data.filename);
+      setOpenedSeconds(null);
+      setReadyVideo(false);
+      setPlaying(false);
+      setDuration(0);
+      setPosition(0);
+      setAnalyzedFrames(0);
+      setDetectionCount(null);
+      loadStartRef.current = performance.now();
+      setUrl(videoUrl);
+      activeRunRef.current = 'b2:' + crypto.randomUUID();
+      activityLedger.begin(ownerId, activeRunRef.current, data.filename, 'uploaded-video');
+    })().catch(error => {
+      if (alive && request === uploadGenerationRef.current) {
+        setError('Could not open the stored video for analysis: ' +
+          (error instanceof Error ? error.message : String(error)));
+      }
+    }).finally(() => {
+      if (alive) setCloudPlaybackLoading(false);
+    });
+    return () => { alive = false; };
+  }, [location.search, active, ownerId, resetTracks]);
+
   // This cleanup must be unconditional. The saved-video restoration effect
   // above can return early when local retention is disabled or a stream is
   // selected; previously that skipped camera/worker teardown on unmount.
@@ -1168,6 +1225,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         </label>
       </div>}
 
+      {cloudPlaybackLoading && <p role="status" className="vg-panel px-4 py-3 text-sm text-slate-600">
+        Opening your saved video from Backblaze B2…
+      </p>}
       {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
       </div>}
@@ -1178,6 +1238,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             <>
               <video key={tabCaptureActive ? 'shared-browser-tab' : webcamActive ? 'browser-camera' : 'uploaded-file'}
                 ref={videoRef} src={tabCaptureActive || webcamActive ? undefined : url}
+                crossOrigin={cloudPlaybackActive ? 'anonymous' : undefined}
                 controls autoPlay muted playsInline preload="auto"
                 className="h-full w-full object-contain"
                 onLoadedMetadata={event => {
@@ -1234,7 +1295,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   firstFrameResolveRef.current?.();
                   firstFrameResolveRef.current = null;
                   setError(webcamRef.current ? 'The shared camera or browser tab was interrupted.'
-                    : 'The browser cannot decode this video. Try converting it to H.264 MP4.');
+                    : cloudPlaybackActive
+                      ? 'This saved video could not be played in the browser. Check the B2 object, signed URL and cross-origin GET permissions.'
+                      : 'The browser cannot decode this video. Try converting it to H.264 MP4.');
                 }}
               />
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
@@ -1302,7 +1365,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
-      {!webcamActive && !tabCaptureActive && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+      {!webcamActive && !tabCaptureActive && !cloudPlaybackActive && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
         <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
           disabled={!ownerId} className="h-4 w-4 accent-indigo-600" />
         <span className="flex-1"><strong>Keep this video on this device</strong>
