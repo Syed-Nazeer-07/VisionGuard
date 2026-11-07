@@ -42,4 +42,25 @@ describe('optical tracking between slow YOLO observations', () => {
   it('drops broken temporal sequences rather than projecting stale objects', () => {
     expect(advanceOpticalTracks([vehicle], makeFrame(2, 0), makeFrame(3, 4))).toEqual([]);
   });
+  it('keeps a small textured motorcycle across nearby frames without relaxing car matching', () => {
+    const small = (time: number, shift: number): GrayFrame => {
+      const width = 100, height = 80;
+      const pixels = new Uint8Array(width * height);
+      for (let y = 35; y < 44; y++) {
+        for (let x = 46; x < 55; x++) {
+          pixels[y * width + x + shift] = (x * 47 + y * 31) % 230 + 20;
+        }
+      }
+      return { time, width, height, sourceWidth: width, sourceHeight: height, pixels };
+    };
+    const motor: LiveTrack = {
+      ...vehicle, id: 51, className: 'motorcycle',
+      x: 50, y: 39, w: 7, h: 7
+    };
+    const result = advanceOpticalTracks([motor], small(1, 0), small(1.1, 2));
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe(51);
+    expect(result[0].x).toBeCloseTo(52, 0);
+  });
+
 });
