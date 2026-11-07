@@ -82,8 +82,8 @@ export function AppLayout() {
       className="fixed inset-0 z-30 bg-slate-950/35 md:hidden"
       onClick={() => setMobileOpen(false)} />}
     <aside
-      style={{ width: collapsed ? 78 : 248 }}
-      className={'fixed inset-y-0 left-0 z-40 flex shrink-0 flex-col border-r border-[#e1e7ee] bg-[#fbfcfe] transition-[width,transform] duration-200 md:relative md:translate-x-0 ' +
+      className={'fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col border-r border-[#e1e7ee] bg-[#fbfcfe] transition-[width,transform] duration-200 md:relative md:translate-x-0 ' +
+        (collapsed ? 'md:w-[78px] ' : 'md:w-[248px] ') +
         (mobileOpen ? 'translate-x-0' : '-translate-x-full')}>
       <div className="flex h-[66px] shrink-0 items-center justify-between border-b border-[#e9edf2] px-4">
         <Link to="/app" onClick={() => setMobileOpen(false)}
