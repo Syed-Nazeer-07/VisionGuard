@@ -13,3 +13,8 @@ export function hiddenPagePolicy(kind: ActiveCaptureKind): {
     releaseCapture: kind === 'camera',
   };
 }
+
+/** Preview playback can be suspended by a browser while focus is elsewhere. */
+export function shouldResumeSharedTab(kind: ActiveCaptureKind, pageHidden: boolean, previewPaused: boolean): boolean {
+  return kind === 'tab' && !pageHidden && previewPaused;
+}
