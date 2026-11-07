@@ -512,8 +512,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               const labelW = context.measureText(label).width + 12;
               // Keep the ID, class and speed label at a FIXED offset inside the
               // vehicle box. Never use varying above/below placements.
-              const labelX = Math.max(offsetX + 2, Math.min(x + 3, offsetX + frameWidth * fit - labelW - 2));
-              const labelY = Math.max(offsetY + 2, Math.min(y + 3, offsetY + frameHeight * fit - 18));
+              // Do not reposition the tag when it nears an edge. A shifting
+              // clamp made labels visibly jump away from their vehicle.
+              // The video clip rectangle already hides any off-screen portion.
+              const labelX = x + 3;
+              const labelY = y + 3;
               context.fillStyle = 'rgba(7,16,34,.90)';
               context.fillRect(labelX, labelY, labelW, 18);
               context.fillStyle = '#ccffeb';
