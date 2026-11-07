@@ -111,11 +111,11 @@ function matchFeature(
  * caused massive box jumps in the recording; require a consensus of several
  * features inside each vehicle instead.
  */
-export function advanceOpticalTracks(
-  tracks: readonly LiveTrack[],
+export function advanceOpticalTracks<T extends LiveTrack>(
+  tracks: readonly T[],
   previous: GrayFrame,
   current: GrayFrame
-): LiveTrack[] {
+): T[] {
   const dt = current.time - previous.time;
   if (dt <= 0 || dt > 0.32 ||
       previous.width !== current.width || previous.height !== current.height ||
@@ -124,7 +124,7 @@ export function advanceOpticalTracks(
 
   const sx = previous.width / previous.sourceWidth;
   const sy = previous.height / previous.sourceHeight;
-  const output: LiveTrack[] = [];
+  const output: T[] = [];
   const featureOffsets = [
     [0, 0], [-.19, -.19], [.19, -.19], [-.19, .19], [.19, .19],
     [0, -.24], [0, .24]
@@ -180,7 +180,7 @@ export function advanceOpticalTracks(
     output.push({
       ...track, x: newX, y: newY,
       vx, vy, motionPxPerSec: Math.hypot(vx, vy)
-    });
+    } as T);
   }
   return output;
 }
