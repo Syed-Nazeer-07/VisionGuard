@@ -37,7 +37,12 @@ export function projectLiveTracks(
 
   return tracks.flatMap((track) => {
     if (![track.x, track.y, track.w, track.h, track.vx, track.vy].every(Number.isFinite)) return [];
-    if (track.w < 7 || track.h < 7 || track.confidence < 0.42) return [];
+    const twoWheeler = track.className === 'motorcycle' || track.className === 'bicycle';
+    const minimumSize = twoWheeler ? 4 : 7;
+    const minimumConfidence = track.className === 'motorcycle' ? .28 :
+      track.className === 'bicycle' ? .33 : .42;
+    if (track.w < minimumSize || track.h < minimumSize ||
+        track.confidence < minimumConfidence) return [];
 
     // Predict only briefly between consecutive real detector observations.
     // Never grow boxes indefinitely during a stalled inference.
