@@ -196,9 +196,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setInitialized(true)
     }
 
-    // Do not await Supabase queries *inside* the auth event callback: it
-    // executes under the session lock and can deadlock token refresh/sign-in.
-    // Defer profile queries to the next task, and ignore superseded requests.
+    // INITIAL_SESSION is emitted when Supabase restores an existing login.
+    // Handle it as a real session event: otherwise it increments authEpoch,
+    // invalidates bootstrap, and leaves the UI loading indefinitely.
+    // Never await Supabase queries inside the auth callback (session lock).
+    // Defer profile queries to the next task and ignore superseded requests.
     let active = true
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, newSession: Session | null) => {
       const epoch = ++authEpochRef.current
@@ -206,6 +208,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         applyAuthState(null, null, null)
         return
       }
+      if (event !== 'INITIAL_SESSION' && event !== 'SIGNED_IN' &&
+          event !== 'TOKEN_REFRESHED' && event !== 'USER_UPDATED' &&
+          event !== 'PASSWORD_RECOVERY') return
       const previous = useAuthStore.getState()
       if (previous.user?.id === newSession.user.id && previous.profile &&
           event !== 'USER_UPDATED') {
