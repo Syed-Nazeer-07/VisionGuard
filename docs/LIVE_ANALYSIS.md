@@ -10,8 +10,30 @@ same detection/tracking pipeline. There is no mandatory Python backend.
 | --- | --- | --- |
 | Uploaded video | **Choose video** | An original local file plays immediately. |
 | Browser camera | **Use camera** | Requires HTTPS or localhost and permission. Camera tracks stop when you leave/hide the page. |
+| Browser tab (including YouTube Live) | **Analyze browser tab** → select the tab playing the live video | Explicit browser permission is required for every capture. Captures visible tab pixels, not extracted stream URLs. |
 | HLS stream | **Live sources** → enter a `.m3u8` URL | The source needs a compatible codec and cross-origin access for frame analysis. |
 | Remote video | **Live sources** → enter a video URL | Direct HTTP(S) video playback; a finite file is not a continuous live camera. |
+
+### YouTube Live and browser tab analysis
+
+YouTube page URLs are not direct HLS streams and cannot be pasted as if they
+were `.m3u8` files. For a live video you are permitted to analyze:
+
+1. Open the YouTube Live page in a separate Edge/Chrome tab and start playback.
+2. Return to VisionGuard → **Live analysis** → **Analyze browser tab**.
+3. In the browser's sharing picker, **select the tab** playing the YouTube live
+   video (not the VisionGuard tab), and explicitly approve sharing.
+4. VisionGuard reads the shared tab's visual frames using the existing local
+   YOLO11s worker. Stop with **Stop tab capture** or the browser's stop-sharing
+   control. Capture also stops when VisionGuard is hidden or the analysis page
+   is left.
+
+This is opt-in screen capture: no Puppeteer, network extraction, YouTube
+downloading, cloud relaying or automatic recording is performed. The video
+remains at its original source. The quality and speed depend on tab playback,
+capture frame rate and YOLO hardware performance. Use it only where you have
+the necessary rights/permissions. Browser sharing permissions cannot be
+persisted or silently bypassed.
 
 Saved source choices are presented as cards and can be switched. Exactly **one**
 source is analyzed at a time; there is no multi-camera simultaneous inference.
@@ -42,8 +64,9 @@ source is analyzed at a time; there is no multi-camera simultaneous inference.
    saved per-user tracking summaries. A raw detection is not automatically a
    verified traffic violation.
 
-Camera permission is never requested until **Use camera** is clicked. Camera
-footage is not saved or uploaded automatically.
+Camera permission is never requested until **Use camera** is clicked. Tab
+sharing is never requested until **Analyze browser tab** is clicked. Neither
+feed is saved or uploaded automatically.
 
 ## Storage and retention
 
