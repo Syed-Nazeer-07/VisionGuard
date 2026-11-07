@@ -4,6 +4,7 @@ import { validateStream } from './streamCatalog';
 describe('live source URLs',()=>{
   it('accepts browser-compatible direct videos and HLS playlists',()=>{
     expect(validateStream('https://example.org/camera/a.m3u8').format).toBe('hls');
+    expect(validateStream('https://example.org/camera/a.m3u8?quality=auto#live').format).toBe('hls');
     expect(validateStream('https://example.org/live.mp4').format).toBe('video');
   });
   it('refuses unsupported protocols and embedded passwords',()=>{
