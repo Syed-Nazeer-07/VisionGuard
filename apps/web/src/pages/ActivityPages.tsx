@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { Link } from 'react-router-dom';
-import { Activity, Download, Film } from 'lucide-react';
+import { Download, Film, Plus, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -67,7 +67,6 @@ export function ActivityDashboard() {
   return <main className="vg-page">
     <header className="vg-page-header">
       <div><h1>Overview</h1><p>Vehicle activity and analysis sessions</p></div>
-      <Link to="/app/analyze" className="vg-primary"><Activity size={16}/> New analysis</Link>
     </header>
     {error && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{error}</p>}
     <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -332,7 +331,6 @@ export function ActivityVideoLibrary() {
   return <main className="vg-page">
     <header className="vg-page-header">
       <div><h1>History</h1><p>Analyzed sessions and retained footage</p></div>
-      <Link to="/app/analyze" className="vg-primary"><Activity size={15}/> New analysis</Link>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     <div className="space-y-5">
