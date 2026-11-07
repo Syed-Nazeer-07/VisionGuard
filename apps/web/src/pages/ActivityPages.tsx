@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, ArrowRight, BarChart3, Car, Download, FileText, Film, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Activity, ArrowRight, BarChart3, Download, FileText, Film } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -105,7 +105,7 @@ export function ActivityDashboard() {
 }
 
 export function ActivityAnalytics() {
-  const { records, loaded, stats, error } = useRuns();
+  const { records, loaded, error } = useRuns();
   const [range, setRange] = useState<'all'|'today'|'week'|'month'>('all');
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -191,7 +191,7 @@ function exportPDF(records: AnalysisRecord[]) {
 }
 
 export function ActivityReports() {
-  const { records, loaded, stats, error } = useRuns();
+  const { records, loaded, error } = useRuns();
   const [selected, setSelected] = useState('all');
   const filtered = selected === 'all' ? records : records.filter(r=>r.id===selected);
   const totals = summarizeActivity(filtered);
