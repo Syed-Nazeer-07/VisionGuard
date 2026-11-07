@@ -21,15 +21,24 @@ jobs:
       - name: Install dependencies
         id: install
         run: npm ci
-      # Some npm lockfiles omit platform-specific optional packages. Pin the
-      # Linux binary to the exact installed oxlint version, without changing
-      # package.json or package-lock.json.
+      # Mirror Cloudflare Workers Builds after a fresh npm ci. Some npm lockfiles
+      # omit Linux native optional packages even though Rolldown needs them.
+      - name: Repair Cloudflare Rolldown binding
+        run: node scripts/ensure-native-build-binding.mjs
+      # Some npm lockfiles also omit the platform-specific Oxlint binding.
+      # Match the installed version without changing tracked lockfiles.
       - name: Ensure Linux oxlint binding is installed
         run: |
           OXLINT_VERSION=$(node -p "require('./apps/web/node_modules/oxlint/package.json').version")
           npm install --no-save --no-package-lock --no-audit "@oxlint/binding-linux-x64-gnu@${OXLINT_VERSION}"
       - run: npm run lint
-      - run: npm run build
+      - name: Build production-style Worker assets (synthetic public CI variables)
+        env:
+          VITE_SUPABASE_URL: https://ci-test.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_ci_test_only_public_fixture
+          VITE_YOLO_MODEL_URL: https://models.example.org/yolo11s.onnx
+          VITE_VIDEO_STORAGE_PROVIDER: b2
+        run: npm run build:pages
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
       - run: npm run test -w web
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
