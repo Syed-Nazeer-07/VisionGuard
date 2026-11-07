@@ -41,6 +41,8 @@ jobs:
 
       - name: Test Cloudflare Pages release guard
         run: npm run test:deploy
+      - name: Verify annotated browser-tracking scorecard
+        run: npm run test:tracking-eval
 
   backend-source:
     name: Backend syntax and deterministic analysis tests

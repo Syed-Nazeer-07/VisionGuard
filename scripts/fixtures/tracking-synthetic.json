@@ -1,0 +1,76 @@
+{
+  "format": "visionguard-tracking-eval/v1",
+  "note": "SYNTHETIC test fixture; does NOT measure browser YOLO11s accuracy",
+  "frames": [
+    {
+      "time": 0,
+      "width": 200,
+      "height": 100,
+      "groundTruth": [
+        {
+          "id": "vehicle-A",
+          "className": "car",
+          "box": {
+            "x": 40,
+            "y": 50,
+            "w": 30,
+            "h": 20
+          }
+        }
+      ],
+      "predictions": [
+        {
+          "id": 1,
+          "className": "car",
+          "box": {
+            "x": 40,
+            "y": 50,
+            "w": 30,
+            "h": 20
+          }
+        }
+      ],
+      "exitedIds": []
+    },
+    {
+      "time": 0.1,
+      "width": 200,
+      "height": 100,
+      "groundTruth": [
+        {
+          "id": "vehicle-A",
+          "className": "car",
+          "box": {
+            "x": 46,
+            "y": 50,
+            "w": 30,
+            "h": 20
+          }
+        }
+      ],
+      "predictions": [
+        {
+          "id": 1,
+          "className": "car",
+          "box": {
+            "x": 46,
+            "y": 50,
+            "w": 30,
+            "h": 20
+          }
+        }
+      ],
+      "exitedIds": []
+    },
+    {
+      "time": 0.2,
+      "width": 200,
+      "height": 100,
+      "groundTruth": [],
+      "predictions": [],
+      "exitedIds": [
+        "vehicle-A"
+      ]
+    }
+  ]
+}
