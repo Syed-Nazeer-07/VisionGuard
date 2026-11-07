@@ -20,19 +20,11 @@ function useRuns() {
 }
 
 function Stat({ label, number, note }: { label: string; number: number; note: string }) {
-  return <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-    <div className="text-sm font-medium text-slate-500">{label}</div>
-    <div className="mt-2 text-3xl font-bold tabular-nums text-slate-900">{fmt(number)}</div>
-    <div className="mt-2 text-xs text-slate-500">{note}</div>
-  </div>;
-}
-
-function LocalScope() {
-  return <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-900">
-    <strong>Local-first activity, with account sync.</strong> Tracking summaries remain available on this device
-    and synchronize to your signed-in account when online. If sync fails, clearing browser data may lose unsynced records.
-    Source video files are saved to Backblaze B2 only when you explicitly request it.
-  </div>;
+  return <section className="vg-stat" aria-label={label}>
+    <div className="vg-stat-label">{label}</div>
+    <div className="vg-stat-value">{fmt(number)}</div>
+    <div className="vg-stat-foot">{note}</div>
+  </section>;
 }
 
 function distribution(records: AnalysisRecord[]) {
@@ -42,54 +34,69 @@ function distribution(records: AnalysisRecord[]) {
 }
 
 function RecentRuns({ records }: { records: AnalysisRecord[] }) {
-  return <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-    <div className="border-b border-slate-100 p-4 font-semibold text-slate-900">Recent analysis sessions</div>
-    {records.slice(0,8).map(run => <div key={run.id} className="flex flex-wrap items-center gap-3 border-b border-slate-100 px-4 py-3 text-sm last:border-0">
-      <Film size={17} className="text-indigo-500" />
-      <div className="min-w-0 flex-1"><div className="truncate font-medium text-slate-800">{run.sourceName}</div>
-        <div className="text-xs text-slate-500">{niceDate(run.updatedAt)} · {run.sourceType === 'live-stream' ? 'Stream' : 'Video'}</div>
-      </div>
-      <div className="text-right"><div className="font-semibold tabular-nums">{Object.keys(run.vehicles).length} vehicles</div>
-        <div className="text-xs text-slate-500">{run.analyzedFrames} inference frames</div>
-      </div>
-    </div>)}
-  </div>;
+  return <section className="vg-panel overflow-hidden">
+    <div className="vg-section-head">
+      <h2>Recent sessions</h2>
+      <Link to="/app/videos">View history</Link>
+    </div>
+    {!records.length ? <p className="vg-empty-row">No sessions on record.</p> :
+    <div className="divide-y divide-slate-100">
+      {records.slice(0, 7).map(run =>
+        <div key={run.id} className="flex items-center gap-4 px-5 py-3.5 text-sm">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+            <Film size={17}/>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate font-medium text-slate-800">{run.sourceName}</div>
+            <div className="mt-1 text-xs text-slate-500">{niceDate(run.updatedAt)} · {run.sourceType === 'live-stream' ? 'Live source' : 'Video'}</div>
+          </div>
+          <div className="text-right">
+            <div className="font-semibold tabular-nums text-slate-900">{Object.keys(run.vehicles).length}</div>
+            <div className="text-[11px] text-slate-500">vehicles</div>
+          </div>
+        </div>)}
+    </div>}
+  </section>;
 }
 
 export function ActivityDashboard() {
   const { records, loaded, stats, error } = useRuns();
-  return <main className="mx-auto max-w-6xl space-y-5 px-3 py-5 sm:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div>
-      <h1 className="text-2xl font-bold tracking-tight text-slate-900">Overview</h1>
-      <p className="mt-1 text-sm text-slate-500">Live vehicle analysis and saved local activity</p>
-    </div><Link to="/app/analyze" className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white"><Activity size={16}/> Analyze traffic</Link></div>
-    <LocalScope/>
-    {error && <div role="alert" className="text-sm text-amber-700">Storage warning: {error}</div>}
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <Stat label="Tracked vehicles" number={stats.vehicles} note="Unique track IDs across sessions"/>
-      <Stat label="Analysis sessions" number={stats.runs} note="Uploaded videos and streams"/>
-      <Stat label="Analyzed frames" number={stats.analyzedFrames} note="YOLO inference observations"/>
-      <Stat label="Recorded violations" number={stats.violations} note="Evidence-backed events only"/>
+  const data = distribution(records);
+  return <main className="vg-page">
+    <header className="vg-page-header">
+      <div><h1>Overview</h1><p>Vehicle activity and analysis sessions</p></div>
+      <Link to="/app/analyze" className="vg-primary"><Activity size={16}/> New analysis</Link>
+    </header>
+    {error && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{error}</p>}
+    <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <Stat label="Unique tracked vehicles" number={stats.vehicles} note="Across recorded sessions"/>
+      <Stat label="Analysis sessions" number={stats.runs} note="Videos and live sources"/>
+      <Stat label="Inference frames" number={stats.analyzedFrames} note="Completed detector observations"/>
+      <Stat label="Recorded incidents" number={stats.violations} note="Evidence-based records"/>
     </div>
-    {!loaded ? <p className="text-sm text-slate-500">Restoring saved activity…</p> : !records.length ? <p className="vg-empty-row">No session records available.</p> :
-      <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
-        <RecentRuns records={records}/>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="mb-3 font-semibold text-slate-900">Vehicle classes</div>
-          <div className="h-64"><ResponsiveContainer width="100%" height="100%">
-            <BarChart data={distribution(records)} layout="vertical" margin={{ left: 13, right: 14 }}>
-              <CartesianGrid strokeDasharray="2 4" horizontal={false}/>
-              <XAxis type="number" allowDecimals={false}/>
-              <YAxis type="category" dataKey="name" width={85} tick={{ fontSize: 12 }}/>
-              <Tooltip/><Bar dataKey="count" name="Unique vehicles" fill="#4f46e5" radius={[0,5,5,0]}/>
-            </BarChart>
-          </ResponsiveContainer></div>
+    <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
+      <RecentRuns records={records}/>
+      <section className="vg-panel overflow-hidden">
+        <div className="vg-section-head">
+          <h2>Vehicle distribution</h2>
+          <Link to="/app/analytics">Analytics</Link>
         </div>
-      </div>}
-    <div className="grid gap-3 sm:grid-cols-2">
-      <Link to="/app/analytics" className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-800"><span className="flex items-center gap-2"><BarChart3 size={17} className="text-indigo-500"/> Detailed analytics</span><ArrowRight size={16}/></Link>
-      <Link to="/app/reports" className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4 text-sm font-semibold text-slate-800"><span className="flex items-center gap-2"><FileText size={17} className="text-indigo-500"/> Export reports</span><ArrowRight size={16}/></Link>
+        {!loaded ? <p className="vg-empty-row">Loading data…</p> :
+          !data.length ? <p className="vg-empty-row">No vehicle classifications available.</p> :
+          <div className="h-72 px-4 py-5">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data} layout="vertical" margin={{ left: 10, right: 12 }}>
+                <CartesianGrid stroke="#eef1f5" horizontal={false}/>
+                <XAxis type="number" allowDecimals={false} tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                <YAxis type="category" dataKey="name" width={90} tick={{fontSize:11,fill:'#475569'}} axisLine={false} tickLine={false}/>
+                <Tooltip cursor={{ fill: '#f5f8fb' }} />
+                <Bar dataKey="count" name="Vehicles" fill="#3866a4" radius={[0,4,4,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>}
+      </section>
     </div>
+    <p className="vg-footnote">Figures reflect the detector's saved observations; estimated speeds are not verified offences.</p>
   </main>;
 }
 
@@ -112,7 +119,7 @@ export function ActivityAnalytics() {
       <option value="all">All time</option><option value="today">Past 24 hours</option>
       <option value="week">Past 7 days</option><option value="month">Past 30 days</option>
     </select></div>
-    <LocalScope/>
+    
     {error && <p className="text-sm text-amber-800">{error}</p>}
     <div className="grid gap-3 sm:grid-cols-3">
       <Stat label="Unique vehicles" number={counts.vehicles} note="Not repeated per frame"/>
@@ -188,7 +195,7 @@ export function ActivityReports() {
     <div><h1 className="text-2xl font-bold text-slate-900">Reports</h1>
       <p className="mt-1 text-sm text-slate-500">Export your actual tracked activity without unnecessary forms or fabricated incidents</p>
     </div>
-    <LocalScope/>
+    
     {error && <p role="alert" className="text-amber-700">{error}</p>}
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <label htmlFor="report-run" className="mb-2 block text-sm font-semibold text-slate-800">Analysis session</label>
@@ -264,7 +271,7 @@ export function ActivityVideoLibrary() {
         Open analysis
       </Link>
     </div>
-    <LocalScope/>
+    
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
         <div><h2 className="font-semibold text-slate-900">Saved videos · Backblaze B2</h2>
@@ -316,7 +323,7 @@ export function ActivityIncidents() {
     <div><h1 className="text-2xl font-bold text-slate-900">Incidents and violations</h1>
       <p className="mt-1 text-sm text-slate-500">Evidence-backed records only — no fabricated overspeed findings</p>
     </div>
-    <LocalScope/>
+    
     <p className="text-xs text-slate-600">Older cloud incidents and case reviews are kept separately:
       <Link className="ml-1 font-semibold text-indigo-600 hover:underline" to="/app/archive-cases">Open legacy cases</Link>.
     </p>
