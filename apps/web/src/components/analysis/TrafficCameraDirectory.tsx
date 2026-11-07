@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ExternalLink, Link2 } from 'lucide-react';
-import { normalizeVideoPageUrl } from '../services/videoPageUrls';
+import { normalizeVideoPageUrl } from '../../services/videoPageUrls';
 
 const publicCameraSites = [
   {
