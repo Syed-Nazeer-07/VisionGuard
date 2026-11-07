@@ -300,17 +300,16 @@ const b2Provider: VideoStorageProvider = {
   },
 }
 
-const providers: Record<StorageProviderId, VideoStorageProvider> = { supabase: supabaseProvider, b2: b2Provider }
+
 
 /** Provider holding an existing asset's bytes. */
 export function storageProviderFor(asset: { storage_provider?: string | null }): VideoStorageProvider {
   return asset.storage_provider === 'b2' ? b2Provider : supabaseProvider
 }
 
-/** Provider for new uploads (non-secret client config; defaults to B2). */
+/** New files ALWAYS use B2. Supabase Storage is read-only legacy compatibility. */
 export function uploadStorageProvider(): VideoStorageProvider {
-  const configured = import.meta.env.VITE_VIDEO_STORAGE_PROVIDER
-  return configured === 'supabase' ? providers.supabase : providers.b2
+  return b2Provider
 }
 
 /**
