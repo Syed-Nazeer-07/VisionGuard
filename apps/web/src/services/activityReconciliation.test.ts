@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileAnalysisRun } from './activityReconciliation';
+import { reconcileAnalysisRun, readCloudAnalysisRow } from './activityReconciliation';
 import type { AnalysisRecord, VehicleRecord, ViolationRecord } from './activityLedger';
 
 const vehicle = (id: number, observations = 5, lastSeenAt = 3): VehicleRecord => ({
@@ -75,5 +75,31 @@ describe('account-scoped analysis conflict resolution', () => {
     const outcome = reconcileAnalysisRun(local,remote,500);
     expect(outcome.record.violations[0].status).toBe('approved');
     expect(outcome.record.violations[0].evidenceNote).toContain('Unverified');
+  });
+});
+
+describe('cloud upsert acknowledgement validation', () => {
+  const payload = record(500);
+  it('reads the actual database revision instead of assuming the sent timestamp', () => {
+    const response = readCloudAnalysisRow({
+      run_id: payload.id, payload, updated_at: new Date(700).toISOString(),
+    });
+    expect(response.revisionAt).toBe(700);
+    expect(response.record).toBe(payload);
+  });
+  it('does not accept a missing row, mismatched session or malformed payload', () => {
+    expect(() => readCloudAnalysisRow(null)).toThrow(/invalid analysis row/);
+    expect(() => readCloudAnalysisRow({
+      run_id: 'other', payload, updated_at: new Date(700).toISOString()
+    })).toThrow(/invalid analysis row/);
+    expect(() => readCloudAnalysisRow({
+      run_id: payload.id, payload: {...payload, violations:null},
+      updated_at: new Date(700).toISOString()
+    })).toThrow(/invalid analysis row/);
+  });
+  it('rejects an unparseable or dishonest server revision', () => {
+    expect(() => readCloudAnalysisRow({
+      run_id:payload.id,payload,updated_at:'invalid'
+    })).toThrow(/invalid analysis revision/);
   });
 });

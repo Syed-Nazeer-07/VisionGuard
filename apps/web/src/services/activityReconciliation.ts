@@ -120,3 +120,30 @@ export function reconcileAnalysisRun(
     needsUpload: true,
   };
 }
+
+/** Validate a returned PostgREST row before treating a write as acknowledged.
+ * The revision used by the SQL stale-update trigger is the *column* timestamp,
+ * not the client-provided timestamp embedded in the JSON payload.
+ */
+export function readCloudAnalysisRow(value: unknown): {
+  runId: string; revisionAt: number; record: AnalysisRecord;
+} {
+  const row = value as {
+    run_id?: unknown; updated_at?: unknown; payload?: Partial<AnalysisRecord>;
+  } | null;
+  if (!row || typeof row.run_id !== 'string' ||
+      typeof row.updated_at !== 'string' ||
+      !row.payload || typeof row.payload !== 'object' ||
+      row.payload.id !== row.run_id ||
+      !Number.isFinite(row.payload.updatedAt) ||
+      !row.payload.vehicles || typeof row.payload.vehicles !== 'object' ||
+      !Array.isArray(row.payload.violations)) {
+    throw Error('Cloud returned an invalid analysis row; no revision was acknowledged.');
+  }
+  const revisionAt = Date.parse(row.updated_at);
+  if (!Number.isFinite(revisionAt) || revisionAt < 0) {
+    throw Error('Cloud returned an invalid analysis revision timestamp.');
+  }
+  return { runId: row.run_id, revisionAt,
+    record: row.payload as AnalysisRecord };
+}
