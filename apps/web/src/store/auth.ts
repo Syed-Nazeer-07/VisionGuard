@@ -17,31 +17,14 @@ interface AuthState {
   logout: () => void
 }
 
-function getPrehydratedAuth(): {
-  user: User | null
-  session: Session | null
-  role: Role | null
-  profile: any | null
-  settings: any | null
-  initialized: boolean
-} {
-  try {
-    if (typeof window !== 'undefined') {
-      const raw = localStorage.getItem('visionguard_demo_session')
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        const session = parsed.session || null
-        const profile = parsed.profile || null
-        const settings = parsed.settings || null
-        const user = session?.user || null
-        const role = (profile?.role as Role) || (user ? 'Viewer' : null)
-        if (session) {
-          return { user, session, role, profile, settings, initialized: true }
-        }
-      }
-    }
-  } catch {}
-  return { user: null, session: null, role: null, profile: null, settings: null, initialized: false }
+function getPrehydratedAuth() {
+  // Never trust locally crafted sessions or roles. Wait for Supabase Auth to
+  // validate the actual session and for the server-owned profile to load.
+  try { localStorage.removeItem('visionguard_demo_session') } catch { /* storage denied */ }
+  return {
+    user: null, session: null, role: null,
+    profile: null, settings: null, initialized: false
+  } as const
 }
 
 const initial = getPrehydratedAuth()
@@ -70,7 +53,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   
   updateProfile: (newProfile) => set((state) => ({ 
     profile: { ...state.profile, ...newProfile },
-    role: (newProfile?.role as Role) || state.role
+    role: state.role // client-side profile editing cannot elevate privileges
   })),
 
   logout: () => {
