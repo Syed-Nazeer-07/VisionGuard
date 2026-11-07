@@ -7,6 +7,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuthStore } from '../store/auth';
 import { summarizeActivity, useActivityLedger, type AnalysisRecord } from '../services/activityLedger';
+import { csvCell } from '../services/csvExport';
 
 const niceDate = (time: number) => new Date(time).toLocaleString();
 const fmt = (n: number) => n.toLocaleString();
@@ -163,12 +164,6 @@ export function ActivityAnalytics() {
   </main>;
 }
 
-function csvCell(value: unknown) {
-  const string = String(value ?? '');
-  // Prevent spreadsheet formula injection when users open exported CSV files.
-  const safe = /^[=+@-]/.test(string) && /[^0-9.]/.test(string.slice(1)) ? "'" + string : string;
-  return '"' + safe.replace(/"/g,'""') + '"';
-}
 function exportCSV(records: AnalysisRecord[]) {
   const columns = ['Session','Source','Date','Track ID','Vehicle class','Confidence','First seen (s)','Last seen (s)','Estimated km/h'];
   const rows = records.flatMap(run => Object.values(run.vehicles).map(t => [
