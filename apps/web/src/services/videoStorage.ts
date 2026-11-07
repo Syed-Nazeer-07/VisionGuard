@@ -148,7 +148,14 @@ const B2_PART_ATTEMPTS = 6
 const B2_SIGN_BATCH = 20
 
 async function callVideoStorage<T>(body: Record<string, unknown>): Promise<T> {
-  if (supabaseConfig.isMock || !supabase.functions) throw new Error('B2 video storage is unavailable in demo mode (no Supabase project configured)')
+  if (supabaseConfig.isMock || !supabase.functions) {
+    throw new Error(
+      'B2 upload needs a signed-in account and the public Supabase Auth connection. ' +
+      'In apps/web/.env.local set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY ' +
+      '(use the project publishable key, never a secret/service_role key), ' +
+      'then completely restart npm run dev. Video bytes will still go to Backblaze B2.'
+    )
+  }
   const { data, error } = await supabase.functions.invoke('video-storage', { body })
   if (error) {
     let message = errorText(error)
