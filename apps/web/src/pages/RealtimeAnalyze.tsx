@@ -713,6 +713,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   useEffect(() => {
     const onVisibility = () => {
       const video = videoRef.current;
+      if (!document.hidden && video && captureKindRef.current === 'tab' && webcamRef.current) {
+        // Some browsers suspend the muted local preview while another tab is
+        // focused. Sharing permission remains intact; resume the preview
+        // when the user returns rather than leaving an empty analysis panel.
+        lastPresentedAtRef.current = performance.now();
+        if (video.paused) {
+          void video.play().catch(() => {
+            setError('Tab sharing is still active, but playback was paused by the browser. Press Play to resume detection.');
+          });
+        }
+        return;
+      }
       if (document.hidden && video) {
         const account = useAuthStore.getState().user?.id;
         if (account) void activityLedger.flush(account).catch(console.warn);
