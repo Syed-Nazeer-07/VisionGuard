@@ -68,8 +68,10 @@ export function decodeTrafficVehicles(
     // Don't turn pedestrians into motorcycles. Permit ambiguity with a rider
     // only when the two-wheeler score closely competes with the person score.
     if (topClass !== bestClass) {
+      // Riders can score higher as PERSON than as MOTORCYCLE.
+      // Never accept a very weak two-wheeler logit on a clear pedestrian.
       const riderOverlap = (bestClass === 3 || bestClass === 1) && topClass === 0 &&
-        topScore <= best * 1.12 && best >= 0.37;
+        best >= 0.36 && best >= topScore * 0.48;
       if (!riderOverlap) continue;
     }
     const centerX = data[i];
@@ -95,7 +97,10 @@ export function decodeTrafficVehicles(
 
     candidates.push({
       x: (x1 + x2) / 2, y: (y1 + y2) / 2,
-      w, h, prob: best, classId: bestClass, className: LABELS[bestClass]
+      w, h, prob: best, classId: bestClass, className: LABELS[bestClass],
+      classScores: (bestClass === 5 || bestClass === 7)
+        ? { bus: data[(4 + 5) * ANCHORS + i], truck: data[(4 + 7) * ANCHORS + i] }
+        : undefined
     });
   }
   // Keep strongest candidates and suppress repeated car/bus/truck boxes.
@@ -111,66 +116,4 @@ export function decodeTrafficVehicles(
     if (selected.length >= 80) break;
   }
   return selected;
-}
-
-/**
- * Narrow visual safeguard for a long tractor/trailer wrongly classified BUS.
- * A truck with a bright neutral cargo box and a distinctly coloured/darker
- * short cab has a strong discontinuity along its length. This operates ONLY
- * on detections already labeled BUS and leaves motorcycles, cars and genuine
- * buses without that evidence unchanged.
- *
- * This is a conservative appearance heuristic, not a second classifier.
- * Don't convert an ambiguous vehicle just because it looks elongated.
- */
-export function correctClearFreightTrailer(
-  detections: BoundingBox[],
-  chw: Float32Array,
-  ratio: number,
-  padW: number,
-  padH: number,
-): BoundingBox[] {
-  const side = 640;
-  const area = side * side;
-  if (chw.length !== area * 3 || ratio <= 0) return detections;
-  function region(
-    box: BoundingBox, start: number, end: number, vertical: boolean
-  ): { brightness: number; chroma: number } | null {
-    let sumBrightness = 0, sumChroma = 0, count = 0;
-    for (let i = 0; i < 7; i++) {
-      for (let j = 0; j < 7; j++) {
-        const along = start + (end - start) * (i + .5) / 7;
-        const across = .30 + .40 * (j + .5) / 7;
-        const srcX = vertical ? box.x - box.w / 2 + across * box.w :
-          box.x - box.w / 2 + along * box.w;
-        const srcY = vertical ? box.y - box.h / 2 + along * box.h :
-          box.y - box.h / 2 + across * box.h;
-        const x = Math.round(srcX * ratio + padW);
-        const y = Math.round(srcY * ratio + padH);
-        if (x < 0 || x >= side || y < 0 || y >= side) return null;
-        const pixel = y * side + x;
-        const red = chw[pixel], green = chw[area + pixel], blue = chw[2 * area + pixel];
-        sumBrightness += (red + green + blue) / 3;
-        sumChroma += Math.max(red, green, blue) - Math.min(red, green, blue);
-        count++;
-      }
-    }
-    return { brightness: sumBrightness / count, chroma: sumChroma / count };
-  }
-
-  return detections.map(box => {
-    if (box.classId !== 5) return box;
-    const portrait = box.h >= box.w * 1.6;
-    const landscape = box.w >= box.h * 1.6;
-    if (!portrait && !landscape) return box;
-    if (Math.max(box.w, box.h) * ratio < 70) return box;
-    const near = region(box, .12, .38, portrait);
-    const far = region(box, .59, .87, portrait);
-    if (!near || !far) return box;
-    const separated = (cargo: typeof near, cab: typeof far) =>
-      cargo.brightness > .68 && cargo.chroma < .13 &&
-      cab.brightness < cargo.brightness - .19 && cab.chroma > .18;
-    if (!separated(near, far) && !separated(far, near)) return box;
-    return { ...box, classId: 7, className: 'truck' };
-  });
 }
