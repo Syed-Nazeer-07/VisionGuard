@@ -1097,7 +1097,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           }} className="h-4 w-4 accent-[#2356a8]"/>
           Keep sharing on other VisionGuard pages
         </label>
-      </div>
+      </div>}
 
       {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
