@@ -8,6 +8,8 @@ export interface BoundingBox {
   prob: number;
   classId: number;
   className: string;
+  /** YOLO's bus and truck scores for ambiguous large vehicles. */
+  classScores?: { bus: number; truck: number };
 }
 
 export interface InitMessage {
