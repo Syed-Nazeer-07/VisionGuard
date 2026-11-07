@@ -13,7 +13,7 @@ and on the target Windows/Edge computer before promoting the release.
 | Roles | New signup is Viewer; non-admin cannot update roles or access Admin routes |
 | Local video | Playback starts and tracking boxes follow road users |
 | Fullscreen | Fullscreen player includes video **and** overlay; Escape exits |
-| Scene exits | Boxes disappear promptly when tracks leave the frame |
+| Scene exits | Boxes disappear promptly; quantify lingering frames after annotated exits using [browser QA](BROWSER_TRACKING_EVALUATION.md) |
 | YouTube tab | User-approved Edge-tab capture survives focus changes |
 | Capture privacy | Global Stop button ends sharing; webcam releases on page hide |
 | Live session history | Tracks persist across dashboard, history, analytics and reports |
@@ -68,7 +68,9 @@ auth recovery, YouTube capture, or real-world tracking accuracy are validated.
 - B2 remote playback/analysis needs correct signed URL, GET/Range/CORS and
   browser-decodable video.
 - Real-world accuracy, especially truck/bus confusion and motorcycles,
-  requires a labeled validation set and hardware testing.
+  requires a labeled validation set and hardware testing. The historical
+  YOLO11n backend benchmark is not a browser YOLO11s performance result.
+  Use the [annotated quality scorecard](BROWSER_TRACKING_EVALUATION.md).
 
 ## CI checks
 
@@ -79,6 +81,7 @@ npm run lint
 npm run build
 npm run test -w web
 npm run test:deploy
+npm run test:tracking-eval
 ```
 
 Run the optional backend test suite in its Python environment:

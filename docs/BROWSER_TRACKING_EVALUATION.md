@@ -1,0 +1,112 @@
+# Browser tracking quality evaluation
+
+This is a reproducible **quality gate**, not a claim that VisionGuard is
+already accurate enough for traffic enforcement. The deployed browser runs
+**YOLO11s**; the older backend report uses **YOLO11n** and must never be
+presented as browser YOLO11s accuracy.
+
+## Capture a real browser overlay trace (opt-in)
+
+1. Visit your deployed VisionGuard Live Analysis URL with
+   ?quality=1 appended to the path. For the current deployment:
+
+   https://visionguard.syednazeerofficial2007.workers.dev/app/analyze?quality=1
+
+2. Select a *local, permitted* traffic video using Choose video.
+3. Play it. The trace captures at most 1200 sampled source-media frames at
+   about 0.1 seconds apart, including frames with no displayed boxes.
+   These are the **actual on-screen tracking IDs, classes and boxes**, in
+   source-video pixel coordinates. No video pixels or footage are stored
+   in the trace.
+4. Click **Download QA trace (N)** at the top. This control is only visible
+   while quality=1 is present and there are captured frames. Normal users
+   never see the diagnostic control.
+5. The exported JSON explicitly marks groundTruth and exitedIds as
+   **null/unannotated**. It is not a benchmark and the evaluator intentionally
+   refuses to score it until you supply honest manual annotations.
+
+Seeking, changing the source or reconnecting resets the trace because frame
+times would otherwise be inconsistent. Quality capture is in memory only;
+it neither uploads recordings nor syncs its trace to Supabase.
+
+## Label actual ground truth
+
+Use the original video and the corresponding media times from the trace to
+annotate each sampled frame independently. Fill in the groundTruth array with
+actual vehicles present in the image, using:
+
+~~~json
+{
+  "id": "vehicle-A",
+  "className": "car",
+  "box": { "x": 100, "y": 140, "w": 50, "h": 30 }
+}
+~~~
+
+- Coordinates are center x/y and width/height in **original video pixels**.
+- Human ground-truth IDs are continuous across frames, separate from the
+  browser's prediction IDs.
+- Do not copy the browser's predicted boxes into ground truth; that makes a
+  meaningless perfect score.
+- Replace exitedIds with an array of human-ground-truth IDs that first
+  become completely absent because they **left the scene** on that frame.
+  Do not mark ordinary occlusion as an exit.
+- Include even frames with zero ground-truth objects. Keep the existing
+  predictions untouched.
+- Ensure all frames have increasing time and a positive width and height.
+
+The labelled JSON must have format "visionguard-tracking-eval/v1", frames
+with groundTruth and predictions arrays, and exitedIds arrays (optional for
+frames that are not annotated for exits). There is an artificial example in
+scripts/fixtures/tracking-synthetic.json which tests the evaluator and **is
+not a real video model benchmark**.
+
+## Generate the scoring report
+
+From the repository root, after checking out the latest main:
+
+~~~bash
+npm run test:tracking-eval
+node scripts/evaluate-tracking.mjs /path/to/labelled-browser-trace.json
+~~~
+
+The evaluator produces class-aware precision, recall, F1 and mean box IoU
+at IoU@0.50; it also reports duplicate boxes, tracking ID switches
+(across annotated observations no more than 0.5s apart) and how many
+sampled frames a predicted ID lingered after a human-marked exit.
+
+Optionally fail a release against *your documented acceptance thresholds*:
+
+~~~bash
+node scripts/evaluate-tracking.mjs /path/to/labelled-browser-trace.json --min-precision=0.8 --min-recall=0.7 --max-id-switches=2 --max-ghost-frames=0
+~~~
+
+These thresholds are suggested examples, **not measured achievements**.
+The tool exits nonzero if a requested threshold is not met.
+
+## Real-world validation plan for a 9/10 portfolio project
+
+Use multiple consented or properly licensed videos: at least 5 independent
+scenes covering congestion, small motorcycles, heavy vehicles, occlusion,
+night/low-light, and exits. Set aside an unseen holdout. Document the
+labelled ground truth and prediction capture conditions.
+
+Measure:
+- Detection precision, recall and F1 separately for car, truck, bus, and
+  motorcycle, and include performance on small distant vehicles.
+- Tracking IDs, identity switches and duplicate boxes across video frames.
+- Annotations for scene exits and the maximum time ghost boxes remain.
+- Inference p50/p95 and throughput on real Chromium devices, including
+  the Surface Laptop 7 and a modest CPU/WASM device.
+- Event-level false positives and false negatives against labelled
+  **review-worthy observations**. These are not traffic-law violations.
+
+The report from October 13, 2026, in
+backend/eval/BENCHMARK_REPORT.md states YOLO11n @ 640x640 on 119 frames
+(1787 annotations) from one highway video reached 72.15% precision and
+62.34% recall at IoU 0.50. **That is a different model, backend and
+dataset scope** from the deployed browser YOLO11s workflow. It cannot
+substitute for the measurements above.
+
+Do not claim crash detection, red-light enforcement, or legally calibrated
+speed measurements without the corresponding model, data and validation.

@@ -166,6 +166,19 @@ Optional Python service: FastAPI analysis backend (separate workflow)
 
 Track IDs refer to individual **analysis sessions**, not licence plates. They are not persistent identifiers across unrelated videos.
 
+## Browser tracking evaluation
+
+For reproducible measurements, open
+[Live Analysis in quality mode](https://visionguard.syednazeerofficial2007.workers.dev/app/analyze?quality=1)
+and download an **opt-in, local-only QA trace**. After independently labelling
+the source-video frames, run the
+[tracking quality scorecard](docs/BROWSER_TRACKING_EVALUATION.md) to measure
+precision, recall, identity switches and lingering boxes after scene exits.
+
+The trace includes **no video bytes**, and synthetic tests do not establish
+real-world detector performance. The historical Python YOLO11n benchmark
+does **not** measure the browser YOLO11s system.
+
 ## Testing
 
 From the repository root:

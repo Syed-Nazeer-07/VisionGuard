@@ -1158,7 +1158,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         const context = canvas.getContext('2d');
         let visible = 0;
         const visibleTracks: PersistentTrack[] = [];
-        let qaTracks: LiveTrack[] = [];
         if (context) {
           context.clearRect(0, 0, canvas.width, canvas.height);
           const observation = latestRef.current;
@@ -1169,7 +1168,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const offsetX = (width - frameWidth * fit) / 2;
             const offsetY = (height - frameHeight * fit) / 2;
             const tracks = projectLiveTracks(observation.tracks, observation.time, video.currentTime, frameWidth, frameHeight);
-            qaTracks = tracks;
             context.save();
             context.scale(dpr, dpr);
             context.beginPath();
@@ -1217,7 +1215,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             video.videoWidth > 0 && video.videoHeight > 0 &&
             !video.paused && !video.ended && !video.seeking) {
           appendQualityFrame(qualityFramesRef.current, video.currentTime,
-            video.videoWidth, video.videoHeight, qaTracks);
+            video.videoWidth, video.videoHeight, visibleTracks);
         }
         if (time - lastUI > 250) {
           lastUI = time;
