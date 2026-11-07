@@ -104,7 +104,12 @@ class UploadManagerService {
    * Creates the video_assets row, then uploads in the background.
    * Resolves as soon as the row exists (with its video_id); rejects with the real error otherwise.
    */
-  public async startUpload(file: File, selectedAt: string = new Date().toISOString()): Promise<{ videoId: string }> {
+  public async startUpload(
+    file: File,
+    selectedAt: string = new Date().toISOString(),
+    options: { keepPreview?: boolean } = {}
+  ): Promise<{ videoId: string }> {
+    if (!file || file.size <= 0) throw new Error('Cannot upload an empty video file.');
     const provider = uploadStorageProvider()
     const contentType = file.type || 'video/mp4'
     const baseMetadata: Metadata = {
@@ -146,7 +151,9 @@ class UploadManagerService {
       storagePath: null,
       error: null,
       createdTimestamp: selectedAt,
-      localPreviewUrl: URL.createObjectURL(file)
+      // Live Analysis already holds the original file URL. Avoid creating an
+      // extra long-lived preview reference for large B2 uploads.
+      localPreviewUrl: options.keepPreview === false ? null : URL.createObjectURL(file)
     }
     this.uploads.set(videoId, record)
     this.notify(record)
