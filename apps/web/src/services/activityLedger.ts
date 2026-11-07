@@ -232,6 +232,27 @@ function change(owner: string, transform: (records: AnalysisRecord[]) => Analysi
   persist(owner);
 }
 
+export function mergeEstimatedSpeeds(
+  vehicles: Record<string, VehicleRecord>,
+  tracks: ReadonlyArray<{id:number; speedKmh: number | null; isPredicted?:boolean}>
+): Record<string, VehicleRecord> {
+  let updated: Record<string, VehicleRecord> | null = null;
+  for (const track of tracks) {
+    // Only real optical evidence can update the estimate. Do not create new
+    // vehicle IDs or manufacture speeds from predicted-only bounding boxes.
+    const speed = track.speedKmh;
+    if (track.isPredicted || !Number.isFinite(track.id) || speed === null ||
+        !Number.isFinite(speed) || speed < 0 || speed > 160) continue;
+    const id = String(track.id);
+    const old = (updated ?? vehicles)[id];
+    if (!old || (old.estimatedSpeedKmh !== null &&
+        Math.abs(old.estimatedSpeedKmh - speed) < 1)) continue;
+    if (!updated) updated = {...vehicles};
+    updated[id] = {...old,estimatedSpeedKmh:speed};
+  }
+  return updated ?? vehicles;
+}
+
 /** Scoped to a real authenticated account. Never shares records across sign-ins. */
 export const activityLedger = {
   load(ownerId: string) { return ensureLoaded(keyFor(ownerId)); },
@@ -283,6 +304,23 @@ export const activityLedger = {
         vehicles: updated
       };
       });
+    });
+  },
+  updateSpeedEstimates(
+    ownerId: string, runId: string,
+    tracks: ReadonlyArray<{id:number;speedKmh:number|null;isPredicted?:boolean}>
+  ) {
+    if (!ownerId || !runId || !tracks.length) return;
+    change(keyFor(ownerId), records => {
+      let changed = false;
+      const next = records.map(run => {
+        if (run.id !== runId) return run;
+        const vehicles = mergeEstimatedSpeeds(run.vehicles, tracks);
+        if (vehicles === run.vehicles) return run;
+        changed = true;
+        return {...run, updatedAt:Date.now(), vehicles};
+      });
+      return changed ? next : records;
     });
   },
   async flush(ownerId: string) {
