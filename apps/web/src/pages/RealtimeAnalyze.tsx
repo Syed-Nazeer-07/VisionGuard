@@ -1152,6 +1152,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 }}
                 onLoadedData={event => {
                   setReadyVideo(true);
+                  setError(previous => previous.startsWith('Sharing is approved, but no video frames')
+                    ? '' : previous);
                   setOpenedSeconds((performance.now() - loadStartRef.current) / 1000);
                   firstFrameResolveRef.current?.();
                   firstFrameResolveRef.current = null;
