@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Activity, ArrowRight, BarChart3, Download, FileText, Film } from 'lucide-react';
+import { Activity, ArrowRight, BarChart3, Download, FileText, Film, ShieldAlert } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -230,5 +230,70 @@ export function ActivityReports() {
       <p className="mt-1">Only detected track records are exported. The speed column is explicitly approximate;
         no overspeed or safety violation is inferred without calibrated measurements or verified evidence.</p>
     </div>}
+  </main>;
+}
+
+
+export function ActivityVideoLibrary() {
+  const { records, loaded, error } = useRuns();
+  return <main className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div><h1 className="text-2xl font-bold text-slate-900">Analysis history</h1>
+        <p className="mt-1 text-sm text-slate-500">Saved tracking sessions for videos and live sources</p>
+      </div>
+      <Link to="/app/analyze" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
+        Open analysis
+      </Link>
+    </div>
+    <LocalScope/>
+    {error && <p role="alert" className="text-sm text-amber-700">{error}</p>}
+    {!loaded ? <p className="text-sm text-slate-500">Restoring activity history…</p> :
+      !records.length ? <EmptyState/> :
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {records.map(run=><div key={run.id} className="flex flex-wrap items-center gap-4 border-b border-slate-100 p-4 last:border-0">
+          <Film size={20} className="text-indigo-500"/>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold text-slate-800">{run.sourceName}</p>
+            <p className="mt-1 text-xs text-slate-500">{niceDate(run.createdAt)} · {run.sourceType==='live-stream'?'Live stream':'Uploaded video'}</p>
+          </div>
+          <div className="text-right text-sm">
+            <strong className="tabular-nums">{Object.keys(run.vehicles).length} unique vehicles</strong>
+            <p className="text-xs text-slate-500">{run.analyzedFrames} analyzed frames</p>
+          </div>
+        </div>)}
+      </div>}
+    <p className="text-xs text-slate-500">An analysis record does not imply its source video was saved. Retaining footage is an independent opt-in inside Live Analysis.</p>
+  </main>;
+}
+
+export function ActivityIncidents() {
+  const { records, loaded, error } = useRuns();
+  const incidents = records.flatMap(run=>run.violations.map(event=>({ run, event })))
+    .sort((a,b)=>b.event.observedAt-a.event.observedAt);
+  return <main className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
+    <div><h1 className="text-2xl font-bold text-slate-900">Incidents and violations</h1>
+      <p className="mt-1 text-sm text-slate-500">Evidence-backed records only — no fabricated overspeed findings</p>
+    </div>
+    <LocalScope/>
+    {error && <p role="alert" className="text-sm text-amber-700">{error}</p>}
+    {!loaded ? <p className="text-sm text-slate-500">Restoring incident history…</p> :
+      !incidents.length ? <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
+        <ShieldAlert className="mx-auto text-indigo-400" size={30}/>
+        <h2 className="mt-3 font-semibold text-slate-900">No verified incidents recorded</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+          Analysis identifies vehicles, but uncalibrated speed estimates do not establish a violation.
+          Verified events will appear here when supported by actual evidence.
+        </p>
+      </div> :
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        {incidents.map(({run,event})=><div key={event.id} className="border-b border-slate-100 p-4 text-sm last:border-0">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <strong className="text-slate-900">{title(event.type)}</strong>
+            <span className="text-xs font-semibold text-slate-600">{event.status.replace('_',' ')}</span>
+          </div>
+          <p className="mt-1 text-slate-600">{run.sourceName} · Track #{event.trackId??'N/A'}</p>
+          <p className="mt-1 text-xs text-slate-500">{event.evidenceNote}</p>
+        </div>)}
+      </div>}
   </main>;
 }
