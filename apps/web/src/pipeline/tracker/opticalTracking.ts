@@ -16,7 +16,8 @@ export function takeGrayFrame(
   canvas: HTMLCanvasElement
 ): GrayFrame | null {
   if (!video.videoWidth || !video.videoHeight || !Number.isFinite(time)) return null;
-  const width = 320;
+  // 448px preserves distant motorcycles that become <7 pixels at 320px.
+  const width = 448;
   const height = Math.max(1, Math.round(width * video.videoHeight / video.videoWidth));
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
@@ -47,7 +48,9 @@ function matchFeature(
   predictedDx: number,
   predictedDy: number,
   search: number,
-  patchRadius: number
+  patchRadius: number,
+  minTexture = 24,
+  maxError = 26,
 ): MotionMatch | null {
   const width = previous.width;
   const height = previous.height;
@@ -66,7 +69,7 @@ function matchFeature(
       max = Math.max(max, value);
     }
   }
-  if (max - min < 24) return null;
+  if (max - min < minTexture) return null;
 
   let best = Infinity;
   let bestDx = 0;
@@ -102,7 +105,7 @@ function matchFeature(
       }
     }
   }
-  if (best > 26 || !Number.isFinite(best)) return null;
+  if (best > maxError || !Number.isFinite(best)) return null;
   return { dx: bestDx, dy: bestDy, error: best };
 }
 
@@ -134,9 +137,11 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     if (track.w < 7 || track.h < 7 || track.confidence < .42) continue;
     const centerX = track.x * sx;
     const centerY = track.y * sy;
-    // Vehicles smaller than 7 thumbnail pixels have no reliable local features.
-    // Prefer hiding the box over sending it wandering into a nearby car.
-    if (track.w * sx < 7 || track.h * sy < 7) continue;
+    const isSmallTwoWheeler = track.className === 'motorcycle' || track.className === 'bicycle';
+    // Higher-resolution thumbnails allow small two-wheelers to remain trackable.
+    // Keep strict criteria on ordinary cars and trucks to avoid regressions.
+    const smallest = isSmallTwoWheeler ? 4.5 : 6;
+    if (track.w * sx < smallest || track.h * sy < smallest) continue;
 
     const predictX = Math.max(-15, Math.min(15, track.vx * sx * dt));
     const predictY = Math.max(-15, Math.min(15, track.vy * sy * dt));
@@ -147,18 +152,22 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     for (const [ox, oy] of featureOffsets) {
       const x = centerX + track.w * sx * ox;
       const y = centerY + track.h * sy * oy;
-      const match = matchFeature(previous, current, x, y, predictX, predictY, search, patchRadius);
+      const match = matchFeature(
+        previous, current, x, y, predictX, predictY, search, patchRadius,
+        isSmallTwoWheeler ? 16 : 24, isSmallTwoWheeler ? 24 : 26
+      );
       if (match) features.push(match);
     }
-    if (features.length < 2) continue;
+    if (features.length < 2 && !(isSmallTwoWheeler && features.length === 1 && features[0].error < 8)) continue;
     const dx = median(features.map(f => f.dx));
     const dy = median(features.map(f => f.dy));
     const consistent = features.filter(f => Math.abs(f.dx - dx) <= 2 &&
-      Math.abs(f.dy - dy) <= 2 && f.error <= 26);
+      Math.abs(f.dy - dy) <= 2 && f.error <= (isSmallTwoWheeler ? 24 : 26));
 
     // Reject boxes when neighboring features disagree: almost always
     // background slip, occlusion or a car leaving the picture.
-    if (consistent.length < 2 || consistent.length < Math.ceil(features.length * .5)) continue;
+    if (consistent.length < 2 && !(isSmallTwoWheeler && consistent.length === 1 && consistent[0].error < 8)) continue;
+    if (consistent.length < Math.ceil(features.length * .5)) continue;
     const moveX = median(consistent.map(f => f.dx)) / sx;
     const moveY = median(consistent.map(f => f.dy)) / sy;
     const newX = track.x + moveX;
