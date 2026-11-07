@@ -18,3 +18,11 @@ export function hiddenPagePolicy(kind: ActiveCaptureKind): {
 export function shouldResumeSharedTab(kind: ActiveCaptureKind, pageHidden: boolean, previewPaused: boolean): boolean {
   return kind === 'tab' && !pageHidden && previewPaused;
 }
+
+/**
+ * Only a browser-tab share can remain connected across the app. Device
+ * cameras must always be stopped on navigation, even if this option is on.
+ */
+export function keepCaptureAcrossPages(kind: ActiveCaptureKind, userOptedIn: boolean): boolean {
+  return kind === 'tab' && userOptedIn;
+}
