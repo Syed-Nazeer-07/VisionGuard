@@ -5,7 +5,12 @@ VisionGuard's **Continue with Google** button uses Supabase Auth
 email/password accounts and **never grants Admin access to a new user**.
 
 The frontend OAuth flow is implemented, but the **Google provider must be
-configured separately**. This configuration cannot be done with a public
+configured separately**.
+A 7 November 2026 sign-in attempt to the connected staging project was rejected
+with HTTP 400 `provider is not enabled` in Supabase Auth logs. This requires
+enabling Google's provider on the server side; editing the React button alone
+cannot fix it. The login UI now checks public provider availability before
+redirecting, when the endpoint is accessible. This configuration cannot be done with a public
 Supabase publishable key and cannot be embedded in frontend source code.
 
 ## 1. Configure Google Auth Platform
@@ -31,7 +36,9 @@ configuration. Never commit it or use `VITE_*` for the secret.
 ## 2. Enable Google in Supabase
 
 Open the [Supabase dashboard](https://supabase.com/dashboard) for the
-same project used by VisionGuard. Navigate to **Authentication → Providers
+same project used by VisionGuard. The connected staging project's
+[Google provider settings](https://supabase.com/dashboard/project/wpkwxlhwjkgtvyersust/auth/providers?provider=Google)
+must explicitly show **enabled**, with a configured client ID and secret. Navigate to **Authentication → Providers
 → Google**. Enable the provider and enter its Google Client ID and
 Client Secret.
 
@@ -73,7 +80,10 @@ profile metadata is only used for display names, **never authorization**.
 
 ### Troubleshooting
 
-- **Provider is not enabled:** configure Google in Supabase Providers.
+- **Provider is not enabled:** this was confirmed in staging Auth logs on
+  7 November 2026. Create the Google OAuth Web client, save its ID and secret
+  under Supabase **Authentication → Providers → Google**, and enable the toggle.
+  Then retry; no app code can substitute for missing server credentials.
 - **redirect_uri_mismatch:** enter the exact Supabase callback under Google
   Authorized redirect URIs. The frontend `/login` goes in Supabase's
   redirect allow list instead.

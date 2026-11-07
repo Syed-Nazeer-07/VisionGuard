@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase, supabaseConfig } from '../../lib/supabase';
+import { checkGoogleProvider } from '../../services/googleAuthAvailability';
 import { useAuthStore } from '../../store/auth';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -122,12 +123,20 @@ export function Login() {
     setIsGoogleLoading(true);
     try {
       sessionStorage.removeItem('visionguard_logged_out');
+      // GoTrue may otherwise redirect to a raw HTTP 400 page when Google is
+      // disabled; show an actionable local error before starting OAuth.
+      const status = await checkGoogleProvider(supabaseConfig.url, supabaseConfig.anonKey);
+      if (status === 'disabled') {
+        throw new Error('Google sign-in is disabled in this Supabase project. Enable the Google provider under Supabase Authentication → Providers, then configure your Google OAuth Client ID, Client Secret and redirect URLs.');
+      }
       // Supabase handles OAuth state and session persistence. Fixed callback.
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: new URL('/login', window.location.origin).toString() },
       });
       if (oauthError) throw oauthError;
+      // When Supabase starts a redirect, the browser leaves this page.
+      // Do not show a misleading "connected" success before it returns.
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not start Google sign-in.');
       setIsGoogleLoading(false);
