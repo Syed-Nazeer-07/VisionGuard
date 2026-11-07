@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hiddenPagePolicy } from './captureVisibility';
+import { hiddenPagePolicy, shouldResumeSharedTab } from './captureVisibility';
 
 describe('live capture visibility policy', () => {
   it('preserves consented YouTube tab sharing when browser focuses the YouTube tab', () => {
@@ -19,5 +19,17 @@ describe('live capture visibility policy', () => {
       pauseMedia: true,
       releaseCapture: false,
     });
+  });
+});
+
+describe('shared-tab preview restoration', () => {
+  it('resumes a paused YouTube-tab preview when returning to VisionGuard', () => {
+    expect(shouldResumeSharedTab('tab', false, true)).toBe(true);
+  });
+  it('does not restart capture while hidden or resume regular webcam footage', () => {
+    expect(shouldResumeSharedTab('tab', true, true)).toBe(false);
+    expect(shouldResumeSharedTab('tab', false, false)).toBe(false);
+    expect(shouldResumeSharedTab('camera', false, true)).toBe(false);
+    expect(shouldResumeSharedTab(null, false, true)).toBe(false);
   });
 });
