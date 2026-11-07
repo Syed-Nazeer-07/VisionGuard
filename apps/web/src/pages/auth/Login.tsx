@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { supabase, supabaseConfig } from '../../lib/supabase';
 import { useAuthStore } from '../../store/auth';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -75,7 +75,7 @@ export function Login() {
     
     sessionStorage.removeItem('visionguard_logged_out');
     
-    if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
+    if (supabaseConfig.isMock) {
       setIsLoading(false);
       setError('Authentication is not configured. Set up the Supabase Auth environment and retry. Demo admin sign-in is disabled for security.');
       return;
@@ -105,7 +105,7 @@ export function Login() {
     setError(null);
     setSuccessMsg(null);
     
-    if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL.includes('placeholder')) {
+    if (supabaseConfig.isMock) {
       setIsLoading(false);
       setError('Registration requires configured Supabase Auth. Local mock administrator accounts are not supported.');
       return;
