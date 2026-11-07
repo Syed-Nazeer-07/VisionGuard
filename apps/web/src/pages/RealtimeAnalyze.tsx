@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Camera, Film, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { TrafficCameraDirectory } from '../components/analysis/TrafficCameraDirectory';
-import { hiddenPagePolicy } from '../services/captureVisibility';
+import { hiddenPagePolicy, shouldResumeSharedTab } from '../services/captureVisibility';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { uploadStorageProvider } from '../services/videoStorage';
@@ -718,7 +718,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         // focused. Sharing permission remains intact; resume the preview
         // when the user returns rather than leaving an empty analysis panel.
         lastPresentedAtRef.current = performance.now();
-        if (video.paused) {
+        if (shouldResumeSharedTab(captureKindRef.current, document.hidden, video.paused)) {
           void video.play().catch(() => {
             setError('Tab sharing is still active, but playback was paused by the browser. Press Play to resume detection.');
           });
