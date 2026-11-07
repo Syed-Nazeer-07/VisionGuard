@@ -61,6 +61,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const captureErrorRef = useRef(false);
   const streamRetryCountRef = useRef(0);
   const streamExhaustedRef = useRef(false);
+  const lastStreamFailureRef = useRef(0);
   const [streamRetries, setStreamRetries] = useState(0);
   const webcamRef = useRef<MediaStream | null>(null);
   const [webcamActive, setWebcamActive] = useState(false);
@@ -385,6 +386,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     lastPresentedAtRef.current = performance.now();
     streamRetryCountRef.current = 0;
     streamExhaustedRef.current = false;
+    lastStreamFailureRef.current = 0;
     setStreamRetries(0);
     captureErrorRef.current = false;
     setStorage('not-saved');
@@ -619,6 +621,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     lastPresentedAtRef.current = performance.now();
     streamRetryCountRef.current = 0;
     streamExhaustedRef.current = false;
+    lastStreamFailureRef.current = 0;
     setStreamRetries(0);
     captureErrorRef.current = false;
     setStreamReloadKey(value => value + 1);
@@ -665,6 +668,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (closed || !data.fatal || streamExhaustedRef.current) return;
         const attempt = ++streamRetryCountRef.current;
+        lastStreamFailureRef.current = performance.now();
         setStreamRetries(attempt);
         if (attempt > MAX_STREAM_RETRIES) {
           streamExhaustedRef.current = true;
@@ -713,6 +717,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         return;
       }
       const attempts = ++streamRetryCountRef.current;
+      lastStreamFailureRef.current = performance.now();
       setStreamRetries(attempts);
       if (attempts > MAX_STREAM_RETRIES) {
         streamExhaustedRef.current = true;
@@ -799,6 +804,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (stopped || !activeRef.current) return;
       if (streamSourceRef.current || webcamRef.current) {
         lastPresentedAtRef.current = performance.now();
+        // Reset retry budget only after a sustained healthy run, not after a
+        // one-frame recovery that fails again a moment later.
+        if (lastStreamFailureRef.current > 0 &&
+            performance.now() - lastStreamFailureRef.current > 30_000) {
+          lastStreamFailureRef.current = 0;
+          streamRetryCountRef.current = 0;
+          setStreamRetries(0);
+        }
       }
       if (captureErrorRef.current) return;
       if (stopped || !activeRef.current ||
@@ -1143,10 +1156,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   setPlaying(true);
                   if (streamSourceRef.current || webcamRef.current) {
                     setStreamHealth('playing');
-                    setStreamRetries(0);
-                    streamRetryCountRef.current = 0;
                     streamExhaustedRef.current = false;
                     lastPresentedAtRef.current = performance.now();
+                    setError(previous => previous.startsWith('Live stream stopped') ||
+                      previous.startsWith('This stream cannot') ? '' : previous);
                   }
                 }}
                 onWaiting={() => {
