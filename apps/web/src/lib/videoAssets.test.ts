@@ -11,5 +11,6 @@ describe('archive availability', () => {
   it('rejects explicitly failed or incomplete uploads', () => {
     expect(canReanalyzeStoredVideo({storage_path:'uploads/video.mp4',metadata:{upload_status:'failed'}})).toBe(false);
     expect(canReanalyzeStoredVideo({storage_path:null,metadata:{upload_status:'uploading'}})).toBe(false);
+    expect(canReanalyzeStoredVideo({storage_path:'uploads/partial.mp4',metadata:{upload_status:'uploading'}})).toBe(false);
   });
 });

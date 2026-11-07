@@ -80,6 +80,9 @@ export function getAssetAvailability(
   const meta: { [key: string]: Json | undefined } = asset.metadata && typeof asset.metadata === 'object' && !Array.isArray(asset.metadata) ? asset.metadata : {}
   const status = getUploadStatus(asset)
   if (status === 'failed') return { kind: 'upload_failed', detail: typeof meta.upload_error === 'string' ? meta.upload_error : 'unknown error' }
+  // A recorded object key before multipart completion is not proof that
+  // cloud bytes are durable. Wait for the upload to report completion.
+  if (status === 'uploading') return { kind: 'uploading' }
   if (!asset.storage_path) return { kind: 'upload_incomplete' }
   if (info && info.objectExists === false) return { kind: 'file_missing' }
   return { kind: 'available' }
