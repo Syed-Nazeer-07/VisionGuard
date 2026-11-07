@@ -1082,7 +1082,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <h1 className="text-2xl font-bold tracking-tight text-slate-900">Live traffic analysis</h1>
           <p className="mt-1 text-sm text-slate-500">Play immediately. YOLO11s detects while the video runs — no lengthy processing screen.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
             onChange={event => {
               const file = event.target.files?.[0];
@@ -1107,7 +1107,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
             {showStreamForm ? 'Close sources' : 'Live sources'}
           </button>
-          {url && <button type="button" aria-label="Remove video" onClick={removeVideo}
+          {url && !webcamActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"><X size={18} /></button>}
         </div>
       </header>
