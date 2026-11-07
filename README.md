@@ -34,7 +34,7 @@ VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime
 | **Fullscreen** | Expand the composite video **with the detection canvas**, not the video alone |
 | **Overview & analytics** | Inspect saved sessions, unique vehicle tracks, frame counts and vehicle-class distribution |
 | **History** | Revisit account-scoped analysis summaries and see locally retained or explicitly cloud-saved video assets |
-| **Incidents** | Create **pending-review flags** tied to sessions and tracks; these are not confirmed traffic offences |
+| **Incidents** | Automatic high-speed-estimate and stationary-vehicle review candidates plus manual flags; none are confirmed offences |
 | **Reports** | Export session/vehicle data as PDF or CSV, and incident-review records as CSV |
 | **Accounts & settings** | Email/password access, configurable Google sign-in, user-specific start pages and account settings |
 
@@ -44,7 +44,7 @@ VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime
 
 1. **Choose footage:** select a local recording, open a permitted device camera or approve browser-tab sharing.
 2. **Track vehicles:** YOLO11s identifies candidates; optical tracking smooths boxes and associates IDs over time.
-3. **Review observations:** examine counts and **approximate** speeds. Create a review flag if an observation needs attention.
+3. **Review observations:** examine counts and **approximate** speeds. The detector automatically flags sustained high speed estimates and unusually stationary vehicles for review; other events can be flagged manually.
 4. **Revisit the session:** use **Overview**, **History**, **Analytics**, **Incidents** and **Reports**. Session metadata is stored locally and synchronized when cloud metadata is configured and available.
 5. **Keep video only if you choose:** optionally retain the local original or explicitly upload it to Backblaze B2. Analyzing a file does not automatically upload the video.
 
@@ -179,6 +179,7 @@ python -m pytest
 Before a production deployment is presented as verified, the following still need real-world acceptance testing:
 
 - Detection, speed-overlay behavior, fullscreen and frame-edge tracking on representative videos and target hardware.
+- Automatic candidate rules reviewed against real labeled footage to assess false positives and missed events.
 - Authorized YouTube-tab capture, focus changes, browser permissions and camera lifecycle.
 - Account sign-up, confirmation and recovery, Google OAuth, and account isolation.
 - Backblaze B2 upload, authorized playback, re-analysis, retention and permissions.

@@ -9,6 +9,7 @@ import { storageProviderFor, uploadStorageProvider } from '../services/videoStor
 import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
+import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { hasAdvancedVideoFrame, isStreamStalled } from '../services/streamRecovery';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
@@ -97,6 +98,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const nextStableIdRef = useRef(1);
   const detectorToStableIdRef = useRef<Map<number, number>>(new Map());
   const speedHistoryRef = useRef<Map<number, SpeedHistory>>(new Map());
+  const autoIncidentDetectorRef = useRef(new AutomaticIncidentDetector());
   const lastOpticalSampleRef = useRef(-Infinity);
   const lastEstimateSaveAtRef = useRef(-Infinity);
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -162,6 +164,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     captureErrorRef.current = false;
     flowTracksRef.current = [];
     speedHistoryRef.current.clear();
+    autoIncidentDetectorRef.current.reset();
     detectorToStableIdRef.current.clear();
     // Preserve increasing stable IDs within this run. A seek/reconnect must
     // not reuse #1 for an entirely different vehicle in the saved ledger.
@@ -997,6 +1000,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 if (!activeIds.has(id)) speedHistoryRef.current.delete(id);
               }
               latestRef.current = { time: current.time, tracks: flowTracksRef.current };
+              const account = useAuthStore.getState().user?.id;
+              if (account && activeRunRef.current) {
+                // Only optically confirmed, repeated observations qualify.
+                // Deterministic event IDs prevent duplicates on replay/reload.
+                for (const incident of autoIncidentDetectorRef.current.ingest(flowTracksRef.current, current.time)) {
+                  activityLedger.addReviewedViolation(account, activeRunRef.current, {
+                    id: 'auto:' + incident.type + ':' + incident.trackId,
+                    trackId: incident.trackId,
+                    type: incident.type,
+                    observedAt: Date.now(),
+                    status: 'pending_review',
+                    evidenceNote: incident.evidenceNote
+                  });
+                }
+              }
               // Save the estimates seen on screen, not just the first sparse
               // YOLO result (which may have no optical speed yet). Rate limit
               // to keep IndexedDB/cloud history efficient.
@@ -1454,6 +1472,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       </div>
 
       <p className="vg-footnote">
+        Sustained unusual speed estimates and stationary vehicles amid moving traffic automatically
+        create pending review candidates in Incidents. Crashes, helmets and signal violations
+        cannot be verified with this general vehicle model.
         Speed values are uncalibrated visual estimates, not verified road speeds.
         {storage === 'saving' ? ' Saving locally…' : storage === 'saved' ? ' Local copy retained.' : ''}
       </p>

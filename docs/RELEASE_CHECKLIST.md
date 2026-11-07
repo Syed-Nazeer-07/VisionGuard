@@ -17,7 +17,7 @@ and on the target Windows/Edge computer before promoting the release.
 | YouTube tab | User-approved Edge-tab capture survives focus changes |
 | Capture privacy | Global Stop button ends sharing; webcam releases on page hide |
 | Live session history | Tracks persist across dashboard, history, analytics and reports |
-| Review flags | Flag a track for speed **review**; it appears in Incidents and both report export formats |
+| Review flags | Sustained high-speed estimates and stopped vehicles amid moving traffic automatically create review candidates, alongside manual flags; confirm they appear in Incidents and report exports |
 | Reload persistence | Saved session data survives reload without duplicating IDs |
 | Local video opt-in | Unchecked means original bytes are not retained across reloads |
 | Optional local retention | Checked retains video only within available browser quota |
@@ -58,6 +58,7 @@ auth recovery, YouTube capture, or real-world tracking accuracy are validated.
 
 - Browser object detection is not a certified traffic-enforcement system.
 - Camera calibration is not supplied; screen-derived km/h values are estimates.
+- The automatic candidate rules cover only sustained high optical speed estimates and long stationary vehicles amid moving traffic; they are not confirmed speeding, obstructions or accidents.
 - License-plate OCR, verified automatic speeding/helmet violations, and
   simultaneous multi-camera inference are **future features**, not part of v1.
 - Capturing a YouTube tab requires permission on each new browser session.

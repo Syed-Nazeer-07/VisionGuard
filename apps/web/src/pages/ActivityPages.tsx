@@ -448,7 +448,7 @@ export function ActivityIncidents() {
   };
   return <main className="vg-page">
     <header className="vg-page-header">
-      <div><h1>Incidents</h1><p>Review flags linked to saved video and live sessions</p></div>
+      <div><h1>Incidents</h1><p>Automatically detected review candidates and manually flagged observations</p></div>
       <Link className="vg-secondary" to="/app/reports">Export review flags</Link>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
@@ -456,8 +456,9 @@ export function ActivityIncidents() {
       <div className="vg-section-head"><h2>Flag an observation for review</h2></div>
       <form onSubmit={submitFlag} className="space-y-4 p-5">
         <p className="text-xs leading-5 text-slate-500">
-          A detector observation is not proof of a violation. Speed estimates
-          require camera calibration, a documented speed limit, and human verification.
+          Sustained high speed estimates and unusually stationary vehicles can create
+          automatic review candidates. You can flag other observations manually.
+          These are not verified offences; camera calibration and human review are required.
         </p>
         <div className="grid gap-4 md:grid-cols-2">
           <div>
@@ -518,7 +519,9 @@ export function ActivityIncidents() {
           {incidents.map(({run: item,event}) =>
             <div key={event.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 text-sm">
               <div className="min-w-0">
-                <p className="font-semibold text-slate-800">{title(event.type)}</p>
+                <p className="font-semibold text-slate-800">{title(event.type)}
+                  {event.id.startsWith('auto:') && <span className="ml-2 rounded-md bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-700">Auto-detected · review only</span>}
+                </p>
                 <p className="mt-1 text-xs text-slate-500">{item.sourceName} · Track {event.trackId === null ? 'not specified' : '#' + event.trackId}</p>
                 <p className="mt-1.5 text-xs leading-5 text-slate-600">{event.evidenceNote}</p>
               </div>
@@ -528,6 +531,6 @@ export function ActivityIncidents() {
             </div>)}
         </div>}
     </section>
-    <p className="vg-footnote">Flags and detector estimates are saved per session for review. They do not establish legal violations.</p>
+    <p className="vg-footnote">Automatic candidates are generated from repeated optical observations. All flags need human review and do not establish traffic-law violations or collisions.</p>
   </main>;
 }
