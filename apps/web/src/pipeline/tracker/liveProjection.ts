@@ -19,8 +19,35 @@ export interface LiveTrack {
   classScores?: { bus: number; truck: number };
 }
 
-export const MAX_TRACK_AGE_SEC = 0.55;
-export const MAX_PROJECTION_SEC = 0.35;
+// When the optical pipeline stalls, expire old boxes quickly instead of
+// painting them over unrelated background after a vehicle has departed.
+export const MAX_TRACK_AGE_SEC = 0.22;
+export const MAX_PROJECTION_SEC = 0.14;
+
+/** Shared edge-exit policy for optical updates, predictions and canvas paint.
+ * Do not retain a box once its observed motion is carrying it off-screen. */
+export function hasExitedVideoFrame(
+  track: Pick<LiveTrack, 'x' | 'y' | 'w' | 'h' | 'vx' | 'vy'>,
+  frameWidth: number,
+  frameHeight: number,
+): boolean {
+  const { x, y, w, h, vx, vy } = track;
+  if (![x, y, w, h, vx, vy, frameWidth, frameHeight].every(Number.isFinite) ||
+      w <= 0 || h <= 0 || frameWidth <= 0 || frameHeight <= 0) return true;
+  const left = x - w / 2, top = y - h / 2;
+  const right = x + w / 2, bottom = y + h / 2;
+  const visibleW = Math.max(0, Math.min(right, frameWidth) - Math.max(left, 0));
+  const visibleH = Math.max(0, Math.min(bottom, frameHeight) - Math.max(top, 0));
+  if (x < 0 || x > frameWidth || y < 0 || y > frameHeight ||
+      visibleW * visibleH < w * h * 0.60) return true;
+  // The box may still be mostly visible just as the vehicle reaches an edge.
+  // When the *measured direction* points outwards, stop drawing immediately.
+  const margin = Math.min(8, Math.max(2, Math.min(w, h) * 0.08));
+  return (right >= frameWidth - margin && vx > 8) ||
+    (left <= margin && vx < -8) ||
+    (bottom >= frameHeight - margin && vy > 8) ||
+    (top <= margin && vy < -8);
+}
 
 export function projectLiveTracks(
   tracks: readonly LiveTrack[],
@@ -49,21 +76,9 @@ export function projectLiveTracks(
     const dt = Math.max(0, Math.min(age, MAX_PROJECTION_SEC));
     const cx = track.x + track.vx * dt;
     const cy = track.y + track.vy * dt;
-    const left = cx - track.w / 2;
-    const top = cy - track.h / 2;
-    const right = cx + track.w / 2;
-    const bottom = cy + track.h / 2;
-    const visibleWidth = Math.min(right, frameWidth) - Math.max(left, 0);
-    const visibleHeight = Math.min(bottom, frameHeight) - Math.max(top, 0);
-    if (visibleWidth <= 0 || visibleHeight <= 0) return [];
-    const fractionVisible = (visibleWidth * visibleHeight) / (track.w * track.h);
-    // Do not leave partial vehicle boxes stuck to the frame border.
-    // Require the box center to remain inside the source frame AND at least
-    // 60% of its area to be visible. This also suppresses off-frame ghosts
-    // from stale optical velocity while a vehicle is exiting.
-    if (cx < 0 || cx > frameWidth || cy < 0 || cy > frameHeight ||
-        fractionVisible < 0.60) return [];
-    return [{ ...track, x: cx, y: cy }];
+    const projected = { ...track, x: cx, y: cy };
+    if (hasExitedVideoFrame(projected, frameWidth, frameHeight)) return [];
+    return [projected];
   });
 }
 

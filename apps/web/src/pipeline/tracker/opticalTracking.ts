@@ -1,4 +1,4 @@
-import type { LiveTrack } from './liveProjection';
+import { hasExitedVideoFrame, type LiveTrack } from './liveProjection';
 
 export interface GrayFrame {
   time: number;
@@ -179,7 +179,8 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     const x2 = newX + track.w / 2, y2 = newY + track.h / 2;
     const visibleW = Math.max(0, Math.min(x2, current.sourceWidth) - Math.max(0, x1));
     const visibleH = Math.max(0, Math.min(y2, current.sourceHeight) - Math.max(0, y1));
-    if (visibleW * visibleH < track.w * track.h * .30) continue;
+    // A 30% remnant frequently tracked the road after a vehicle left.
+    if (visibleW * visibleH < track.w * track.h * .60) continue;
 
     const instantaneousX = moveX / dt;
     const instantaneousY = moveY / dt;
@@ -188,10 +189,12 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     if (Math.hypot(instantaneousX, instantaneousY) > maxPhysical) continue;
     const vx = track.vx * .6 + instantaneousX * .4;
     const vy = track.vy * .6 + instantaneousY * .4;
-    output.push({
+    const moved = {
       ...track, x: newX, y: newY,
       vx, vy, motionPxPerSec: Math.hypot(vx, vy)
-    } as T);
+    } as T;
+    if (hasExitedVideoFrame(moved, current.sourceWidth, current.sourceHeight)) continue;
+    output.push(moved);
   }
   return output;
 }

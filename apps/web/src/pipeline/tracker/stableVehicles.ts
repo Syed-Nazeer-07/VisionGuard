@@ -1,4 +1,4 @@
-import type { LiveTrack } from './liveProjection';
+import { hasExitedVideoFrame, type LiveTrack } from './liveProjection';
 import { getIOU } from './matching';
 
 export interface PersistentTrack extends LiveTrack {
@@ -221,8 +221,9 @@ export function updateScreenSpeed(
 
 /**
  * A single failed optical match is NOT evidence that a vehicle disappeared.
- * Hold a tightly bounded prediction for at most 0.33s while visual matching
- * reacquires. After that, hide it. Never reuse a predicted point for speed.
+ * Bridge at most 0.17s (roughly two optical samples). A longer ghost
+ * after the last actual pixel match causes boxes to linger at scene exits.
+ * Never reuse a predicted point for speed or incident detection.
  */
 export function recoverBriefOpticalMisses(
   previous: readonly PersistentTrack[],
@@ -241,21 +242,15 @@ export function recoverBriefOpticalMisses(
   for (const track of previous) {
     if (present.has(track.id)) continue;
     const sinceReliable = mediaTime - (track.lastOpticalAt ?? track.lastDetectedAt);
-    if (sinceReliable < 0 || sinceReliable > .33) continue;
+    if (sinceReliable < 0 || sinceReliable > .17) continue;
     const velocityLimit = Math.max(110, Math.max(track.w, track.h) * 2.5);
     const rawSpeed = Math.hypot(track.vx, track.vy);
     const scale = rawSpeed > velocityLimit ? velocityLimit / rawSpeed : 1;
     const cx = track.x + track.vx * scale * elapsed;
     const cy = track.y + track.vy * scale * elapsed;
-    const left = cx - track.w / 2, top = cy - track.h / 2;
-    const right = cx + track.w / 2, bottom = cy + track.h / 2;
-    const visibleWidth = Math.max(0, Math.min(frameWidth, right) - Math.max(0, left));
-    const visibleHeight = Math.max(0, Math.min(frameHeight, bottom) - Math.max(0, top));
-    // Match display projection: once most of a predicted box has exited the
-    // source image, remove it instead of pinning a ghost to the frame edge.
-    if (cx < 0 || cx > frameWidth || cy < 0 || cy > frameHeight ||
-        visibleWidth * visibleHeight < track.w * track.h * .60) continue;
-    result.push({ ...track, x: cx, y: cy, isPredicted: true });
+    const predicted = { ...track, x: cx, y: cy, isPredicted: true };
+    if (hasExitedVideoFrame(predicted, frameWidth, frameHeight)) continue;
+    result.push(predicted);
   }
   return result;
 }

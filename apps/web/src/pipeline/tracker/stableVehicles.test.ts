@@ -80,6 +80,22 @@ describe('persistent crowded vehicle tracking', () => {
     expect(gone).toHaveLength(0);
   });
 
+  it('expires a box after two missing optical samples even if its old location remains in frame', () => {
+    const old: PersistentTrack = {
+      ...car(100, 120, 13), lastDetectedAt: 2, lastOpticalAt: 2,
+      speedKmh: 30, speedIsEstimate: true
+    };
+    const held = recoverBriefOpticalMisses([old], [], 2, 2.1, 300, 300);
+    expect(held).toHaveLength(1);
+    expect(recoverBriefOpticalMisses(held, [], 2.1, 2.18, 300, 300)).toEqual([]);
+  });
+  it('immediately rejects outward-moving boxes before they stick to the border', () => {
+    const leaving: PersistentTrack = {
+      ...car(272, 120, 18), lastDetectedAt: 3, lastOpticalAt: 3,
+      vx: 120, vy: 0, speedKmh: 30, speedIsEstimate: true
+    };
+    expect(recoverBriefOpticalMisses([leaving], [], 3, 3.01, 300, 300)).toEqual([]);
+  });
   it('drops predicted-only boxes when the next YOLO result also misses', () => {
     const ghost: PersistentTrack = {
       ...car(270, 120, 11), id: 11, lastDetectedAt: 2,

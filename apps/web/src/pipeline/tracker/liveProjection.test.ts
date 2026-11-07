@@ -13,6 +13,15 @@ describe('live playback projected vehicle overlays', () => {
     expect(result[0].x).toBeCloseTo(106);
     expect(result[0].w).toBe(42);
   });
+  it('hides outward-moving vehicles as soon as their boxes reach the edge', () => {
+    const departing = { ...vehicle, x: 179, w: 42, vx: 45 };
+    expect(projectLiveTracks([departing], 2, 2, 200, 100)).toEqual([]);
+    const approaching = { ...departing, x: 166 };
+    expect(projectLiveTracks([approaching], 2, 2, 200, 100)).toHaveLength(1);
+  });
+  it('expires an orphaned overlay within a fraction of a second', () => {
+    expect(projectLiveTracks([vehicle], 2, 2.23, 200, 100)).toEqual([]);
+  });
   it('immediately removes boxes beyond the video edge', () => {
     const leaving = { ...vehicle, x: 203, w: 24, vx: 100 };
     expect(projectLiveTracks([leaving], 2, 2.18, 200, 100)).toEqual([]);
