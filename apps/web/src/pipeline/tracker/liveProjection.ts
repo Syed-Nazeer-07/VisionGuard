@@ -14,6 +14,8 @@ export interface LiveTrack {
   vx: number; // image motion, source px / media-second
   vy: number;
   motionPxPerSec: number | null;
+  /** Strong image evidence of a distinct freight cab/trailer, not just YOLO class confidence. */
+  freightEvidence?: boolean;
 }
 
 export const MAX_TRACK_AGE_SEC = 0.55;
