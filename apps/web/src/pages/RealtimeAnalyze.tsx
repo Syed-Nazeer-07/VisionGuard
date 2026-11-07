@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Activity, AlertTriangle, Camera, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { YouTubeLivePanel } from '../components/analysis/YouTubeLivePanel';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
-import { uploadStorageProvider } from '../services/videoStorage';
+import { storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
+import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
 import { hasAdvancedVideoFrame, isStreamStalled } from '../services/streamRecovery';
 import { useAuthStore } from '../store/auth';
@@ -42,6 +44,7 @@ function readableTime(value: number) {
 type Observation = { time: number; tracks: LiveTrack[] };
 
 export default function RealtimeAnalyze({ active = true }: { active?: boolean }) {
+  const location = useLocation();
   const ownerId = useAuthStore(state => state.user?.id ?? null);
   const activeRunRef = useRef('');
   const currentFileRef = useRef<File | null>(null);
@@ -113,6 +116,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [detectionCount, setDetectionCount] = useState<number | null>(null);
   const [fallbackReason, setFallbackReason] = useState('');
   const [storage, setStorage] = useState<'idle' | 'saving' | 'saved' | 'error' | 'not-saved'>('idle');
+  const [cloudPlaybackActive, setCloudPlaybackActive] = useState(false);
+  const [cloudPlaybackLoading, setCloudPlaybackLoading] = useState(false);
   const [error, setError] = useState('');
 
   const toggleFullscreen = async () => {
@@ -288,6 +293,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     file: Blob, name: string, savedPosition = 0, restoredRunId?: string
   ) => {
     resetTracks();
+    setCloudPlaybackActive(false);
     const accountForRestore = useAuthStore.getState().user?.id;
     if (restoredRunId && accountForRestore) {
       const restored = activityLedger.snapshot(accountForRestore).records
@@ -382,6 +388,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       videoRef.current?.pause();
       stopWebcam();
       resetTracks();
+      setCloudPlaybackActive(false);
       nextStableIdRef.current = 1;
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = null;
@@ -466,6 +473,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       videoRef.current?.pause();
       stopWebcam();
       resetTracks();
+      setCloudPlaybackActive(false);
       nextStableIdRef.current = 1;
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = null;
