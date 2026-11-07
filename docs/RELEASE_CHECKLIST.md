@@ -15,6 +15,8 @@ and on the target Windows/Edge computer before promoting the release.
 | Fullscreen | Fullscreen player includes video **and** overlay; Escape exits |
 | Scene exits | Boxes disappear promptly; quantify lingering frames after annotated exits using [browser QA](BROWSER_TRACKING_EVALUATION.md) |
 | YouTube tab | No URL form; select **Analyze tab** and approve an existing YouTube tab; capture survives focus changes |
+| Tab stalls and resumes | Muted, paused, frozen captures hide stale boxes; old optical IDs and incident streaks reset across long gaps; detection reacquires live vehicles |
+| Extended live capture | At least 30 minutes on Edge/Chrome without growing GPU memory or leaking browser capture permission; verify actual decoded frames and CPU/GPU usage |
 | Capture privacy | Global Stop button ends sharing; webcam releases on page hide |
 | Live session history | Tracks persist across dashboard, history, analytics and reports |
 | Review flags | Sustained high-speed estimates and stopped vehicles amid moving traffic automatically create review candidates, alongside manual flags; confirm they appear in Incidents and report exports |
@@ -24,13 +26,13 @@ and on the target Windows/Edge computer before promoting the release.
 | B2 storage | Explicit upload completes, appears in History, opens via signed GET URL |
 | B2 re-analysis | Archive **Analyze Again** loads video into browser detector; bucket CORS permits reading its frames |
 | Offline and reconnect | Metadata stays local offline and can sync after reconnect |
-| Account switching | Settings, YouTube links and tracked history do not leak between users |
+| Account switching | Account settings, video/capture state and tracked history do not leak between users |
 | Device performance | Sustainable inference speed verified on Surface Laptop 7 / Windows ARM |
 | Report clarity | Estimated speeds never described as verified offences |
 | Cloudflare Workers/Pages | Production build guard, Hugging Face model/CORS, version-matched external ONNX Runtime WASM, security headers and 25 MiB limit validated on deployed HTTPS site |
 | Deployment | HTTPS, secure server-side B2 credentials, RLS, rate limits and backup/recovery policy verified |
 
-Follow the [Cloudflare Pages deployment guide](CLOUDFLARE_PAGES.md) for the precise GitHub, model/R2, OAuth and release settings. Deploying only the frontend does not activate Google OAuth or provision a model.
+Follow the [Cloudflare Workers deployment guide](CLOUDFLARE_PAGES.md) for the precise GitHub, public Hugging Face model, OAuth and release settings. Deploying the frontend does not enable Google OAuth or guarantee model reachability.
 
 ## Connected staging database review (7 November 2026)
 

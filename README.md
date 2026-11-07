@@ -53,7 +53,7 @@ VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime
 
 Play an authorized YouTube video/live stream in another Edge or Chrome tab, then select **Analyze tab** in VisionGuard and share the playing **browser tab** (not Entire Screen or Window). **No YouTube URL needs to be copied or pasted into VisionGuard.** The optional **Open YouTube** shortcut just opens youtube.com; it does not download or analyze a video. Browser permission remains mandatory.
 
-You can optionally keep an already-approved tab capture connected while visiting other VisionGuard pages; a visible **Stop** control remains available. Browser-tab capture may pause or be throttled by the browser and must be reauthorized after a new browser session. Device cameras are released when hidden.
+You can optionally keep an already-approved tab capture connected while visiting other VisionGuard pages; a visible **Stop** control remains available. Browser-tab capture may pause or be throttled by the browser and must be reauthorized after a new browser session. Device cameras are released when hidden. During muted or frozen live capture, stale tracking boxes are hidden rather than presented as current detections; after a lengthy interruption, tracking restarts from new visual evidence.
 
 See the [live analysis guide](docs/LIVE_ANALYSIS.md) for the complete workflow and troubleshooting.
 

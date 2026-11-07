@@ -34,6 +34,16 @@ Chrome/Edge may focus the shared YouTube tab when sharing begins. Returning
 to VisionGuard should not revoke sharing; the app attempts to resume the
 preview if the browser paused it.
 
+**Stall handling:** VisionGuard only draws live vehicle boxes when the
+captured tab/camera has delivered a recent decoded frame. A muted, buffering
+or frozen video no longer displays stale detections as if they were live.
+After a prolonged frame gap or media-clock restart, optical tracks,
+approximate speed estimates and unfinished incident streaks are reset;
+the signed-in analysis session and already-used vehicle IDs remain.
+It may take another YOLO inference to reacquire vehicles once playback
+resumes. The browser can still throttle hidden tabs, and a capture cannot
+continue after its sharing permission is revoked.
+
 ## What is and isn't persistent
 
 - **Keep sharing on other pages:** this preference is saved locally per
@@ -59,7 +69,12 @@ preview if the browser paused it.
 - One camera/video source at a time; no multi-camera recording or grid.
 - Screen-capture availability, frame rate, video decoding, and background
   throttling depend on browser and device. A paused or unavailable
-  YouTube stream may produce no new detections.
+  YouTube stream may produce no new detections. Live inference results
+  need actual decoded frames; VisionGuard cannot bypass hidden-tab
+  throttling, DRM or browser media-capture permissions.
+- The inference worker explicitly releases ONNX output tensors after each
+  decoded frame to reduce GPU memory accumulation in long sessions.
+  This does not replace real-device stability and memory testing.
 - YOLO11s can misidentify vehicles, particularly small motorcycles and
   similar-looking trucks/buses. Browser frame capture doesn't improve
   trained model accuracy by itself.
