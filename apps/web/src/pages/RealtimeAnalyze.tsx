@@ -999,6 +999,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           detectorToStableIdRef.current.clear();
           lastOpticalSampleRef.current = -Infinity;
           lastEstimateSaveAtRef.current = -Infinity;
+          // A rebased media clock may start back at 0. Do not make inference
+          // wait until the previous stream's high timestamp is reached.
+          lastCapturedTimeRef.current = -Infinity;
           workerRef.current?.postMessage({ type: 'reset' });
         }
         if (discontinuity || hasAdvancedVideoFrame(lastDecodedMediaTimeRef.current, mediaTime)) {
