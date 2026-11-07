@@ -45,6 +45,7 @@ const listeners = new Set<() => void>();
 const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const writeTasks = new Map<string, Promise<void>>();
 const cloudTasks = new Map<string, Promise<void>>();
+const lastCloudPush = new Map<string, number>();
 const cloudLoads = new Set<string>();
 const cloudStatus = new Map<string, 'idle' | 'synced' | 'offline'>();
 
@@ -184,10 +185,15 @@ function persist(owner: string) {
     const next = prior.catch(() => {}).then(() => write(owner, records));
     writeTasks.set(owner, next);
     void next.then(() => {
+      // Keep live playback and tracking responsive: do NOT make a network
+      // round-trip after each sampled video frame. Local writes stay fast;
+      // remote sync runs at most every 15s, plus explicit pause/visibility flush.
+      if (Date.now() - (lastCloudPush.get(owner) ?? 0) < 15_000) return;
+      lastCloudPush.set(owner, Date.now());
       const priorCloud = cloudTasks.get(owner) ?? Promise.resolve();
       const cloud = priorCloud.catch(()=>{}).then(() => syncToCloud(owner, getSnapshot(owner).records));
       cloudTasks.set(owner, cloud);
-      return cloud;
+      return cloud.catch(error => { lastCloudPush.set(owner, 0); throw error; });
     }).catch(error => {
       const state = getSnapshot(owner);
       setState(owner, { ...state, error: 'Local or cloud activity save warning: ' + String(error) });
