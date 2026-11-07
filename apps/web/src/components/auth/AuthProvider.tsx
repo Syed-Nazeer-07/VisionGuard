@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo, useCallback } from 'react'
-import type { User, Session } from '@supabase/supabase-js'
+import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore, type Role } from '../../store/auth'
 import { AuthContext, type AuthContextType, useAuth } from '../../context/AuthContext'
@@ -189,7 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // executes under the session lock and can deadlock token refresh/sign-in.
     // Defer profile queries to the next task, and ignore superseded requests.
     let active = true
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, newSession: Session | null) => {
       const epoch = ++authEpochRef.current
       if (event === 'SIGNED_OUT' || !newSession) {
         applyAuthState(null, null, null)
