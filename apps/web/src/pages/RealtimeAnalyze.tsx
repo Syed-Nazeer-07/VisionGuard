@@ -8,6 +8,7 @@ import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
 import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
+import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { hasAdvancedVideoFrame, isStreamStalled } from '../services/streamRecovery';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
@@ -113,6 +114,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [provider, setProvider] = useState('');
   const [inferenceMs, setInferenceMs] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(0);
+  const [liveMaxSpeed, setLiveMaxSpeed] = useState<number | null>(null);
   const [analyzedFrames, setAnalyzedFrames] = useState(0);
   const [detectionCount, setDetectionCount] = useState<number | null>(null);
   const [fallbackReason, setFallbackReason] = useState('');
@@ -1110,6 +1112,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }
         const context = canvas.getContext('2d');
         let visible = 0;
+        const visibleTracks: PersistentTrack[] = [];
         if (context) {
           context.clearRect(0, 0, canvas.width, canvas.height);
           const observation = latestRef.current;
@@ -1136,6 +1139,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               context.lineWidth = 2;
               context.strokeRect(x, y, w, h);
               const stable = track as PersistentTrack;
+              visibleTracks.push(stable);
               const classLabel = stable.className.toUpperCase();
               // Speed is deliberately marked approximate: vehicle width is an
               // assumed reference, not a calibrated road-plane distance.
@@ -1163,6 +1167,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (time - lastUI > 250) {
           lastUI = time;
           setPosition(video.currentTime);
+          const latestSpeed = fastestVisibleEstimate(visibleTracks);
+          setLiveMaxSpeed(previous => previous === latestSpeed ? previous : latestSpeed);
           if (paintCountRef.current !== visible) {
             paintCountRef.current = visible;
             setVisibleCount(visible);
@@ -1442,8 +1448,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="text-xs font-medium text-slate-500">Vehicle speed · estimated km/h</div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">≈ km/h · stationary = 0 km/h</div>
-          <div className="mt-1 text-xs leading-5 text-slate-500">Auto-estimate from vehicle image size and motion. Not measured speed: camera calibration is needed for reliable km/h.</div>
+          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{liveMaxSpeed === null ? '— km/h' : liveMaxSpeed === 0 ? '0 km/h' : '≈' + Math.round(liveMaxSpeed) + ' km/h'}</div>
+          <div className="mt-1 text-xs leading-5 text-slate-500">Fastest visible tracked vehicle. Visual estimate only; camera calibration is needed for reliable road speed.</div>
         </div>
       </div>
 
