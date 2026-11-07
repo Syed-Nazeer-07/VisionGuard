@@ -310,9 +310,9 @@ export function VideoLibrary() {
                         <div className="inline-flex items-center justify-end gap-1.5">
                           {isActivelyAnalyzing ? (
                             <button
-                              onClick={() => navigate(`/app/analyze?video=${encodeURIComponent(video.id)}`)}
+                              onClick={() => setSearchParams({video: video.id})}
                               className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-md text-xs font-semibold transition-colors cursor-pointer shadow-2xs shrink-0"
-                              title={`View live analysis in progress for ${name}`}
+                              title={`View stored video and processing status for ${name}`}
                             >
                               <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" /> In Progress
                             </button>
