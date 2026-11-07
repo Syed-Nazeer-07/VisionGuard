@@ -195,7 +195,7 @@ export function recoverBriefOpticalMisses(
   frameWidth: number,
   frameHeight: number,
 ): PersistentTrack[] {
-  const result = observed.map(track => ({
+  const result: PersistentTrack[] = observed.map(track => ({
     ...track, lastOpticalAt: mediaTime, isPredicted: false
   }));
   const present = new Set(result.map(t => t.id));
