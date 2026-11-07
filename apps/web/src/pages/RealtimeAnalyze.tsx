@@ -755,6 +755,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setFilename('');
     setReadyVideo(false);
     setPlaying(false);
+    setCloudPlaybackActive(false);
     stopWebcam();
     setStreamHealth('idle');
     currentFileRef.current = null;
@@ -869,11 +870,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
     // Never overwrite a saved file's position with a now-closed camera or
     // YouTube tab capture timestamp.
-    if (video && !wasCapturing && ownerId &&
+    if (video && !wasCapturing && !cloudPlaybackActive && ownerId &&
         Number.isFinite(video.currentTime)) {
       void localAnalysisStorage.savePosition(video.currentTime, ownerId).catch(() => {});
     }
-  }, [active, keepTabConnected, ownerId]);
+  }, [active, keepTabConnected, ownerId, cloudPlaybackActive]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -904,7 +905,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           setUrl('');
           setStreamHealth('idle');
           resetTracks();
-        } else if (account) {
+        } else if (account && !!urlRef.current) {
+          // Cloud B2 playback should not overwrite the saved position of a
+          // different video retained locally for this account.
           void localAnalysisStorage.savePosition(video.currentTime, account).catch(() => {});
         }
       }
@@ -1279,8 +1282,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 }}
                 onPause={event => {
                   setPlaying(false);
-                  if (!webcamActive && !tabCaptureActive)
-                    void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId ?? undefined).catch(() => {});
+                  if (!webcamActive && !tabCaptureActive && !cloudPlaybackActive && ownerId)
+                    void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId).catch(() => {});
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
                 onSeeking={resetTracks}
