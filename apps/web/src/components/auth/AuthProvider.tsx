@@ -3,6 +3,7 @@ import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore, type Role } from '../../store/auth'
 import { AuthContext, type AuthContextType, useAuth } from '../../context/AuthContext'
+import { shouldLoadAuthenticatedProfile } from './authSessionEvents'
 
 export { useAuth, AuthContext }
 
@@ -208,9 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         applyAuthState(null, null, null)
         return
       }
-      if (event !== 'INITIAL_SESSION' && event !== 'SIGNED_IN' &&
-          event !== 'TOKEN_REFRESHED' && event !== 'USER_UPDATED' &&
-          event !== 'PASSWORD_RECOVERY') return
+      if (!shouldLoadAuthenticatedProfile(event)) return
       const previous = useAuthStore.getState()
       if (previous.user?.id === newSession.user.id && previous.profile &&
           event !== 'USER_UPDATED') {
