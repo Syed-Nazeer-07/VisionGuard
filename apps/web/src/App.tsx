@@ -10,13 +10,11 @@ import { ForgotPassword } from './pages/auth/ForgotPassword'
 import { ResetPassword } from './pages/auth/ResetPassword'
 
 // Main Pages
-import { ActivityDashboard as Dashboard, ActivityAnalytics as Analytics, ActivityReports as Reports } from './pages/ActivityPages'
-import { Cases } from './pages/Cases'
+import { ActivityDashboard as Dashboard, ActivityAnalytics as Analytics, ActivityReports as Reports, ActivityVideoLibrary, ActivityIncidents } from './pages/ActivityPages'
 import { Users } from './pages/Users'
 import { Config } from './pages/Config'
 import { AuditLogs } from './pages/AuditLogs'
 import Settings from './pages/Settings'
-import { VideoLibrary } from './pages/VideoLibrary'
 import { evidenceQueue } from './pipeline/evidence/queue'
 import { useEffect } from 'react'
 
@@ -76,7 +74,7 @@ function App() {
               <Route path="reports" element={<Reports />} />
               <Route path="settings" element={<Settings />} />
               <Route path="analyze" element={null} />
-              <Route path="videos" element={<VideoLibrary />} />
+              <Route path="videos" element={<ActivityVideoLibrary />} />
               <Route path="video-review" element={<VideoReviewRedirect />} />
               <Route path="history" element={<Navigate to="/app/videos" replace />} />
               <Route path="alerts" element={<Navigate to="/app/cases?tab=incidents" replace />} />
@@ -88,7 +86,7 @@ function App() {
                 <Route path="incidents" element={<IncidentsRedirect />} />
               </Route>
               <Route element={<RequireRole allowedRoles={['Viewer', 'Operator', 'Supervisor', 'Admin']} />}>
-                <Route path="cases" element={<Cases />} />
+                <Route path="cases" element={<ActivityIncidents />} />
               </Route>
 
               <Route element={<RequireRole allowedRoles={['Viewer', 'Operator', 'Supervisor', 'Admin']} />}>
