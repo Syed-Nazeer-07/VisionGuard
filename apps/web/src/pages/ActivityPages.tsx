@@ -7,7 +7,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuthStore } from '../store/auth';
-import { activityLedger, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
+import { activityLedger, countRepeatedTracks, isRepeatedVehicleTrack, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
 import { csvCell } from '../services/csvExport';
 import { groupIncidentRecords, incidentLabel, incidentReviewLabel, manualIncidentEvidence } from '../services/incidentPresentation';
 
@@ -54,7 +54,7 @@ function RecentRuns({ records }: { records: AnalysisRecord[] }) {
             <div className="mt-1 text-xs text-slate-500">{niceDate(run.updatedAt)} · {run.sourceType === 'live-stream' ? 'Live source' : 'Video'}</div>
           </div>
           <div className="text-right">
-            <div className="font-semibold tabular-nums text-slate-900">{Object.keys(run.vehicles).length}</div>
+            <div className="font-semibold tabular-nums text-slate-900">{countRepeatedTracks(run)}</div>
             <div className="text-[11px] text-slate-500">vehicles</div>
           </div>
         </div>)}
@@ -71,7 +71,8 @@ export function ActivityDashboard() {
     </header>
     {error && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{error}</p>}
     <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <Stat label="Unique tracked vehicles" number={stats.vehicles} note="Across recorded sessions"/>
+      <Stat label="Repeated vehicle tracks" number={stats.vehicles}
+        note={stats.transientTrackCandidates + ' brief/noisy candidates excluded'}/>
       <Stat label="Analysis sessions" number={stats.runs} note="Videos and live sources"/>
       <Stat label="Inference frames" number={stats.analyzedFrames} note="Completed detector observations"/>
       <Stat label="Review flags" number={stats.violations}
@@ -100,7 +101,7 @@ export function ActivityDashboard() {
           </div>}
       </section>
     </div>
-    <p className="vg-footnote">Figures reflect the detector's saved observations; estimated speeds are not verified offences.</p>
+    <p className="vg-footnote">Counts exclude fleeting track IDs but can still include duplicates after occlusion. Speed readings are uncalibrated optical proxies.</p>
   </main>;
 }
 
@@ -139,7 +140,7 @@ export function ActivityAnalytics() {
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     <div className="mb-5 grid gap-3 sm:grid-cols-3">
-      <Stat label="Unique vehicles" number={counts.vehicles} note="Distinct tracks per session"/>
+      <Stat label="Repeated tracks" number={counts.vehicles} note="Observed on multiple frames"/>
       <Stat label="Peak simultaneous tracks" number={counts.maximumVisible} note="Maximum detected in one frame"/>
       <Stat label="Inference frames" number={counts.analyzedFrames} note="Completed observations"/>
     </div>
@@ -170,21 +171,22 @@ export function ActivityAnalytics() {
                   <p className="truncate font-medium text-slate-800">{run.sourceName}</p>
                   <p className="mt-1 text-xs text-slate-500">{niceDate(run.createdAt)}</p>
                 </div>
-                <span className="shrink-0 font-semibold tabular-nums text-slate-800">{Object.keys(run.vehicles).length}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-slate-800">{countRepeatedTracks(run)}</span>
               </div>)}
           </div> : <p className="vg-empty-row">No sessions in the selected period.</p>}
       </section>
     </div>
-    <p className="vg-footnote">These are detector observations. Estimated speeds are not included in confirmed violation totals.</p>
+    <p className="vg-footnote">Repeated track IDs exclude brief detections, but ID switches may still count one vehicle twice. No physical speed is calibrated.</p>
   </main>;
 }
 
 function exportCSV(records: AnalysisRecord[]) {
-  const columns = ['Session','Source','Date','Track ID','Vehicle class','Confidence','First seen (s)','Last seen (s)','Estimated km/h'];
+  const columns = ['Session','Source','Date','Track ID','Vehicle class','Confidence','First seen (s)','Last seen (s)','Estimated km/h (uncalibrated)','Repeated track'];
   const rows = records.flatMap(run => Object.values(run.vehicles).map(t => [
     run.id,run.sourceName,new Date(run.createdAt).toISOString(),t.id,t.type,
     t.confidence.toFixed(3),t.firstSeenAt.toFixed(2),t.lastSeenAt.toFixed(2),
-    t.estimatedSpeedKmh === null ? '' : t.estimatedSpeedKmh.toFixed(1)
+    t.estimatedSpeedKmh === null ? '' : t.estimatedSpeedKmh.toFixed(1),
+    isRepeatedVehicleTrack(t) ? 'yes' : 'no'
   ]));
   const csv = '\uFEFF'+[columns,...rows].map(row=>row.map(csvCell).join(',')).join('\r\n');
   const link = document.createElement('a');
@@ -198,8 +200,8 @@ function exportPDF(records: AnalysisRecord[]) {
   pdf.setFont('helvetica','bold');pdf.setFontSize(18);pdf.text('VisionGuard | Traffic activity',14,20);
   pdf.setFont('helvetica','normal');pdf.setFontSize(10);
   pdf.text('Exported '+new Date().toLocaleString(),14,29);
-  pdf.text('Local device activity. Speeds are approximate and not enforcement evidence.',14,36);
-  pdf.text('Sessions: '+data.runs+'  |  Tracked vehicles: '+data.vehicles+'  |  Review flags: '+data.violations,14,45);
+  pdf.text('Optical speed proxies are uncalibrated, NOT verified road speeds.',14,36);
+  pdf.text('Sessions: '+data.runs+'  |  Repeated tracks: '+data.vehicles+'  |  Review flags: '+data.violations,14,45);
   const rows = records.flatMap(run=>Object.values(run.vehicles).map(v=>[
     run.sourceName.slice(0,32),String(v.id),v.type,
     String(Math.round(v.confidence*100))+'%',
@@ -263,7 +265,7 @@ export function ActivityReports() {
         </select>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <Stat label="Sessions" number={totals.runs} note="Included in report"/>
-          <Stat label="Unique vehicles" number={totals.vehicles} note="Tracked objects"/>
+          <Stat label="Repeated tracks" number={totals.vehicles} note="Raw CSV includes brief candidates"/>
           <Stat label="Review flags" number={totals.violations}
             note={totals.pendingReviews + ' pending · ' +
               (totals.reviewedFlags + totals.dismissedFlags) + ' handled'}/>
@@ -395,7 +397,7 @@ export function ActivityVideoLibrary() {
                   <div className="mt-1 text-xs text-slate-500">{niceDate(run.createdAt)} · {run.sourceType==='live-stream'?'Live source':'Video'}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-semibold tabular-nums text-slate-800">{Object.keys(run.vehicles).length}</div>
+                  <div className="font-semibold tabular-nums text-slate-800">{countRepeatedTracks(run)}</div>
                   <div className="text-[11px] text-slate-500">vehicles</div>
                 </div>
               </div>)}

@@ -518,13 +518,28 @@ export function useActivityLedger(ownerId: string | null | undefined): ActivityS
   );
 }
 
+/** Repeated track IDs are a more conservative count than raw one-frame
+ * detections. They are NOT verified physical-vehicle identities.
+ */
+export function isRepeatedVehicleTrack(track: VehicleRecord): boolean {
+  return Number.isSafeInteger(track.id) && track.id > 0 &&
+    Number.isFinite(track.confidence) && track.confidence >= 0.55 &&
+    Number.isFinite(track.firstSeenAt) && Number.isFinite(track.lastSeenAt) &&
+    Number.isSafeInteger(track.observations) && track.observations >= 2 &&
+    track.lastSeenAt - track.firstSeenAt >= 0.18;
+}
+export function countRepeatedTracks(run: AnalysisRecord): number {
+  return Object.values(run.vehicles).filter(isRepeatedVehicleTrack).length;
+}
 export function summarizeActivity(records: readonly AnalysisRecord[]) {
-  const vehicles = records.flatMap(run => Object.values(run.vehicles));
+  const candidates = records.flatMap(run => Object.values(run.vehicles));
+  const vehicles = candidates.filter(isRepeatedVehicleTrack);
   const distribution: Record<string, number> = {};
   for (const v of vehicles) distribution[v.type] = (distribution[v.type] ?? 0) + 1;
   return {
     runs: records.length,
     vehicles: vehicles.length,
+    transientTrackCandidates: candidates.length - vehicles.length,
     analyzedFrames: records.reduce((sum,r) => sum + r.analyzedFrames, 0),
     maximumVisible: records.reduce((max,r) => Math.max(max, r.maximumVisibleVehicles), 0),
     violations: records.reduce((sum,r) => sum + r.violations.length, 0),

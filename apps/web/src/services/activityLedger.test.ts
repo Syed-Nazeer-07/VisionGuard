@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeIncidentReviewStatus, clearResolvedCloudWarning, mergeEstimatedSpeeds, nextActivityRevision, shouldRefreshCloudOnFocus, summarizeActivity, type AnalysisRecord } from './activityLedger';
+import { changeIncidentReviewStatus, clearResolvedCloudWarning, countRepeatedTracks, isRepeatedVehicleTrack, mergeEstimatedSpeeds, nextActivityRevision, shouldRefreshCloudOnFocus, summarizeActivity, type AnalysisRecord } from './activityLedger';
 
 function record(id: string, vehicles: Record<string, { id:number; type:string;confidence:number;firstSeenAt:number;lastSeenAt:number;observations:number;estimatedSpeedKmh:number|null }>): AnalysisRecord {
   return {
@@ -136,5 +136,28 @@ describe('cloud revision monotonicity', () => {
   });
   it('keeps real clock time if later than current revision', () => {
     expect(nextActivityRevision(1000, 1100)).toBe(1100);
+  });
+});
+
+describe('conservative vehicle counts', () => {
+  it('excludes one-frame detector noise without deleting its history', () => {
+    const run = record('test', {
+      '1': { ...a, observations:40,lastSeenAt:12 },
+      '2': { ...a,id:2,observations:1,firstSeenAt:3,lastSeenAt:3 },
+      '3': { ...a,id:3,observations:2,firstSeenAt:6,lastSeenAt:6.05 }
+    });
+    expect(summarizeActivity([run])).toMatchObject({
+      vehicles:1,transientTrackCandidates:2
+    });
+    expect(countRepeatedTracks(run)).toBe(1);
+    expect(Object.keys(run.vehicles)).toHaveLength(3);
+  });
+  it('requires repeated, coherent detections before counting a track', () => {
+    expect(isRepeatedVehicleTrack({...a,observations:2,firstSeenAt:3,lastSeenAt:3.3})).toBe(true);
+    expect(isRepeatedVehicleTrack({...a,observations:2,firstSeenAt:3,lastSeenAt:3.01})).toBe(false);
+    expect(isRepeatedVehicleTrack({...a,confidence:NaN})).toBe(false);
+  });
+  it('preserves per-session counts without claiming global reidentification', () => {
+    expect(summarizeActivity([record('one',{'1':a}),record('two',{'1':a})]).vehicles).toBe(2);
   });
 });

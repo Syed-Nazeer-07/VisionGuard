@@ -1216,8 +1216,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               // Speed is deliberately marked approximate: vehicle width is an
               // assumed reference, not a calibrated road-plane distance.
               const speed = stable.speedKmh === null
-                ? '— km/h'
-                : stable.speedKmh === 0 ? '0 km/h' : '≈' + Math.round(stable.speedKmh) + ' km/h';
+                ? '—'
+                : stable.speedKmh === 0 ? '≈0 km/h*' : '≈' + Math.round(stable.speedKmh) + ' km/h*';
               const label = '#' + stable.id + ' ' + classLabel + '  ' + speed;
               context.font = '600 11px system-ui,sans-serif';
               const labelW = context.measureText(label).width + 12;
@@ -1538,9 +1538,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           {provider === 'wasm' && fallbackReason && <div className="mt-1 text-[11px] leading-4 text-amber-700" title={fallbackReason}>WebGPU unavailable; using slower CPU/WASM</div>}
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-xs font-medium text-slate-500">Vehicle speed · estimated km/h</div>
+          <div className="text-xs font-medium text-slate-500">Uncalibrated speed proxy · km/h*</div>
           <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{liveMaxSpeed === null ? '— km/h' : liveMaxSpeed === 0 ? '0 km/h' : '≈' + Math.round(liveMaxSpeed) + ' km/h'}</div>
-          <div className="mt-1 text-xs leading-5 text-slate-500">Fastest visible tracked vehicle. Visual estimate only; camera calibration is needed for reliable road speed.</div>
+          <div className="mt-1 text-xs leading-5 text-slate-500">Fastest visible optical estimate. *Not a measured road speed; camera/road calibration is required.</div>
         </div>
       </div>
 
