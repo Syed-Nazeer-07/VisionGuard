@@ -8,7 +8,9 @@
       "truck",
       "bus",
       "motorcycle"
-    ]
+    ],
+    "human_verified": false,
+    "annotation_origin": "automatic_model_pseudo_labels"
   },
   "hardware_info": {
     "provider": "DmlExecutionProvider",
@@ -71,7 +73,7 @@
               "tp": 3,
               "fp": 0,
               "fn": 7,
-              "precision": 1.0,
+              "precision": 1,
               "recall": 0.3,
               "f1": 0.4615,
               "mean_iou": 0.9077
@@ -82,9 +84,9 @@
               "tp": 0,
               "fp": 12,
               "fn": 14,
-              "precision": 0.0,
-              "recall": 0.0,
-              "f1": 0.0
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
             },
             "medium": {
               "tp": 725,
@@ -181,7 +183,7 @@
               "tp": 3,
               "fp": 0,
               "fn": 7,
-              "precision": 1.0,
+              "precision": 1,
               "recall": 0.3,
               "f1": 0.4615,
               "mean_iou": 0.9077
@@ -192,9 +194,9 @@
               "tp": 0,
               "fp": 12,
               "fn": 14,
-              "precision": 0.0,
-              "recall": 0.0,
-              "f1": 0.0
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
             },
             "medium": {
               "tp": 713,
@@ -376,7 +378,7 @@
       "name": "Conf 0.20, IoU 0.55 (Relaxed NMS)",
       "conf": 0.2,
       "iou_th": 0.55,
-      "fps": 17.0,
+      "fps": 17,
       "iou_50": {
         "tp": 1121,
         "fp": 454,
@@ -453,7 +455,7 @@
               "tp": 5,
               "fp": 0,
               "fn": 5,
-              "precision": 1.0,
+              "precision": 1,
               "recall": 0.5,
               "f1": 0.6667,
               "mean_iou": 0.8242
@@ -464,9 +466,9 @@
               "tp": 0,
               "fp": 13,
               "fn": 14,
-              "precision": 0.0,
-              "recall": 0.0,
-              "f1": 0.0
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
             },
             "medium": {
               "tp": 740,
@@ -574,9 +576,9 @@
               "tp": 0,
               "fp": 13,
               "fn": 14,
-              "precision": 0.0,
-              "recall": 0.0,
-              "f1": 0.0
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
             },
             "medium": {
               "tp": 721,

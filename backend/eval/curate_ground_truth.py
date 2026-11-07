@@ -1,11 +1,14 @@
 """
-VisionGuard Ground-Truth Curation Pipeline
-Builds verified ground-truth annotations across the 119 sampled frames:
+VisionGuard AUTOMATED PSEUDO-LABEL Curation Pipeline
+Produces detector-generated proposals, NOT independently human-verified
+ground truth. Scores measured against these labels are pseudo-label
+agreement only and are not a valid estimate of real detection accuracy.
+Historically the output was mistakenly labelled verified: true.
 1. Multi-scale high-resolution tiled inspection (resolving small/distant vehicles on the highway horizon)
 2. Temporal forward/backward trajectory verification across adjacent video frames to confirm physical vehicle presence
 3. Rigorous traffic class filtering and vehicle size verification (car, truck, bus, motorcycle)
-4. Weighted Box Fusion for sub-pixel boundary precision
-5. Saves clean ground truth in backend/eval/dataset/ground_truth.json
+4. Weighted Box Fusion for proposal refinement
+5. Saves algorithm-generated pseudo-labels in backend/eval/dataset/ground_truth.json
 """
 
 import json
@@ -184,11 +187,13 @@ def run_curation():
         meta = json.load(f)
 
     samples = meta.get("samples", [])
-    print(f"Curating ground truth for {len(samples)} frames...")
+    print(f"Generating automatic pseudo-labels for {len(samples)} frames (NOT human verified)...")
 
     det = YOLODetector()
     gt_data: Dict[str, Any] = {
         "version": "1.0",
+        "annotation_origin": "automatic_model_pseudo_labels",
+        "human_verified": False,
         "dataset_name": "VisionGuard-Highway-119",
         "source_video": "assets/car-detection.mp4",
         "total_frames": len(samples),
@@ -221,7 +226,7 @@ def run_curation():
                 "box": b["box"],
                 "class_name": c_name,
                 "score": b["score"],
-                "verified": True
+                "verified": False
             })
 
         total_vehicles += len(frame_boxes)
@@ -233,7 +238,7 @@ def run_curation():
             "width": sample["width"],
             "height": sample["height"],
             "tags": sample.get("tags", []),
-            "verified": True,
+            "verified": False,
             "boxes": frame_boxes
         }
 
@@ -243,7 +248,7 @@ def run_curation():
     with open(GROUND_TRUTH_PATH, "w", encoding="utf-8") as f:
         json.dump(gt_data, f, indent=2)
 
-    print(f"\nGround truth curation complete!")
+    print(f"\nAutomatic pseudo-label generation complete (NOT an accuracy benchmark)!")
     print(f"Total frames: {len(samples)}")
     print(f"Total curated vehicles: {total_vehicles} (avg {total_vehicles/len(samples):.1f} per frame)")
     print(f"Class breakdown: {class_counts}")

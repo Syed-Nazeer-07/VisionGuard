@@ -1,6 +1,8 @@
 """
 VisionGuard Detection Evaluation & Benchmark Suite
-Executes comprehensive evaluation against the 119-frame ground-truth dataset:
+Reports agreement against a 119-frame detector-generated PSEUDO-LABEL set.
+These are not independent human labels, so precision/recall do NOT measure
+real-world detector accuracy. Do not use this report to claim YOLO11s accuracy.
 1. Baseline Production Evaluation (yolo11n.onnx @ 640x640, conf=0.20, iou=0.45)
 2. Threshold & NMS Parameter Exploration (conf in [0.15, 0.20, 0.25, 0.30], iou in [0.35, 0.45, 0.55])
 3. Class-Specific NMS vs Class-Agnostic NMS Comparison
@@ -134,7 +136,9 @@ def main():
     ]
     total_frames = len(gt_dict)
     total_gt_boxes = sum(len(b) for b in gt_dict.values())
-    print(f"Loaded ground truth: {total_frames} frames, {total_gt_boxes} vehicle annotations.")
+    print(f"Loaded pseudo-label set: {total_frames} frames, {total_gt_boxes} automatic annotations.")
+    if not full_gt_data.get("human_verified", False):
+        print("WARNING: No independent human annotation. Precision/recall are pseudo-label agreement, NOT detector accuracy.")
 
     evaluator = DetectionEvaluator(iou_thresholds=[0.50, 0.75], target_classes=TARGET_CLASSES)
     detector = YOLODetector()
@@ -211,7 +215,9 @@ def main():
         "dataset_info": {
             "total_frames": total_frames,
             "total_annotations": total_gt_boxes,
-            "classes": TARGET_CLASSES
+            "classes": TARGET_CLASSES,
+            "human_verified": bool(full_gt_data.get("human_verified", False)),
+            "annotation_origin": full_gt_data.get("annotation_origin", "legacy_automatic_pseudo_labels")
         },
         "hardware_info": {
             "provider": detector.active_provider,
@@ -246,11 +252,17 @@ def generate_markdown_report(res: Dict[str, Any]):
     h_m50 = res["horizon_enhanced"]["evaluation"]["metrics"]["iou_50"]
     h_perf = res["horizon_enhanced"]["performance"]
 
-    md = f"""# VisionGuard Phase 2: Vehicle Detection Accuracy & Quality Benchmark Report
+    md = f"""# VisionGuard Phase 2: Historical Pseudo-Label Agreement Report
+
+> **NOT independently human-annotated.** Pseudo-labels were generated
+> automatically by a detector and heuristics, including weighted box fusion.
+> Reported precision, recall and F1 measure agreement with these proposals,
+> **not validated traffic detection accuracy**. This historical YOLO11n
+> Python benchmark does not measure browser YOLO11s performance.
 
 Generated: {res['timestamp']}
 Execution Provider: `{res['hardware_info']['provider']}`
-Dataset: **{res['dataset_info']['total_frames']} frames**, **{res['dataset_info']['total_annotations']} verified vehicle annotations** across `assets/car-detection.mp4`.
+Dataset: **{res['dataset_info']['total_frames']} frames**, **{res['dataset_info']['total_annotations']} automatically generated vehicle pseudo-labels** across `assets/car-detection.mp4`.
 
 ---
 

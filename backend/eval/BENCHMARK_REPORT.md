@@ -1,14 +1,24 @@
-# VisionGuard Phase 2: Vehicle Detection Accuracy & Quality Benchmark Report
+# VisionGuard Phase 2: Historical Pseudo-Label Agreement Report
+
+> **Important provenance correction (8 November 2026): NOT ground-truth
+> accuracy.** The 1,787 labels were generated automatically using a YOLO
+> detector, image crops, weighted-box fusion and heuristics in
+> [curate_ground_truth.py](curate_ground_truth.py). The earlier
+> "verified" flag did **not** mean a human independently annotated them.
+> Accordingly, the percentages below measure **agreement with model-generated
+> pseudo-labels**, not independently validated precision/recall.
+> This is also **YOLO11n in the Python backend**, not the deployed
+> browser YOLO11s system. Do not cite these as real-world model accuracy.
 
 Generated: 2026-10-13 09:12:27
 Execution Provider: `DmlExecutionProvider`
-Dataset: **119 frames**, **1787 verified vehicle annotations** across `assets/car-detection.mp4`.
+Dataset: **119 frames**, **1787 automatically generated pseudo-label annotations** across `assets/car-detection.mp4`.
 
 ---
 
 ## 1. Production Baseline Performance (YOLO11n @ 640x640, Conf 0.20, IoU 0.45)
 
-### Overall Detection Accuracy
+### Overall Agreement with Pseudo-Labels (not measured detection accuracy)
 | Metric | IoU @ 0.50 (Standard) | IoU @ 0.75 (Strict) |
 | :--- | :---: | :---: |
 | **Precision** | **72.15%** | **71.05%** |
