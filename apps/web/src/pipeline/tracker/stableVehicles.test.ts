@@ -102,4 +102,24 @@ describe('persistent crowded vehicle tracking', () => {
     expect(merged.tracks[0].h).toBeLessThan(88);
   });
 
+  it('allows strong freight-cab evidence to correct an outdated BUS label', () => {
+    const before: PersistentTrack = {
+      ...car(100, 120, 5), id: 5, className: 'bus',
+      classVotes: { bus: 3, truck: .2 }, lastDetectedAt: 1,
+      speedKmh: null, speedIsEstimate: true
+    };
+    const corrected = reconcileVehicles(
+      [before], [{ ...car(101, 120, 88), className: 'truck', freightEvidence: true }],
+      2, 6
+    );
+    expect(corrected.tracks).toHaveLength(1);
+    expect(corrected.tracks[0].id).toBe(5);
+    expect(corrected.tracks[0].className).toBe('truck');
+    const genuineBus = reconcileVehicles(
+      [{ ...before, classVotes: { bus: 3 } }], [{ ...car(101, 120, 88), className: 'bus' }],
+      2, 6
+    );
+    expect(genuineBus.tracks[0].className).toBe('bus');
+  });
+
 });
