@@ -1158,6 +1158,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         const context = canvas.getContext('2d');
         let visible = 0;
         const visibleTracks: PersistentTrack[] = [];
+        let qaTracks: LiveTrack[] = [];
         if (context) {
           context.clearRect(0, 0, canvas.width, canvas.height);
           const observation = latestRef.current;
@@ -1168,11 +1169,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const offsetX = (width - frameWidth * fit) / 2;
             const offsetY = (height - frameHeight * fit) / 2;
             const tracks = projectLiveTracks(observation.tracks, observation.time, video.currentTime, frameWidth, frameHeight);
-            if (qualityEnabledRef.current && currentFileRef.current &&
-                !video.paused && !video.ended && !video.seeking) {
-              appendQualityFrame(qualityFramesRef.current, video.currentTime,
-                frameWidth, frameHeight, tracks);
-            }
+            qaTracks = tracks;
             context.save();
             context.scale(dpr, dpr);
             context.beginPath();
@@ -1213,6 +1210,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             }
             context.restore();
           }
+        }
+        // Include empty video frames as well as tracked ones: these are vital
+        // for measuring false positives and ghost boxes after scene exits.
+        if (qualityEnabledRef.current && currentFileRef.current && readyRef.current &&
+            video.videoWidth > 0 && video.videoHeight > 0 &&
+            !video.paused && !video.ended && !video.seeking) {
+          appendQualityFrame(qualityFramesRef.current, video.currentTime,
+            video.videoWidth, video.videoHeight, qaTracks);
         }
         if (time - lastUI > 250) {
           lastUI = time;
