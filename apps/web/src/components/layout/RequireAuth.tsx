@@ -6,7 +6,6 @@ import { Loader2, RefreshCw } from 'lucide-react'
 export function RequireAuth() {
   const session = useAuthStore(state => state.session)
   const initialized = useAuthStore(state => state.initialized)
-  const setInitialized = useAuthStore(state => state.setInitialized)
   const location = useLocation()
   const [isStalled, setIsStalled] = useState(false)
 
@@ -30,11 +29,13 @@ export function RequireAuth() {
             <span>Taking longer than expected?</span>
             <button
               onClick={() => {
-                setInitialized(true)
+                // Reloading retries real Supabase session restoration. Marking
+                // initialized=true would incorrectly bypass verification.
+                window.location.reload()
               }}
               className="text-indigo-600 hover:text-indigo-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
             >
-              <RefreshCw className="w-3 h-3" /> Retry
+              <RefreshCw className="w-3 h-3" /> Reload
             </button>
             <span className="text-slate-300">·</span>
             <Link
