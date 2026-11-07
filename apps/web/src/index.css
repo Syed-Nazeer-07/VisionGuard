@@ -57,3 +57,19 @@ video::-moz-media-controls-fullscreen-button { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+/* Keep the video AND its tracking canvas together in browser fullscreen. */
+.vg-player-frame:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: none;
+  aspect-ratio: auto;
+  background: #080e20;
+}
+.vg-player-frame:fullscreen video,
+.vg-player-frame:fullscreen canvas {
+  width: 100%;
+  height: 100%;
+}
+.vg-player-frame:fullscreen video { object-fit: contain; }
