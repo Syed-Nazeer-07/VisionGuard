@@ -88,7 +88,13 @@ export function reconcileVehicles(
     const oldVotes = before.classVotes ?? { [before.className]: before.confidence * 2 };
     const votes = Object.fromEntries(Object.entries(oldVotes).map(([key, value]) => [key, value * .84]));
     votes[after.className] = (votes[after.className] ?? 0) + after.confidence;
-    const label = Object.entries(votes).sort((a, b) => b[1] - a[1])[0][0];
+    if (after.freightEvidence) {
+      // Optical and model voting must not undo a strong visible truck-cab
+      // correction and leave an obviously freight-bearing vehicle as BUS.
+      votes.truck = Math.max(votes.truck ?? 0, (votes.bus ?? 0) + after.confidence * 1.7);
+    }
+    const label = after.freightEvidence ? 'truck' :
+      Object.entries(votes).sort((a, b) => b[1] - a[1])[0][0];
     assigned.push({
       ...after,
       id: before.id,
