@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Camera, Film, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
+import { Activity, AlertTriangle, Camera, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { YouTubeLivePanel } from '../components/analysis/YouTubeLivePanel';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
@@ -67,6 +67,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [tabCaptureStarting, setTabCaptureStarting] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const urlRef = useRef<string | null>(null);
@@ -112,6 +114,30 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [fallbackReason, setFallbackReason] = useState('');
   const [storage, setStorage] = useState<'idle' | 'saving' | 'saved' | 'error' | 'not-saved'>('idle');
   const [error, setError] = useState('');
+
+  const toggleFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else if (playerRef.current) {
+        if (!document.fullscreenEnabled || !playerRef.current.requestFullscreen) {
+          setError('Fullscreen is unavailable in this browser. Open VisionGuard directly in Edge or Chrome, outside an embedded preview.');
+          return;
+        }
+        // Fullscreen the composite player, NEVER just <video>; otherwise
+        // the native fullscreen control hides all vehicle-box overlays.
+        await playerRef.current.requestFullscreen();
+      }
+    } catch (error) {
+      setError('Could not enter fullscreen: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(document.fullscreenElement === playerRef.current);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
 
   const clearInFlight = useCallback(() => {
     if (inFlightTimeoutRef.current !== null) clearTimeout(inFlightTimeoutRef.current);
@@ -1139,7 +1165,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       </div>}
 
       <section className="vg-panel overflow-hidden">
-        <div className="relative aspect-video w-full overflow-hidden bg-[#080e20]">
+        <div ref={playerRef} className="vg-player-frame relative aspect-video w-full overflow-hidden bg-[#080e20]">
           {url ? (
             <>
               <video key={tabCaptureActive ? 'shared-browser-tab' : webcamActive ? 'browser-camera' : 'uploaded-file'}
@@ -1222,6 +1248,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                     detector === 'error' ? 'Detector unavailable' : 'Detector starting'}
                 </span>
               </div>
+              <button type="button" onClick={() => void toggleFullscreen()}
+                title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen with tracking boxes'}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen with detections'}
+                className="absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-slate-950/75 text-white shadow-sm transition-colors hover:bg-slate-900/95">
+                {isFullscreen ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}
+              </button>
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
@@ -1244,6 +1276,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <button type="button" onClick={() => void toggleFullscreen()}
+                className="vg-secondary" aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
+                {isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
+                {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+              </button>
               {detector === 'error' && <button type="button" onClick={startDetector}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
                 <RefreshCw size={14} /> Retry detector
