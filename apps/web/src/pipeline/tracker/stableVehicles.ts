@@ -47,7 +47,8 @@ export function reconcileVehicles(
   candidates: readonly LiveTrack[],
   mediaTime: number,
   nextId: number,
-): { tracks: PersistentTrack[]; nextId: number } {
+  knownSourceIds: ReadonlyMap<number, number> = new Map(),
+): { tracks: PersistentTrack[]; nextId: number; sourceAssignments: Map<number, number> } {
   const viable = candidates.filter(finiteTrack);
   const options: { previous: number; current: number; score: number }[] = [];
   existing.forEach((old, previous) => {
@@ -60,12 +61,14 @@ export function reconcileVehicles(
   const usedOld = new Set<number>();
   const usedNew = new Set<number>();
   const assigned: PersistentTrack[] = [];
+  const sourceAssignments = new Map<number, number>();
   for (const { previous, current } of options) {
     if (usedOld.has(previous) || usedNew.has(current)) continue;
     const before = existing[previous];
     const after = viable[current];
     usedOld.add(previous);
     usedNew.add(current);
+    sourceAssignments.set(after.id, before.id);
     // A gradual correction avoids the huge visual leap when YOLO finally
     // finishes the frame that optical flow has already advanced through.
     const correction = .55;
@@ -97,9 +100,16 @@ export function reconcileVehicles(
     // Avoid duplicated boxes for the same vehicle.
     if (assigned.some(t => classFamily(t.className) === classFamily(candidate.className) &&
       getIOU(t, candidate) > .4)) return;
+    // If optical tracking temporarily lost this car, reuse the ID that the
+    // persistent detector assigned it earlier rather than creating a new tag.
+    const remembered = knownSourceIds.get(candidate.id);
+    const inUse = new Set(assigned.map(track => track.id));
+    const persistentId = remembered !== undefined && !inUse.has(remembered)
+      ? remembered : nextId++;
+    sourceAssignments.set(candidate.id, persistentId);
     assigned.push({
       ...candidate,
-      id: nextId++,
+      id: persistentId,
       speedKmh: null,
       speedIsEstimate: true,
       classVotes: { [candidate.className]: candidate.confidence * 2 },
@@ -109,12 +119,13 @@ export function reconcileVehicles(
   // Keep a missed YOLO track only if optical tracking *still* sees it.
   // Drop it quickly after repeated detector misses or overlap with new boxes.
   existing.forEach((old, index) => {
-    if (usedOld.has(index) || mediaTime - old.lastDetectedAt > 1.7) return;
+    if (usedOld.has(index) || mediaTime - old.lastDetectedAt > 1.7 ||
+        assigned.some(track => track.id === old.id)) return;
     if (assigned.some(t => classFamily(t.className) === classFamily(old.className) &&
       getIOU(t, old) > .45)) return;
     assigned.push(old);
   });
-  return { tracks: assigned, nextId };
+  return { tracks: assigned, nextId, sourceAssignments };
 }
 
 /**
