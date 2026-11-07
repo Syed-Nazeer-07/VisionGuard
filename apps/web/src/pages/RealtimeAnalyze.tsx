@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Camera, Film, Play, RefreshCw, Radio, Upload, X } from 'lucide-react';
+import { Activity, AlertTriangle, Camera, Film, MonitorPlay, Play, RefreshCw, Radio, Upload, X } from 'lucide-react';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { uploadStorageProvider } from '../services/videoStorage';
@@ -32,6 +32,7 @@ type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnect
 const MAX_STREAM_RETRIES = 3;
 const STREAM_STALL_MS = 15_000;
 const BROWSER_CAMERA_SOURCE = 'visionguard:browser-camera';
+const BROWSER_TAB_SOURCE = 'visionguard:shared-browser-tab';
 
 function readableTime(value: number) {
   const seconds = Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
@@ -67,6 +68,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [streamRetries, setStreamRetries] = useState(0);
   const webcamRef = useRef<MediaStream | null>(null);
   const [webcamActive, setWebcamActive] = useState(false);
+  const [tabCaptureActive, setTabCaptureActive] = useState(false);
+  const [tabCaptureStarting, setTabCaptureStarting] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
   const [showStreamForm, setShowStreamForm] = useState(false);
   const [streamLabel, setStreamLabel] = useState('');
@@ -301,12 +304,86 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     } else activeRunRef.current = '';
   }, [resetTracks]);
 
+  // Both the camera and tab capture are permission-based MediaStreams.
+  // Releasing the current stream must stop all captured tracks, not just
+  // disconnect the preview element.
   const stopWebcam = () => {
     const active = webcamRef.current;
     webcamRef.current = null;
-    if (videoRef.current?.srcObject === active) videoRef.current.srcObject = null;
+    if (active && videoRef.current?.srcObject === active) videoRef.current.srcObject = null;
     active?.getTracks().forEach(track => track.stop());
     setWebcamActive(false);
+    setTabCaptureActive(false);
+  };
+
+  const startTabCapture = async () => {
+    if (tabCaptureStarting) return;
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setError('Browser tab capture requires Edge/Chrome on localhost or HTTPS.');
+      return;
+    }
+    // Must be invoked directly from the button click. No network calls or
+    // async work can precede the browser's capture-permission prompt.
+    setTabCaptureStarting(true);
+    setError('');
+    const request = ++uploadGenerationRef.current;
+    try {
+      const capture = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: false,
+      });
+      if (request !== uploadGenerationRef.current || !activeRef.current || document.hidden) {
+        capture.getTracks().forEach(track => track.stop());
+        return;
+      }
+      videoRef.current?.pause();
+      stopWebcam();
+      resetTracks();
+      nextStableIdRef.current = 1;
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+      currentFileRef.current = null;
+      currentHandleRef.current = null;
+      streamSourceRef.current = null;
+      setStreamSource(null);
+      if (ownerId) streamCatalog.select(ownerId, null);
+      webcamRef.current = capture;
+      setTabCaptureActive(true);
+      setWebcamActive(false);
+      setUrl(BROWSER_TAB_SOURCE);
+      setFilename('Shared browser tab · live');
+      setReadyVideo(false);
+      setPlaying(false);
+      setOpenedSeconds(null);
+      setStreamHealth('connecting');
+      setStorage('not-saved');
+      setDuration(0);
+      setPosition(0);
+      loadStartRef.current = performance.now();
+      if (ownerId) {
+        activeRunRef.current = 'tab:' + crypto.randomUUID();
+        activityLedger.begin(ownerId, activeRunRef.current, 'Shared browser tab', 'live-stream');
+      } else activeRunRef.current = '';
+      for (const track of capture.getVideoTracks()) {
+        track.onended = () => {
+          if (webcamRef.current !== capture) return;
+          stopWebcam();
+          resetTracks();
+          setUrl('');
+          setStreamHealth('idle');
+          setError('Tab sharing ended. To resume analysis, choose the YouTube tab again.');
+          if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
+        };
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        setError('Tab sharing was cancelled. Choose the video tab when you are ready.');
+      } else {
+        setError('Could not capture tab: ' + (error instanceof Error ? error.message : String(error)));
+      }
+    } finally {
+      setTabCaptureStarting(false);
+    }
   };
 
   const startWebcam = async () => {
@@ -699,7 +776,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   };
 
   useEffect(() => {
-    if (!webcamActive) return;
+    if (!webcamActive && !tabCaptureActive) return;
     const camera = webcamRef.current;
     const video = videoRef.current;
     if (!camera || !video) return;
@@ -710,7 +787,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     return () => {
       if (video.srcObject === camera) video.srcObject = null;
     };
-  }, [webcamActive, url]);
+  }, [webcamActive, tabCaptureActive, url]);
 
   useEffect(() => {
     if (!streamSource) return;
@@ -1013,7 +1090,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   // Rebind callbacks when the media element is recreated for a HLS retry or
   // a different saved source with the same URL. Otherwise AI continues
   // sampling an orphaned video node while the new video plays untracked.
-  }, [url, streamSource?.id, streamReloadKey, webcamActive, clearInFlight]);
+  }, [url, streamSource?.id, streamReloadKey, webcamActive, tabCaptureActive, clearInFlight]);
 
   // Paint each display frame using optical positions from the most recent
   // decoded video frame; hide boxes immediately when tracking loses them.
@@ -1129,7 +1206,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">
             <Camera size={16} /> {cameraStarting ? 'Opening camera…' : webcamActive ? 'Stop camera' : 'Use camera'}
           </button>
-          {(streamSource || webcamActive) && saveVideo && <button type="button"
+          <button type="button"
+            onClick={() => tabCaptureActive ? removeVideo() : void startTabCapture()}
+            disabled={tabCaptureStarting}
+            className="vg-secondary"
+            title="Choose the tab playing YouTube Live or another authorized stream">
+            <MonitorPlay size={16}/>
+            {tabCaptureStarting ? 'Choosing tab…' : tabCaptureActive ? 'Stop tab capture' : 'Analyze browser tab'}
+          </button>
+          {(streamSource || webcamActive || tabCaptureActive) && saveVideo && <button type="button"
             onClick={() => void reopenSavedVideo()}
             className="vg-secondary">
             <Film size={16}/> Saved video
@@ -1138,7 +1223,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             className="vg-secondary">
             {showStreamForm ? 'Close sources' : 'Live sources'}
           </button>
-          {url && !webcamActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
+          {url && !webcamActive && !tabCaptureActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"><X size={18} /></button>}
         </div>
       </header>
@@ -1205,6 +1290,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         </p>
       </section>}
 
+      {tabCaptureActive && <p className="text-xs text-slate-500">
+        Analyzing the shared tab's live pixels. Stop sharing at any time using the button above
+        or your browser's sharing control. No video is uploaded automatically.
+      </p>}
+
       {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
       </div>}
@@ -1213,9 +1303,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="relative aspect-video w-full overflow-hidden bg-[#080e20]">
           {url ? (
             <>
-              <video key={webcamActive ? 'browser-camera' :
+              <video key={tabCaptureActive ? 'shared-browser-tab' : webcamActive ? 'browser-camera' :
                   streamSource ? streamSource.id + ':' + streamReloadKey : 'uploaded-file'}
-                ref={videoRef} src={webcamActive || streamSource?.format === 'hls' ? undefined : url}
+                ref={videoRef} src={tabCaptureActive || webcamActive || streamSource?.format === 'hls' ? undefined : url}
                 crossOrigin={streamSource ? 'anonymous' : undefined}
                 controls autoPlay muted playsInline preload="auto"
                 className="h-full w-full object-contain"
@@ -1261,7 +1351,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 }}
                 onPause={event => {
                   setPlaying(false);
-                  if (!streamSource && !webcamActive)
+                  if (!streamSource && !webcamActive && !tabCaptureActive)
                     void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId ?? undefined).catch(() => {});
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
@@ -1291,7 +1381,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
               <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-semibold text-white">
-                  {webcamActive ? (
+                  {tabCaptureActive ? (
+                    streamHealth === 'playing' ? 'TAB LIVE' :
+                    streamHealth === 'buffering' ? 'TAB BUFFERING' : 'CONNECTING TAB'
+                  ) : webcamActive ? (
                     streamHealth === 'playing' ? 'CAMERA LIVE' :
                     streamHealth === 'buffering' ? 'CAMERA BUFFERING' : 'STARTING CAMERA'
                   ) : streamSource ? (
@@ -1326,7 +1419,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-slate-900">{filename}</div>
               <div className="mt-1 text-xs text-slate-500">
-                {webcamActive ? 'LIVE CAMERA' :
+                {tabCaptureActive ? 'LIVE BROWSER TAB' :
+                  webcamActive ? 'LIVE CAMERA' :
                   streamSource ? 'LIVE STREAM' : readableTime(position) + ' / ' + readableTime(duration)} · Playback at 1×
                 {openedSeconds !== null ? ' · Opened in ' + openedSeconds.toFixed(2) + 's' : ''}
               </div>
@@ -1349,7 +1443,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
-      {!streamSource && !webcamActive && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+      {!streamSource && !webcamActive && !tabCaptureActive && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
         <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
           disabled={!ownerId} className="h-4 w-4 accent-indigo-600" />
         <span className="flex-1"><strong>Keep this video on this device</strong>
@@ -1359,7 +1453,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </span>
         </span>
       </label>}
-      {!streamSource && !webcamActive && currentFileRef.current && (
+      {!streamSource && !webcamActive && !tabCaptureActive && currentFileRef.current && (
         <div className="vg-panel p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
