@@ -62,6 +62,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const captureKindRef = useRef<'camera' | 'tab' | null>(null);
   const [webcamActive, setWebcamActive] = useState(false);
   const [tabCaptureActive, setTabCaptureActive] = useState(false);
+  const stopCaptureActionRef = useRef<() => void>(() => {});
   const [tabCaptureStarting, setTabCaptureStarting] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -673,6 +674,27 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       void persistenceQueueRef.current.catch(e => setError('Could not clear local video: ' + String(e)));
     }
   };
+
+  // The app shell remains visible while Live Analysis is hidden. Keep a
+  // persistent, accessible stop-sharing button whenever tab capture is live.
+  stopCaptureActionRef.current = () => {
+    if (captureKindRef.current === 'tab') removeVideo();
+  };
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('visionguard:tab-capture-status', {
+      detail: { active: tabCaptureActive }
+    }));
+    return () => {
+      window.dispatchEvent(new CustomEvent('visionguard:tab-capture-status', {
+        detail: { active: false }
+      }));
+    };
+  }, [tabCaptureActive]);
+  useEffect(() => {
+    const stop = () => stopCaptureActionRef.current();
+    window.addEventListener('visionguard:stop-tab-capture', stop);
+    return () => window.removeEventListener('visionguard:stop-tab-capture', stop);
+  }, []);
 
   useEffect(() => {
     if (!webcamActive && !tabCaptureActive) return;
