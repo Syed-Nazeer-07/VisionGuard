@@ -671,7 +671,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500"><Activity size={14} /> Vehicles in frame</div>
           <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{visibleCount}</div>
-          <div className="text-xs text-slate-500">Confirmed detections only</div>
+          <div className="text-xs text-slate-500">Stable tracks and high-confidence new vehicles</div>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="text-xs font-medium text-slate-500">YOLO11s inference</div>
