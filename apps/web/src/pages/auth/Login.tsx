@@ -146,10 +146,11 @@ export function Login() {
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data: signupResult, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
+          emailRedirectTo: new URL('/login', window.location.origin).toString(),
           data: {
             full_name: data.fullName,
             organization: data.organization
@@ -162,11 +163,11 @@ export function Login() {
       if (error) {
         setError(error.message);
       } else {
-        setSuccessMsg('Registration successful! Please sign in.');
-        setTimeout(() => {
-          setMode('login');
-          setSuccessMsg(null);
-        }, 2000);
+        setSuccessMsg(signupResult.session
+          ? 'Your account is ready. You can sign in using the email and password you just chose.'
+          : 'Check your email for a VisionGuard confirmation link. After confirming, return here to sign in. Check spam if you do not see it.');
+        // Keep the confirmation instructions visible. Automatically removing
+        // them after two seconds made activation appear to be broken.
       }
     } catch (err: any) {
       setIsLoading(false);
@@ -343,7 +344,13 @@ export function Login() {
               >
                 <div className="p-3.5 bg-green-50 border border-green-100 text-green-700 rounded-lg text-[14px] font-medium flex items-start shadow-sm">
                   <CheckCircle2 className="w-5 h-5 mr-2 flex-shrink-0" />
-                  <span>{successMsg}</span>
+                  <span className="flex-1">{successMsg}
+                    {mode === 'register' && <button type="button"
+                      onClick={() => switchMode('login')}
+                      className="mt-2 block text-xs font-semibold underline underline-offset-2">
+                      Go to sign in
+                    </button>}
+                  </span>
                 </div>
               </motion.div>
             )}
