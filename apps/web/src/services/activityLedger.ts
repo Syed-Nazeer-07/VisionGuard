@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { supabase, supabaseConfig } from '../lib/supabase';
-import { readCloudAnalysisRow, reconcileAnalysisRun, sameAnalysisRecord } from './activityReconciliation';
+import { planCloudAcknowledgements, readCloudAnalysisRow, reconcileAnalysisRun, sameAnalysisRecord } from './activityReconciliation';
 
 export type VehicleClass = 'car' | 'bus' | 'truck' | 'motorcycle' | 'bicycle' | 'train' | 'bus/truck';
 
@@ -159,38 +159,23 @@ async function syncToCloud(owner: string, records: AnalysisRecord[]): Promise<vo
         .upsert(rows, { onConflict: 'owner_id,run_id' })
         .select('run_id,payload,updated_at');
       if (error) throw error;
-      if (!Array.isArray(data) || data.length !== pending.length) {
-        throw Error('Cloud did not acknowledge every analysis record; local history was preserved.');
-      }
-      const returned = new Map<string, ReturnType<typeof readCloudAnalysisRow>>();
-      for (const raw of data) {
-        const value = readCloudAnalysisRow(raw);
-        if (returned.has(value.runId)) throw Error('Cloud returned duplicate analysis records.');
-        returned.set(value.runId, value);
-      }
+      const acknowledgements = planCloudAcknowledgements(
+        pending, data, getSnapshot(owner).records
+      );
       const retry: AnalysisRecord[] = [];
-      for (const sent of pending) {
-        const acknowledged = returned.get(sent.id);
-        if (!acknowledged) {
-          throw Error('Cloud omitted an analysis record; local history was preserved.');
-        }
-        // The column timestamp is what the database trigger compares.
-        // Never mark the *sent* revision as synced unless it was accepted.
-        revisions.set(sent.id, acknowledged.revisionAt);
+      for (const ack of acknowledgements) {
+        // The column timestamp is what the SQL trigger actually compares.
+        // Never record a sent revision if the database returned its OLD row.
+        revisions.set(ack.runId, ack.acceptedRevisionAt);
         uploadedRevisions.set(owner, revisions);
-        const latest = getSnapshot(owner).records.find(run => run.id === sent.id) ?? sent;
-        const resolution = reconcileAnalysisRun(
-          latest, acknowledged.record, acknowledged.revisionAt
-        );
-        if (resolution.needsUpload) {
-          // Keep the newer local edits and remote events together first.
-          change(owner, runs => runs.map(run => run.id === sent.id ? resolution.record : run));
-          retry.push(resolution.record);
-        } else if (!sameAnalysisRecord(latest, acknowledged.record)) {
-          // Another device may already contain the complete newer record.
-          // Adopt it only after a server ACK, keeping IndexedDB in sync.
+        if (ack.resolved.needsUpload) {
           change(owner, runs => runs.map(run =>
-            run.id === sent.id ? acknowledged.record : run));
+            run.id === ack.runId ? ack.resolved.record : run));
+          retry.push(ack.resolved.record);
+        } else if (!sameAnalysisRecord(ack.current, ack.resolved.record)) {
+          // A different browser already has the complete latest snapshot.
+          change(owner, runs => runs.map(run =>
+            run.id === ack.runId ? ack.resolved.record : run));
         }
       }
       pending = retry;
@@ -270,8 +255,19 @@ async function ensureLoaded(owner: string): Promise<void> {
       // A newly created session may already have arrived while IDB was reading.
       // Always merge instead of overwriting live observations.
       const byId = new Map(records.map(r => [r.id, r]));
-      for (const updated of pending?.records ?? []) byId.set(updated.id, updated);
-      setState(owner, { loaded: true, records: [...byId.values()].sort((a,b) => b.updatedAt-a.updatedAt), error: null });
+      let mergedUnsavedHistory = false;
+      for (const updated of pending?.records ?? []) {
+        const stored = byId.get(updated.id);
+        if (!stored) { byId.set(updated.id, updated); mergedUnsavedHistory = true; continue; }
+        // Reading an older IndexedDB snapshot must not erase newly created
+        // incidents or observations from this page while it was loading.
+        const resolution = reconcileAnalysisRun(updated, stored);
+        byId.set(updated.id, resolution.record);
+        mergedUnsavedHistory ||= resolution.needsUpload;
+      }
+      setState(owner, { loaded: true,
+        records: [...byId.values()].sort((a,b) => b.updatedAt-a.updatedAt), error: null });
+      if (mergedUnsavedHistory) persist(owner);
       // Do not delay UI hydration on a network call.
       void mergeFromCloud(owner);
     } catch (error) {

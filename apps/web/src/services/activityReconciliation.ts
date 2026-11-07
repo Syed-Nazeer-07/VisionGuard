@@ -154,3 +154,45 @@ export function readCloudAnalysisRow(value: unknown): {
 export function sameAnalysisRecord(a: AnalysisRecord, b: AnalysisRecord): boolean {
   return a.updatedAt === b.updatedAt && equivalentContent(a, b);
 }
+
+/** Pure simulation of a PostgREST upsert result. Useful in CI without
+ * privileged database keys or mutating a real user's session.
+ */
+export function planCloudAcknowledgements(
+  sent: readonly AnalysisRecord[],
+  received: unknown,
+  latest: readonly AnalysisRecord[],
+): Array<{
+  runId: string;
+  acceptedRevisionAt: number;
+  current: AnalysisRecord;
+  resolved: ReconciledRun;
+}> {
+  if (!Array.isArray(received) || received.length !== sent.length) {
+    throw Error('Cloud did not acknowledge every requested analysis record.');
+  }
+  const submittedIds = new Set(sent.map(run => run.id));
+  if (submittedIds.size !== sent.length) {
+    throw Error('Cloud sync attempted duplicate session IDs.');
+  }
+  const byId = new Map<string, ReturnType<typeof readCloudAnalysisRow>>();
+  for (const row of received) {
+    const accepted = readCloudAnalysisRow(row);
+    if (!submittedIds.has(accepted.runId) || byId.has(accepted.runId)) {
+      throw Error('Cloud returned an unexpected or duplicate session record.');
+    }
+    byId.set(accepted.runId, accepted);
+  }
+  const currentById = new Map(latest.map(run => [run.id, run]));
+  return sent.map(sentRun => {
+    const server = byId.get(sentRun.id);
+    if (!server) throw Error('Cloud omitted an analysis revision.');
+    const current = currentById.get(sentRun.id) ?? sentRun;
+    return {
+      runId: sentRun.id,
+      acceptedRevisionAt: server.revisionAt,
+      current,
+      resolved: reconcileAnalysisRun(current, server.record, server.revisionAt),
+    };
+  });
+}

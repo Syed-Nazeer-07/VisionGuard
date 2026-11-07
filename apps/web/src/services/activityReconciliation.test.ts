@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileAnalysisRun, readCloudAnalysisRow } from './activityReconciliation';
+import { reconcileAnalysisRun, readCloudAnalysisRow, planCloudAcknowledgements } from './activityReconciliation';
 import type { AnalysisRecord, VehicleRecord, ViolationRecord } from './activityLedger';
 
 const vehicle = (id: number, observations = 5, lastSeenAt = 3): VehicleRecord => ({
@@ -101,5 +101,41 @@ describe('cloud upsert acknowledgement validation', () => {
     expect(() => readCloudAnalysisRow({
       run_id:payload.id,payload,updated_at:'invalid'
     })).toThrow(/invalid analysis revision/);
+  });
+});
+
+describe('stale Supabase upsert responses', () => {
+  const row = (record: AnalysisRecord, revision = record.updatedAt) => ({
+    run_id:record.id, payload:record, updated_at:new Date(revision).toISOString(),
+  });
+  it('recognizes a rejected stale update and schedules a merged revision', () => {
+    const local = record(600,{violations:[incident('approved',600)]});
+    const remote = record(800,{analyzedFrames:25});
+    const [ack] = planCloudAcknowledgements([local],[row(remote)], [local]);
+    expect(ack.acceptedRevisionAt).toBe(800);
+    expect(ack.resolved.needsUpload).toBe(true);
+    expect(ack.resolved.record.updatedAt).toBe(801);
+    expect(ack.resolved.record.violations[0].status).toBe('approved');
+    expect(ack.resolved.record.analyzedFrames).toBe(25);
+  });
+  it('requires no retry when the returned row contains the submitted change', () => {
+    const local = record(900,{violations:[incident('rejected',900)]});
+    const [ack] = planCloudAcknowledgements([local],[row(local)], [local]);
+    expect(ack.resolved.needsUpload).toBe(false);
+  });
+  it('preserves a newer in-flight local edit made after the request was sent', () => {
+    const sent = record(800);
+    const latest = record(900,{violations:[incident('approved',900)]});
+    const [ack] = planCloudAcknowledgements([sent],[row(sent)], [latest]);
+    expect(ack.resolved.needsUpload).toBe(true);
+    expect(ack.resolved.record.violations[0].status).toBe('approved');
+  });
+  it('rejects missing rows and duplicates rather than inventing success', () => {
+    const sent = record(800);
+    expect(() => planCloudAcknowledgements([sent], [], [sent])).toThrow(/did not acknowledge/);
+    expect(() => planCloudAcknowledgements([sent, {...sent,id:'run-2'}],
+      [row(sent),row(sent)], [sent])).toThrow(/duplicate/);
+    expect(() => planCloudAcknowledgements([sent],
+      [row({...sent,id:'run-2'})], [sent])).toThrow(/unexpected/);
   });
 });
