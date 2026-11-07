@@ -48,6 +48,17 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   
+  useEffect(() => {
+    // An unsuccessful external OAuth flow returns to /login with an error.
+    // Keep the message visible instead of silently bouncing through /app.
+    const query = new URLSearchParams(location.search);
+    if (query.has('error')) {
+      const message = query.get('error_description') || 'Google sign-in was not completed.';
+      setError(message.replace(/\+/g, ' ').slice(0, 250));
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location.pathname, location.search, navigate]);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -114,7 +125,7 @@ export function Login() {
       // Supabase handles OAuth state and session persistence. Fixed callback.
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: new URL('/app', window.location.origin).toString() },
+        options: { redirectTo: new URL('/login', window.location.origin).toString() },
       });
       if (oauthError) throw oauthError;
     } catch (reason) {
