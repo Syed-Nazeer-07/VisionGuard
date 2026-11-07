@@ -1076,11 +1076,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   }, []);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5 px-2 py-4 sm:p-6">
-      <header className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="vg-page space-y-5">
+      <header className="vg-page-header">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Live traffic analysis</h1>
-          <p className="mt-1 text-sm text-slate-500">Play immediately. YOLO11s detects while the video runs — no lengthy processing screen.</p>
+          <h1>Live analysis</h1>
+          <p>Video, stream, and camera detection</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
@@ -1090,7 +1090,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               event.target.value = '';
             }} />
           <button type="button" onClick={() => void chooseVideo()}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+            className="vg-primary">
             <Upload size={16} /> Choose video
           </button>
           <button type="button" onClick={() => webcamActive ? removeVideo() : void startWebcam()}
@@ -1100,11 +1100,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </button>
           {(streamSource || webcamActive) && saveVideo && <button type="button"
             onClick={() => void reopenSavedVideo()}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+            className="vg-secondary">
             <Film size={16}/> Saved video
           </button>}
           <button type="button" onClick={() => setShowStreamForm(v=>!v)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+            className="vg-secondary">
             {showStreamForm ? 'Close sources' : 'Live sources'}
           </button>
           {url && !webcamActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
@@ -1178,7 +1178,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
       </div>}
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="vg-panel overflow-hidden">
         <div className="relative aspect-video w-full overflow-hidden bg-[#080e20]">
           {url ? (
             <>
@@ -1322,7 +1322,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         </span>
       </label>}
       {!streamSource && !webcamActive && currentFileRef.current && (
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="vg-panel p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-slate-900">Backblaze B2 · optional cloud storage</div>
@@ -1376,9 +1376,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         </div>
       </div>
 
-      <p className="text-xs leading-5 text-slate-500">
-        Vehicle classes: bicycle, car, motorcycle, bus, train and truck. Stable identities and consensus-based optical tracking run between YOLO detections. Speed is an approximate image-based estimate for a stationary camera, not a certified physical measurement.
-        {storage === 'saving' ? ' Saving the selected video locally...' : storage === 'saved' ? ' Video selection saved locally.' : ''}
+      <p className="vg-footnote">
+        Speed values are uncalibrated visual estimates, not verified road speeds.
+        {storage === 'saving' ? ' Saving locally…' : storage === 'saved' ? ' Local copy retained.' : ''}
       </p>
     </div>
   );
