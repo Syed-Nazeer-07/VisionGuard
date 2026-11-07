@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasAdvancedVideoFrame, isStreamStalled, liveRetryDelay } from './streamRecovery';
+import { hasAdvancedVideoFrame, isStreamStalled, liveRetryDelay, shouldPaintLiveOverlay, LIVE_OVERLAY_FRESHNESS_MS } from './streamRecovery';
 
 const playing = { paused: false, ended: false, seeking: false };
 
@@ -35,5 +35,32 @@ describe('video progress signal for live feeds', () => {
     expect(hasAdvancedVideoFrame(8, 7.9)).toBe(false);
     expect(hasAdvancedVideoFrame(8, Number.NaN)).toBe(false);
     expect(hasAdvancedVideoFrame(8, Number.POSITIVE_INFINITY)).toBe(false);
+  });
+});
+
+describe('live overlay freshness and privacy', () => {
+  const playing = { paused: false, ended: false, seeking: false };
+  it('keeps paused local-file analysis boxes but not paused live captures', () => {
+    expect(shouldPaintLiveOverlay(null, 10_000, 1_000, { ...playing, paused: true }, false)).toBe(true);
+    expect(shouldPaintLiveOverlay('tab', 10_000, 9_900, { ...playing, paused: true }, false)).toBe(false);
+  });
+  it('immediately removes boxes when a shared tab is muted or buffering', () => {
+    expect(shouldPaintLiveOverlay('tab', 10_000, 9_999, playing, true)).toBe(false);
+    expect(shouldPaintLiveOverlay('camera', 10_000, 9_999, playing, true)).toBe(false);
+  });
+  it('draws only if a decoded live video frame arrived recently', () => {
+    expect(shouldPaintLiveOverlay('tab', 10_000, 9_000, playing, false)).toBe(true);
+    expect(shouldPaintLiveOverlay('tab', 10_000, 10_000 - LIVE_OVERLAY_FRESHNESS_MS, playing, false)).toBe(true);
+    expect(shouldPaintLiveOverlay('tab', 10_000, 10_000 - LIVE_OVERLAY_FRESHNESS_MS - 1, playing, false)).toBe(false);
+  });
+  it('does not mistake metadata or future timestamps for real frame delivery', () => {
+    for (const at of [0, Number.NaN, Number.POSITIVE_INFINITY, 20_000]) {
+      expect(shouldPaintLiveOverlay('tab', 10_000, at, playing, false)).toBe(false);
+    }
+    expect(shouldPaintLiveOverlay('tab', Number.NaN, 9_900, playing, false)).toBe(false);
+  });
+  it('clears overlays on ended and seeking captures', () => {
+    expect(shouldPaintLiveOverlay('tab', 10_000, 9_900, { ...playing, ended: true }, false)).toBe(false);
+    expect(shouldPaintLiveOverlay('tab', 10_000, 9_900, { ...playing, seeking: true }, false)).toBe(false);
   });
 });

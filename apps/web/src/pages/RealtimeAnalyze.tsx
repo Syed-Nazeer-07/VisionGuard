@@ -11,7 +11,7 @@ import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
-import { hasAdvancedVideoFrame, isStreamStalled } from '../services/streamRecovery';
+import { hasAdvancedVideoFrame, isStreamStalled, shouldPaintLiveOverlay } from '../services/streamRecovery';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
 import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
@@ -177,6 +177,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const resetTracks = useCallback(() => {
     generationRef.current += 1;
     lastDecodedMediaTimeRef.current = null;
+    lastPresentedAtRef.current = 0;
     captureStalledRef.current = false;
     latestRef.current = null;
     captureErrorRef.current = false;
@@ -455,7 +456,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           if (webcamRef.current === capture) {
             // Don't show LIVE until a real frame has advanced.
             captureStalledRef.current = true;
-            lastPresentedAtRef.current = performance.now();
+            // Do not label the feed fresh until the next decoded frame.
             setStreamHealth('buffering');
           }
         };
@@ -915,7 +916,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         // Some browsers suspend the muted local preview while another tab is
         // focused. Sharing permission remains intact; resume the preview
         // when the user returns rather than leaving an empty analysis panel.
-        lastPresentedAtRef.current = performance.now();
+        // Returning to the tab is not evidence that the shared video
+        // delivered a fresh decoded frame. Keep overlays hidden until it does.
         if (shouldResumeSharedTab(captureKindRef.current, document.hidden, video.paused)) {
           void video.play().catch(() => {
             setError('Tab sharing is still active, but playback was paused by the browser. Press Play to resume detection.');
@@ -1159,7 +1161,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (context) {
           context.clearRect(0, 0, canvas.width, canvas.height);
           const observation = latestRef.current;
-          if (observation && video.videoWidth && video.videoHeight && !video.seeking && !video.ended) {
+          if (observation && video.videoWidth && video.videoHeight &&
+              !video.seeking && !video.ended &&
+              shouldPaintLiveOverlay(
+                captureKindRef.current, time, lastPresentedAtRef.current,
+                { paused: video.paused, ended: video.ended, seeking: video.seeking },
+                captureStalledRef.current
+              )) {
             const frameWidth = video.videoWidth;
             const frameHeight = video.videoHeight;
             const fit = Math.min(width / frameWidth, height / frameHeight);
@@ -1346,15 +1354,22 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 onPlaying={() => {
                   setPlaying(true);
                   if (webcamRef.current) {
-                    setStreamHealth('playing');
-                    lastPresentedAtRef.current = performance.now();
+                    // onPlaying fires before actual pixels arrive; only
+                    // maybeInfer may mark this live feed as playing.
+                    setStreamHealth('buffering');
                   }
                 }}
                 onWaiting={() => {
-                  if (webcamRef.current) setStreamHealth('buffering');
+                  if (webcamRef.current) {
+                    captureStalledRef.current = true;
+                    setStreamHealth('buffering');
+                  }
                 }}
                 onStalled={() => {
-                  if (webcamRef.current) setStreamHealth('buffering');
+                  if (webcamRef.current) {
+                    captureStalledRef.current = true;
+                    setStreamHealth('buffering');
+                  }
                 }}
                 onPause={event => {
                   setPlaying(false);
