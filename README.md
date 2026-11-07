@@ -1,8 +1,24 @@
-# VisionGuard
+<div align="center">
+  <img src="apps/web/public/favicon.svg" alt="VisionGuard" width="68" />
+  <h1>VisionGuard</h1>
+  <p><strong>Traffic footage → vehicle tracking → reviewable insight.</strong></p>
+  <p>A local-first traffic analysis workspace built with React, TypeScript, YOLO11s, ONNX Runtime Web and FastAPI.</p>
+  <p>
+    <a href="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml"><img src="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml/badge.svg" alt="GitHub Actions CI" /></a>
+    <img src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" alt="React 19" />
+    <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white" alt="TypeScript 6" />
+    <img src="https://img.shields.io/badge/YOLO11s-ONNX-263e61" alt="YOLO11s ONNX" />
+  </p>
+  <p>
+    <a href="#what-the-application-does">Features</a> ·
+    <a href="#run-locally">Quick start</a> ·
+    <a href="#data-and-privacy">Data & privacy</a> ·
+    <a href="#architecture">Architecture</a> ·
+    <a href="#current-release-limitations">Limitations</a>
+  </p>
+</div>
 
-**Traffic video analysis and vehicle tracking, with account-owned history and review workflows.**
-
-VisionGuard is a React/TypeScript application for processing traffic video, showing vehicle detections, recording tracked activity, and organizing review flags, analytics, and reports. The browser runs YOLO11s via ONNX Runtime Web; a separate local Python service is available for optional offline processing.
+VisionGuard processes supported traffic video in your browser, draws moving vehicle detections, records account-scoped analysis history and organizes analytics, review flags and downloadable reports. A separate Python processing service is optional; it is not required by the browser workflow.
 
 > **Release state: v1 core workflow / verification candidate.** The frontend builds and unit tests run in CI. Physical camera behavior, external video capture, model accuracy, B2 credentials, Google OAuth, and deployment must still be checked end-to-end before calling an installation production-ready. Speeds are approximate and not usable as enforcement evidence.
 
@@ -44,7 +60,9 @@ See [Live analysis instructions](docs/LIVE_ANALYSIS.md).
 
 **Speed caveat:** An arbitrary camera does not provide sufficient geometry to establish true road speed from pixels alone. VisionGuard's browser speed labels are estimates. A saved speed-review flag is a request for human verification, not a legal speeding violation.
 
-## Run locally (Windows / Surface Laptop / other systems)
+## Run locally
+
+Works with Windows, including Surface Laptop, and other systems supporting current Node.js and Chromium browsers.
 
 Prerequisites: a current supported Node.js LTS release with npm. Browser AI works in modern Chromium browsers; accelerated execution depends on the device, and WebAssembly fallback may be slower.
 
@@ -80,6 +98,8 @@ VITE_VIDEO_STORAGE_PROVIDER=b2
 Restart `npm run dev` after changing Vite variables. These are **public browser** settings; never put `service_role`, `sb_secret_*`, Google client secrets, or Backblaze application keys in `VITE_*` variables.
 
 Backblaze credentials and the signing function live on the server side and must be configured separately. Until they are configured, local analysis can work but B2 upload cannot.
+
+**Local preview vs. a connected account:** Without Supabase environment variables, the app uses a local demo adapter. Some legacy administration screens may contain seeded example records; these are **not real traffic incidents** or live camera data. Production history requires valid authentication and database policies.
 
 Google sign-in requires enabling the provider and redirect allowlist in Supabase and configuring Google Cloud credentials. See [Google sign-in setup](docs/GOOGLE_SIGN_IN.md).
 
