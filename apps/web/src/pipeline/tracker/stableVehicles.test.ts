@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack } from './stableVehicles';
+import { chooseHeavyVehicleLabel, reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack } from './stableVehicles';
 import type { LiveTrack } from './liveProjection';
 
 function car(x: number, y = 120, id = 0): LiveTrack {
@@ -102,24 +102,37 @@ describe('persistent crowded vehicle tracking', () => {
     expect(merged.tracks[0].h).toBeLessThan(88);
   });
 
-  it('allows strong freight-cab evidence to correct an outdated BUS label', () => {
-    const before: PersistentTrack = {
+  it('distinguishes bus and truck from real detector scores over time', () => {
+    expect(chooseHeavyVehicleLabel({ bus: .82, truck: .09 }).label).toBe('bus');
+    expect(chooseHeavyVehicleLabel({ bus: .09, truck: .82 }).label).toBe('truck');
+    expect(chooseHeavyVehicleLabel({ bus: .51, truck: .46 }).label).toBe('bus/truck');
+
+    let previous: PersistentTrack = {
       ...car(100, 120, 5), id: 5, className: 'bus',
-      classVotes: { bus: 3, truck: .2 }, lastDetectedAt: 1,
+      classVotes: { bus: .9, truck: .2 }, lastDetectedAt: 1,
       speedKmh: null, speedIsEstimate: true
     };
-    const corrected = reconcileVehicles(
-      [before], [{ ...car(101, 120, 88), className: 'truck', freightEvidence: true }],
-      2, 6
-    );
-    expect(corrected.tracks).toHaveLength(1);
-    expect(corrected.tracks[0].id).toBe(5);
-    expect(corrected.tracks[0].className).toBe('truck');
-    const genuineBus = reconcileVehicles(
-      [{ ...before, classVotes: { bus: 3 } }], [{ ...car(101, 120, 88), className: 'bus' }],
-      2, 6
-    );
-    expect(genuineBus.tracks[0].className).toBe('bus');
+    for (let step = 0; step < 3; step++) {
+      const next = reconcileVehicles(
+        [previous],
+        [{ ...car(100, 120, 88), className: 'truck',
+          classScores: { bus: .08, truck: .91 } }],
+        2 + step, 6
+      );
+      expect(next.tracks).toHaveLength(1);
+      expect(next.tracks[0].id).toBe(5);
+      previous = next.tracks[0];
+    }
+    expect(previous.className).toBe('truck');
+  });
+
+  it('does not force a bus/truck label from weakly differentiated scores', () => {
+    const first = reconcileVehicles([], [{
+      ...car(100, 120, 100),
+      className: 'bus',
+      classScores: { bus: .49, truck: .46 }
+    }], 1, 1);
+    expect(first.tracks[0].className).toBe('bus/truck');
   });
 
 });
