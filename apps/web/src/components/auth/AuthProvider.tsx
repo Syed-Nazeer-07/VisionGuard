@@ -29,6 +29,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loadingStep, setLoadingStep] = useState<string>('Verifying active session & loading profile...')
 
   const isMountedRef = useRef(true)
+  // Prevent stale async profile loads from restoring a previous user after
+  // sign-out or a second sign-in.
+  const authEpochRef = useRef(0)
 
   // Single stable update dispatcher that updates local React state AND Zustand store together
   const applyAuthState = useCallback((newSession: Session | null, newProfile: any | null, newSettings: any | null) => {
@@ -98,13 +101,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isMountedRef.current = true
 
     async function executeBootstrap() {
+      const epoch = authEpochRef.current
       if (!globalBootstrapPromise) {
         globalBootstrapPromise = (async () => {
           try {
-            // Timeout safeguard to ensure bootstrap never hangs indefinitely
-            const bootstrapTimeout = new Promise<{ session: Session | null; profile: any | null; settings: any | null }>(resolve => {
-              setTimeout(() => resolve({ session: null, profile: null, settings: null }), 5000)
-            })
+            // Never interpret a slow profile/network response as a sign-out.
+            // RequireAuth offers an explicit reload if startup is genuinely stuck.
 
             const bootstrapAction = (async () => {
               // 1. Restore the existing Supabase session
@@ -161,7 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             })()
 
-            return await Promise.race([bootstrapAction, bootstrapTimeout])
+            return await bootstrapAction
           } catch (err) {
             console.error('Failed to bootstrap workspace data:', err)
             return { session: null, profile: null, settings: null }
@@ -170,7 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const result = await globalBootstrapPromise
-      if (isMountedRef.current) {
+      if (isMountedRef.current && epoch === authEpochRef.current) {
         applyAuthState(result.session, result.profile, result.settings)
       }
     }
@@ -183,15 +185,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setInitialized(true)
     }
 
-    // Subscribe to auth state changes once for the application lifetime
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: any, newSession: any) => {
+    // Do not await Supabase queries *inside* the auth event callback: it
+    // executes under the session lock and can deadlock token refresh/sign-in.
+    // Defer profile queries to the next task, and ignore superseded requests.
+    let active = true
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      const epoch = ++authEpochRef.current
       if (event === 'SIGNED_OUT' || !newSession) {
         applyAuthState(null, null, null)
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-        const currentUserId = useAuthStore.getState().user?.id
-        if (currentUserId && currentUserId === newSession.user?.id) {
-          applyAuthState(newSession, useAuthStore.getState().profile, useAuthStore.getState().settings)
-        } else {
+        return
+      }
+      const previous = useAuthStore.getState()
+      if (previous.user?.id === newSession.user.id && previous.profile &&
+          event !== 'USER_UPDATED') {
+        applyAuthState(newSession, previous.profile, previous.settings)
+        return
+      }
+      window.setTimeout(() => {
+        if (!active || !isMountedRef.current || epoch !== authEpochRef.current) return
+        void (async () => {
           try {
             const [pRes, sRes] = await Promise.all([
               supabase.from('profiles').select('*').eq('id', newSession.user.id).maybeSingle(),
@@ -200,8 +212,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             let foundProfile = pRes.data || null
             let foundSettings = sRes.data || null
             if (!foundProfile && !pRes.error) {
-              // A first-time Google OAuth account may have no profile yet.
-              // Insert-only prevents ever overwriting an existing Admin role.
+              // New OAuth accounts may lack a profile. Insert Viewer only,
+              // never overwrite existing permissions.
               const { data: created } = await supabase.from('profiles').insert([{
                 id: newSession.user.id,
                 email: newSession.user.email,
@@ -221,20 +233,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 .insert([{ id: newSession.user.id }]).select().maybeSingle()
               foundSettings = created
             }
+            if (!active || !isMountedRef.current || epoch !== authEpochRef.current) return
             if (foundProfile?.status === 'Disabled') {
               await supabase.auth.signOut()
-              applyAuthState(null, null, null)
+              // SIGNED_OUT handles the state reset.
             } else {
               applyAuthState(newSession, foundProfile, foundSettings)
             }
-          } catch {
-            applyAuthState(newSession, null, null)
+          } catch (error) {
+            console.warn('Could not retrieve account profile:', error)
+            if (active && isMountedRef.current && epoch === authEpochRef.current) {
+              applyAuthState(newSession, null, null)
+            }
           }
-        }
-      }
+        })()
+      }, 0)
     })
 
     return () => {
+      active = false
       isMountedRef.current = false
       subscription.unsubscribe()
     }
