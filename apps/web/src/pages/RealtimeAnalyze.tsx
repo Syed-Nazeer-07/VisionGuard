@@ -31,6 +31,7 @@ type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnect
 const MAX_STREAM_RETRIES = 3;
 const STREAM_STALL_MS = 15_000;
 const STREAM_RETRY_DELAY_MS = 1_500;
+const BROWSER_CAMERA_SOURCE = 'visionguard:browser-camera';
 
 function readableTime(value: number) {
   const seconds = Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
@@ -59,6 +60,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const lastPresentedAtRef = useRef(0);
   const streamRetryCountRef = useRef(0);
   const [streamRetries, setStreamRetries] = useState(0);
+  const webcamRef = useRef<MediaStream | null>(null);
+  const [webcamActive, setWebcamActive] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
   const [showStreamForm, setShowStreamForm] = useState(false);
   const [streamLabel, setStreamLabel] = useState('');
   const [streamUrlInput, setStreamUrlInput] = useState('');
@@ -277,7 +281,79 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     } else activeRunRef.current = '';
   }, [resetTracks]);
 
+  const stopWebcam = () => {
+    const active = webcamRef.current;
+    webcamRef.current = null;
+    if (videoRef.current?.srcObject === active) videoRef.current.srcObject = null;
+    active?.getTracks().forEach(track => track.stop());
+    setWebcamActive(false);
+  };
+
+  const startWebcam = async () => {
+    if (cameraStarting) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('Camera access requires a supported browser on HTTPS or localhost.');
+      return;
+    }
+    setCameraStarting(true);
+    setError('');
+    // Invalidate any file/stream restoration that may still be in flight.
+    const request = ++uploadGenerationRef.current;
+    try {
+      const camera = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      if (request !== uploadGenerationRef.current) {
+        camera.getTracks().forEach(track => track.stop());
+        return;
+      }
+      videoRef.current?.pause();
+      stopWebcam();
+      resetTracks();
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+      currentFileRef.current = null;
+      currentHandleRef.current = null;
+      streamSourceRef.current = null;
+      setStreamSource(null);
+      if (ownerId) streamCatalog.select(ownerId, null);
+      webcamRef.current = camera;
+      setWebcamActive(true);
+      setUrl(BROWSER_CAMERA_SOURCE);
+      setFilename('Browser camera · live');
+      setReadyVideo(false);
+      setPlaying(false);
+      setOpenedSeconds(null);
+      setStreamHealth('connecting');
+      setStorage('not-saved');
+      setDuration(0);
+      setPosition(0);
+      loadStartRef.current = performance.now();
+      if (ownerId) {
+        activeRunRef.current = 'camera:' + new Date().toISOString() + ':' + request;
+        activityLedger.begin(ownerId, activeRunRef.current, 'Browser camera', 'live-stream');
+      } else activeRunRef.current = '';
+      // If permission is revoked, stop retaining the stream in the background.
+      for (const track of camera.getVideoTracks()) {
+        track.onended = () => {
+          if (webcamRef.current !== camera) return;
+          setError('Camera disconnected or permission revoked. Select Camera to reconnect.');
+          stopWebcam();
+          resetTracks();
+          setUrl('');
+          setStreamHealth('error');
+        };
+      }
+    } catch (error) {
+      setError('Could not open camera: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setCameraStarting(false);
+    }
+  };
+
   const chooseStream = (source: StreamSource) => {
+    stopWebcam();
     videoRef.current?.pause();
     uploadGenerationRef.current += 1;
     resetTracks();
@@ -381,6 +457,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
     uploadGenerationRef.current += 1;
     streamSourceRef.current = null;
+    stopWebcam();
     setStreamSource(null);
     setStreamHealth('idle');
     if (ownerId) streamCatalog.select(ownerId, null);
@@ -492,6 +569,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setReadyVideo(false);
     setPlaying(false);
     streamSourceRef.current = null;
+    stopWebcam();
     setStreamSource(null);
     setStreamHealth('idle');
     if (ownerId) streamCatalog.select(ownerId, null);
@@ -526,6 +604,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setStreamRetries(0);
     setStreamReloadKey(value => value + 1);
   };
+
+  useEffect(() => {
+    if (!webcamActive) return;
+    const camera = webcamRef.current;
+    const video = videoRef.current;
+    if (!camera || !video) return;
+    video.srcObject = camera;
+    void video.play().catch(() => {
+      setError('Camera is ready, but playback was blocked. Press Play to start analysis.');
+    });
+    return () => {
+      if (video.srcObject === camera) video.srcObject = null;
+    };
+  }, [webcamActive, url]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -603,7 +695,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (active) return;
     const video = videoRef.current;
     video?.pause();
-    if (video && Number.isFinite(video.currentTime)) {
+    if (webcamRef.current) {
+      // Releasing the camera on navigation is a deliberate privacy safeguard.
+      stopWebcam();
+      setUrl('');
+      setStreamHealth('idle');
+      resetTracks();
+    }
+    if (video && !streamSourceRef.current && !webcamRef.current &&
+        Number.isFinite(video.currentTime)) {
       void localAnalysisStorage.savePosition(video.currentTime, ownerId ?? undefined).catch(() => {});
     }
   }, [active]);
@@ -871,6 +971,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
             <Upload size={16} /> Choose video
           </button>
+          <button type="button" onClick={() => webcamActive ? removeVideo() : void startWebcam()}
+            disabled={cameraStarting}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">
+            <Camera size={16} /> {cameraStarting ? 'Opening camera…' : webcamActive ? 'Stop camera' : 'Use camera'}
+          </button>
           <button type="button" onClick={() => setShowStreamForm(v=>!v)}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
             {showStreamForm ? 'Close sources' : 'Live sources'}
@@ -926,8 +1031,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="relative aspect-video w-full overflow-hidden bg-[#080e20]">
           {url ? (
             <>
-              <video key={streamSource ? streamSource.id + ':' + streamReloadKey : 'uploaded-file'}
-                ref={videoRef} src={streamSource?.format === 'hls' ? undefined : url}
+              <video key={webcamActive ? 'browser-camera' :
+                  streamSource ? streamSource.id + ':' + streamReloadKey : 'uploaded-file'}
+                ref={videoRef} src={webcamActive || streamSource?.format === 'hls' ? undefined : url}
                 crossOrigin={streamSource ? 'anonymous' : undefined}
                 controls autoPlay muted playsInline preload="auto"
                 className="h-full w-full object-contain"
@@ -954,7 +1060,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 }}
                 onPlaying={() => {
                   setPlaying(true);
-                  if (streamSourceRef.current) {
+                  if (streamSourceRef.current || webcamRef.current) {
                     setStreamHealth('playing');
                     setStreamRetries(0);
                     streamRetryCountRef.current = 0;
@@ -962,14 +1068,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   }
                 }}
                 onWaiting={() => {
-                  if (streamSourceRef.current) setStreamHealth('buffering');
+                  if (streamSourceRef.current || webcamRef.current) setStreamHealth('buffering');
                 }}
                 onStalled={() => {
-                  if (streamSourceRef.current) setStreamHealth('buffering');
+                  if (streamSourceRef.current || webcamRef.current) setStreamHealth('buffering');
                 }}
                 onPause={event => {
                   setPlaying(false);
-                  if (!streamSource) void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId ?? undefined).catch(() => {});
+                  if (!streamSource && !webcamActive)
+                    void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId ?? undefined).catch(() => {});
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
                 onSeeking={resetTracks}
@@ -980,7 +1087,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
                 onError={() => {
-                  if (streamSourceRef.current) setStreamHealth('error');
+                  if (streamSourceRef.current || webcamRef.current) setStreamHealth('error');
                   firstFrameResolveRef.current?.();
                   firstFrameResolveRef.current = null;
                   setError(streamSource
@@ -991,7 +1098,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
               <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-semibold text-white">
-                  {streamSource ? (
+                  {webcamActive ? (
+                    streamHealth === 'playing' ? 'CAMERA LIVE' :
+                    streamHealth === 'buffering' ? 'CAMERA BUFFERING' : 'STARTING CAMERA'
+                  ) : streamSource ? (
                     streamHealth === 'playing' ? 'STREAM LIVE' :
                     streamHealth === 'reconnecting' ? 'RECONNECTING ' + streamRetries + '/' + MAX_STREAM_RETRIES :
                     streamHealth === 'buffering' ? 'BUFFERING' :
@@ -1022,7 +1132,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-slate-900">{filename}</div>
               <div className="mt-1 text-xs text-slate-500">
-                {streamSource ? 'LIVE STREAM' : readableTime(position) + ' / ' + readableTime(duration)} · Playback at 1×
+                {webcamActive ? 'LIVE CAMERA' :
+                  streamSource ? 'LIVE STREAM' : readableTime(position) + ' / ' + readableTime(duration)} · Playback at 1×
                 {openedSeconds !== null ? ' · Opened in ' + openedSeconds.toFixed(2) + 's' : ''}
               </div>
             </div>
@@ -1044,7 +1155,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
-      {!streamSource && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+      {!streamSource && !webcamActive && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
         <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
           disabled={!ownerId} className="h-4 w-4 accent-indigo-600" />
         <span className="flex-1"><strong>Keep this video on this device</strong>
@@ -1054,7 +1165,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </span>
         </span>
       </label>}
-      {!streamSource && currentFileRef.current && (
+      {!streamSource && !webcamActive && currentFileRef.current && (
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
