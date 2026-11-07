@@ -751,8 +751,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           setUrl('');
           setStreamHealth('idle');
           resetTracks();
-        } else if (!streamSourceRef.current) {
-          void localAnalysisStorage.savePosition(video.currentTime, ownerId ?? undefined).catch(() => {});
+        } else if (!streamSourceRef.current && account) {
+          void localAnalysisStorage.savePosition(video.currentTime, account).catch(() => {});
         }
       }
     };
@@ -994,7 +994,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }
         if (urlRef.current && time - lastSaved > 2000 && !video.paused && Number.isFinite(video.currentTime)) {
           lastSaved = time;
-          void localAnalysisStorage.savePosition(video.currentTime, ownerId ?? undefined).catch(() => {});
+          const account = useAuthStore.getState().user?.id;
+          if (account) void localAnalysisStorage.savePosition(video.currentTime, account).catch(() => {});
         }
       }
       animation = requestAnimationFrame(render);
