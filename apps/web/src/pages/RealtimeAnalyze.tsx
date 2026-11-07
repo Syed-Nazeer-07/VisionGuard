@@ -54,6 +54,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const grayHistoryRef = useRef<GrayFrame[]>([]);
   const flowTracksRef = useRef<PersistentTrack[]>([]);
   const nextStableIdRef = useRef(1);
+  const detectorToStableIdRef = useRef<Map<number, number>>(new Map());
   const speedHistoryRef = useRef<Map<number, SpeedHistory>>(new Map());
   const lastOpticalSampleRef = useRef(-Infinity);
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -89,6 +90,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     latestRef.current = null;
     flowTracksRef.current = [];
     speedHistoryRef.current.clear();
+    detectorToStableIdRef.current.clear();
     nextStableIdRef.current = 1;
     grayHistoryRef.current = [];
     lastOpticalSampleRef.current = -Infinity;
@@ -178,9 +180,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }
         const latestTime = history[history.length - 1].time;
         const merged = reconcileVehicles(
-          flowTracksRef.current, corrected, latestTime, nextStableIdRef.current
+          flowTracksRef.current, corrected, latestTime, nextStableIdRef.current,
+          detectorToStableIdRef.current
         );
         nextStableIdRef.current = merged.nextId;
+        for (const [sourceId, stableId] of merged.sourceAssignments) {
+          detectorToStableIdRef.current.set(sourceId, stableId);
+        }
         flowTracksRef.current = merged.tracks;
         latestRef.current = { time: latestTime, tracks: merged.tracks };
       } else if (message.type === 'error') {
