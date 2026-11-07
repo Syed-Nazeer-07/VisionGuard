@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Camera, Film, MonitorPlay, Play, RefreshCw, Radio, Upload, X } from 'lucide-react';
+import { Activity, AlertTriangle, Camera, Film, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
+import { TrafficCameraDirectory } from '../components/analysis/TrafficCameraDirectory';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { uploadStorageProvider } from '../services/videoStorage';
 import { activityLedger } from '../services/activityLedger';
-import { streamCatalog, type StreamSource } from '../services/streamCatalog';
-import { hasAdvancedVideoFrame, isStreamStalled, liveRetryDelay } from '../services/streamRecovery';
-import Hls from 'hls.js';
+import { hasAdvancedVideoFrame, isStreamStalled } from '../services/streamRecovery';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
 import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
@@ -29,7 +28,6 @@ type WorkerEvent =
 
 type DetectorState = 'idle' | 'loading' | 'ready' | 'error';
 type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecting' | 'ended' | 'error';
-const MAX_STREAM_RETRIES = 3;
 const STREAM_STALL_MS = 15_000;
 const BROWSER_CAMERA_SOURCE = 'visionguard:browser-camera';
 const BROWSER_TAB_SOURCE = 'visionguard:shared-browser-tab';
@@ -53,28 +51,17 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudUpload, setCloudUpload] = useState<ActiveUpload | null>(null);
   const [cloudStarting, setCloudStarting] = useState(false);
   const [cloudError, setCloudError] = useState('');
-  const [streams, setStreams] = useState<StreamSource[]>([]);
-  const [streamSource, setStreamSource] = useState<StreamSource | null>(null);
-  const streamSourceRef = useRef<StreamSource | null>(null);
   const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
-  const [streamReloadKey, setStreamReloadKey] = useState(0);
+  const [showCameraDirectory, setShowCameraDirectory] = useState(false);
   const lastPresentedAtRef = useRef(0);
   const lastDecodedMediaTimeRef = useRef<number | null>(null);
-  const mediaReadyRef = useRef(false);
   const captureErrorRef = useRef(false);
-  const streamRetryCountRef = useRef(0);
-  const streamExhaustedRef = useRef(false);
-  const lastStreamFailureRef = useRef(0);
-  const [streamRetries, setStreamRetries] = useState(0);
   const webcamRef = useRef<MediaStream | null>(null);
   const captureKindRef = useRef<'camera' | 'tab' | null>(null);
   const [webcamActive, setWebcamActive] = useState(false);
   const [tabCaptureActive, setTabCaptureActive] = useState(false);
   const [tabCaptureStarting, setTabCaptureStarting] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
-  const [showStreamForm, setShowStreamForm] = useState(false);
-  const [streamLabel, setStreamLabel] = useState('');
-  const [streamUrlInput, setStreamUrlInput] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -357,9 +344,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       urlRef.current = null;
       currentFileRef.current = null;
       currentHandleRef.current = null;
-      streamSourceRef.current = null;
-      setStreamSource(null);
-      if (ownerId) streamCatalog.select(ownerId, null);
       webcamRef.current = capture;
       captureKindRef.current = 'tab';
       setTabCaptureActive(true);
@@ -434,9 +418,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       urlRef.current = null;
       currentFileRef.current = null;
       currentHandleRef.current = null;
-      streamSourceRef.current = null;
-      setStreamSource(null);
-      if (ownerId) streamCatalog.select(ownerId, null);
       webcamRef.current = camera;
       captureKindRef.current = 'camera';
       setWebcamActive(true);
@@ -472,87 +453,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
   };
 
-  const chooseStream = (source: StreamSource) => {
-    // Clicking the already-selected source should not restart playback, reset
-    // vehicle IDs, or inflate the session history. Use Reconnect to restart.
-    if (streamSourceRef.current?.id === source.id) return;
-    stopWebcam();
-    videoRef.current?.pause();
-    uploadGenerationRef.current += 1;
-    resetTracks();
-    nextStableIdRef.current = 1;
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    urlRef.current = null;
-    currentFileRef.current = null;
-    currentHandleRef.current = null;
-    cloudUnsubscribeRef.current?.();
-    cloudUnsubscribeRef.current = null;
-    cloudUploadIdRef.current = null;
-    setCloudUpload(null);
-    setCloudError('');
-    setReadyVideo(false);
-    mediaReadyRef.current = false;
-    setOpenedSeconds(null);
-    setDuration(0);
-    setPosition(0);
-    setFilename(source.name);
-    setUrl(source.url);
-    streamSourceRef.current = source;
-    setStreamSource(source);
-    setStreamHealth('connecting');
-    mediaReadyRef.current = false;
-    lastPresentedAtRef.current = performance.now();
-    streamRetryCountRef.current = 0;
-    streamExhaustedRef.current = false;
-    lastStreamFailureRef.current = 0;
-    setStreamRetries(0);
-    captureErrorRef.current = false;
-    setStorage('not-saved');
-    setError('');
-    loadStartRef.current = performance.now();
-    restoreTimeRef.current = 0;
-    if (ownerId) {
-      streamCatalog.select(ownerId, source.id);
-      // Every new selection is its own tracking session; the previous
-      // day-based key merged repeated sessions and reused vehicle IDs.
-      activeRunRef.current = 'stream:' + source.id + ':' + crypto.randomUUID();
-      activityLedger.begin(ownerId, activeRunRef.current, source.name, 'live-stream');
-    }
-  };
-
   useEffect(() => {
-    const preference = ownerId
-      ? localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes'
-      : false;
-    setSaveVideo(preference);
-    if (!ownerId) { setStreams([]); return; }
-    const known = streamCatalog.list(ownerId);
-    setStreams(known);
-    const activeId = streamCatalog.active(ownerId);
-    const activeSource = known.find(source=>source.id===activeId);
-    if (activeSource && !urlRef.current && !currentFileRef.current) {
-      // The saved choice remains selected after refresh.
-      chooseStream(activeSource);
-    }
-    const startedGeneration = uploadGenerationRef.current;
-    let mounted = true;
-    void streamCatalog.refresh(ownerId).then(remote => {
-      if (!mounted) return;
-      setStreams(remote);
-      const selected = remote.find(source=>source.id===streamCatalog.active(ownerId));
-      if (selected && !currentFileRef.current &&
-          startedGeneration === uploadGenerationRef.current &&
-          streamSourceRef.current?.id !== selected.id) chooseStream(selected);
-    }).catch(error => {
-      if (mounted) setError('Live sources available on this device; cloud sync unavailable: ' + String(error));
-    });
-    return () => { mounted = false; };
+    setSaveVideo(ownerId ? localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes' : false);
   }, [ownerId]);
 
   useEffect(() => {
     let alive = true;
-    if (!ownerId || streamCatalog.active(ownerId) ||
-        localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
+    if (!ownerId || localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
     const generation = uploadGenerationRef.current;
     void Promise.all([
       localAnalysisStorage.loadVideo(ownerId ?? undefined),
@@ -603,11 +510,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       return;
     }
     uploadGenerationRef.current += 1;
-    streamSourceRef.current = null;
     stopWebcam();
-    setStreamSource(null);
     setStreamHealth('idle');
-    if (ownerId) streamCatalog.select(ownerId, null);
     currentFileRef.current = file;
     currentHandleRef.current = handle ?? null;
     cloudUnsubscribeRef.current?.();
@@ -648,24 +552,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     });
   };
 
-  const addStream = () => {
-    if (!ownerId) return;
-    try {
-      const source = streamCatalog.add(ownerId, streamLabel, streamUrlInput);
-      setStreams(streamCatalog.list(ownerId));
-      setShowStreamForm(false);
-      setStreamLabel('');
-      setStreamUrlInput('');
-      chooseStream(source);
-      void streamCatalog.saveRemote(ownerId, source).catch(error => {
-        setError('Source saved locally, but cross-device sync failed: ' + String(error));
-      });
-    } catch (error) { setError(error instanceof Error ? error.message : String(error)); }
-  };
-
   const saveCurrentVideoToB2 = async () => {
     const file = currentFileRef.current;
-    if (!file || !ownerId || streamSource || cloudStarting || cloudUploadIdRef.current) return;
+    if (!file || !ownerId || cloudStarting || cloudUploadIdRef.current) return;
     setCloudStarting(true);
     setCloudError('');
     try {
@@ -718,10 +607,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       videoRef.current?.pause();
       uploadGenerationRef.current += 1;
       stopWebcam();
-      streamSourceRef.current = null;
-      setStreamSource(null);
       setStreamHealth('idle');
-      streamCatalog.select(ownerId, null);
       const file = saved.file instanceof File
         ? saved.file : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
       currentFileRef.current = file;
@@ -737,8 +623,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const removeVideo = () => {
     // Stopping a live stream/camera must NEVER delete an unrelated video
     // previously saved by the user on this device.
-    const removingLocalFile = !!currentFileRef.current &&
-      !streamSourceRef.current && !webcamRef.current;
+    const removingLocalFile = !!currentFileRef.current && !webcamRef.current;
     videoRef.current?.pause();
     uploadGenerationRef.current += 1;
     resetTracks();
@@ -750,11 +635,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setFilename('');
     setReadyVideo(false);
     setPlaying(false);
-    streamSourceRef.current = null;
     stopWebcam();
-    setStreamSource(null);
     setStreamHealth('idle');
-    if (ownerId) streamCatalog.select(ownerId, null);
     currentFileRef.current = null;
     currentHandleRef.current = null;
     cloudUnsubscribeRef.current?.();
@@ -780,20 +662,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
   };
 
-  const reconnectStream = () => {
-    if (!streamSourceRef.current) return;
-    resetTracks();
-    setError('');
-    setStreamHealth('connecting');
-    lastPresentedAtRef.current = performance.now();
-    streamRetryCountRef.current = 0;
-    streamExhaustedRef.current = false;
-    lastStreamFailureRef.current = 0;
-    setStreamRetries(0);
-    captureErrorRef.current = false;
-    setStreamReloadKey(value => value + 1);
-  };
-
   useEffect(() => {
     if (!webcamActive && !tabCaptureActive) return;
     const camera = webcamRef.current;
@@ -809,106 +677,17 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   }, [webcamActive, tabCaptureActive, url]);
 
   useEffect(() => {
-    if (!streamSource) return;
-    const timeout = window.setTimeout(() => {
-      if (streamSourceRef.current?.id !== streamSource.id || mediaReadyRef.current) return;
-      setStreamHealth('error');
-      setError('The stream has not produced a playable video frame. Check source availability, format and CORS; press Reconnect to retry.');
-    }, 20_000);
-    return () => window.clearTimeout(timeout);
-  }, [streamSource, streamReloadKey]);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !streamSource || streamSource.format !== 'hls') return;
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 20,
-        maxBufferLength: 15,
-      });
-      let retryTimer: number | null = null;
-      let closed = false;
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-        if (!closed) hls.loadSource(streamSource.url);
-      });
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (closed) return;
-        setStreamHealth('connecting');
-        void video.play().catch(() => {
-          // Some browsers require the user to press Play, even while muted.
-          setStreamHealth('buffering');
-        });
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (closed || !data.fatal || streamExhaustedRef.current) return;
-        const attempt = ++streamRetryCountRef.current;
-        lastStreamFailureRef.current = performance.now();
-        setStreamRetries(attempt);
-        if (attempt > MAX_STREAM_RETRIES) {
-          streamExhaustedRef.current = true;
-          setStreamHealth('error');
-          setError('Live stream stopped (' + data.details +
-            '). Check its availability, codec and CORS settings, then press Reconnect.');
-          hls.stopLoad();
-          return;
-        }
-        setStreamHealth('reconnecting');
-        if (retryTimer !== null) window.clearTimeout(retryTimer);
-        retryTimer = window.setTimeout(() => {
-          if (closed) return;
-          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
-          else hls.startLoad();
-        }, liveRetryDelay(attempt));
-      });
-      return () => {
-        closed = true;
-        if (retryTimer !== null) window.clearTimeout(retryTimer);
-        hls.destroy();
-      };
-    }
-    // Safari supports HLS natively and handles reconnection independently.
-    if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      video.src = streamSource.url;
-      return;
-    }
-    setStreamHealth('error');
-    setError('HLS is not supported by this browser. Use a compatible Edge/Chrome/Safari version.');
-  }, [streamSource, streamReloadKey]);
-
-  // Media can stall without emitting an HLS fatal error. Make the stalled
-  // state visible instead of showing a misleading permanent LIVE badge.
-  useEffect(() => {
-    if (!streamSource || !active) return;
+    if (!(tabCaptureActive || webcamActive) || !active) return;
     const timer = window.setInterval(() => {
       const video = videoRef.current;
-      if (!video || streamExhaustedRef.current || !isStreamStalled(
+      if (video && isStreamStalled(
         performance.now(), lastPresentedAtRef.current,
         { paused: video.paused, ended: video.ended, seeking: video.seeking },
         STREAM_STALL_MS
-      )) return;
-      if (streamSource.format !== 'hls') {
-        setStreamHealth('buffering');
-        return;
-      }
-      const attempts = ++streamRetryCountRef.current;
-      lastStreamFailureRef.current = performance.now();
-      setStreamRetries(attempts);
-      if (attempts > MAX_STREAM_RETRIES) {
-        streamExhaustedRef.current = true;
-        setStreamHealth('error');
-        setError('Live stream stopped producing video frames. Press Reconnect to try again.');
-        return;
-      }
-      lastPresentedAtRef.current = performance.now();
-      setStreamHealth('reconnecting');
-      resetTracks();
-      setStreamReloadKey(value => value + 1);
+      )) setStreamHealth('buffering');
     }, 2_000);
     return () => window.clearInterval(timer);
-  }, [streamSource, active, resetTracks]);
+  }, [tabCaptureActive, webcamActive, active]);
 
   useEffect(() => {
     if (active) return;
@@ -924,7 +703,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
     // Never overwrite a saved file's position with a now-closed camera or
     // YouTube tab capture timestamp.
-    if (video && !wasCapturing && !streamSourceRef.current && ownerId &&
+    if (video && !wasCapturing && ownerId &&
         Number.isFinite(video.currentTime)) {
       void localAnalysisStorage.savePosition(video.currentTime, ownerId).catch(() => {});
     }
@@ -946,7 +725,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           setUrl('');
           setStreamHealth('idle');
           resetTracks();
-        } else if (!streamSourceRef.current && account) {
+        } else if (account) {
           void localAnalysisStorage.savePosition(video.currentTime, account).catch(() => {});
         }
       }
@@ -986,18 +765,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
     const maybeInfer = (mediaTime: number) => {
       if (stopped || !activeRef.current) return;
-      if ((streamSourceRef.current || webcamRef.current) &&
-          !video.paused && !video.ended && video.readyState >= 2 &&
-          hasAdvancedVideoFrame(lastDecodedMediaTimeRef.current, mediaTime)) {
+      if (webcamRef.current && !video.paused && !video.ended &&
+          video.readyState >= 2 && hasAdvancedVideoFrame(lastDecodedMediaTimeRef.current, mediaTime)) {
         lastDecodedMediaTimeRef.current = mediaTime;
         lastPresentedAtRef.current = performance.now();
-        // A one-frame recovery must not immediately reset the retry budget.
-        if (lastStreamFailureRef.current > 0 &&
-            performance.now() - lastStreamFailureRef.current > 30_000) {
-          lastStreamFailureRef.current = 0;
-          streamRetryCountRef.current = 0;
-          setStreamRetries(0);
-        }
       }
       if (captureErrorRef.current) return;
       if (stopped || !activeRef.current ||
@@ -1046,7 +817,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           captureErrorRef.current = true;
           setError('Video playback works, but the browser cannot read frames for detection. ' +
             'The stream must allow cross-origin image access (CORS). Details: ' + String(e));
-          if (streamSourceRef.current) setStreamHealth('error');
+          if (webcamRef.current) setStreamHealth('error');
         }
       }
 
@@ -1089,7 +860,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (inFlightIdRef.current === requestId) clearInFlight();
         captureErrorRef.current = true;
         setError('Could not capture a decoded video frame for AI: ' + String(error));
-        if (streamSourceRef.current) setStreamHealth('error');
+        if (webcamRef.current) setStreamHealth('error');
       });
     };
 
@@ -1116,7 +887,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   // Rebind callbacks when the media element is recreated for a HLS retry or
   // a different saved source with the same URL. Otherwise AI continues
   // sampling an orphaned video node while the new video plays untracked.
-  }, [url, streamSource?.id, streamReloadKey, webcamActive, tabCaptureActive, clearInFlight]);
+  }, [url, webcamActive, tabCaptureActive, clearInFlight]);
 
   // Paint each display frame using optical positions from the most recent
   // decoded video frame; hide boxes immediately when tracking loses them.
@@ -1240,81 +1011,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             <MonitorPlay size={16}/>
             {tabCaptureStarting ? 'Choosing tab…' : tabCaptureActive ? 'Stop tab capture' : 'Analyze browser tab'}
           </button>
-          {(streamSource || webcamActive || tabCaptureActive) && saveVideo && <button type="button"
+          {(webcamActive || tabCaptureActive) && saveVideo && <button type="button"
             onClick={() => void reopenSavedVideo()}
             className="vg-secondary">
             <Film size={16}/> Saved video
           </button>}
-          <button type="button" onClick={() => setShowStreamForm(v=>!v)}
-            className="vg-secondary">
-            {showStreamForm ? 'Close sources' : 'Live sources'}
+          <button type="button" onClick={() => setShowCameraDirectory(value => !value)}
+            aria-expanded={showCameraDirectory} className="vg-secondary">
+            {showCameraDirectory ? 'Hide camera sites' : 'Traffic camera sites'}
           </button>
           {url && !webcamActive && !tabCaptureActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"><X size={18} /></button>}
         </div>
       </header>
 
-      {(showStreamForm || streams.length > 0) && <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-              <Radio size={16} className="text-indigo-500"/> Live stream sources
-            </h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Select one of your saved HLS (.m3u8) or direct video sources. Source names and URLs sync with your account.
-            </p>
-          </div>
-          <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600">
-            {streams.length} saved {streams.length === 1 ? 'source' : 'sources'}
-          </span>
-        </div>
-        {streams.length > 0 && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {streams.map(source => {
-            const selected = streamSource?.id === source.id;
-            return <button key={source.id} type="button" onClick={() => chooseStream(source)}
-              aria-pressed={selected}
-              className={'flex min-w-0 items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ' +
-                (selected ? 'border-indigo-400 bg-indigo-50 text-indigo-950' :
-                  'border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-300 hover:bg-white')}>
-              <Radio size={17} className={selected ? 'shrink-0 text-indigo-600' : 'shrink-0 text-slate-400'}/>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold">{source.name}</span>
-                <span className="block truncate text-[11px] text-slate-500">
-                  {source.format === 'hls' ? 'HLS stream' : 'Video URL'}
-                  {selected ? ' · Selected' : ''}
-                </span>
-              </span>
-              {selected && <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-500"/>}
-            </button>;
-          })}
-        </div>}
-        {showStreamForm && <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
-          <input aria-label="Source name" placeholder="Camera A · Main road" value={streamLabel}
-            onChange={e=>setStreamLabel(e.target.value)} maxLength={80}
-            className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm"/>
-          <input aria-label="Stream URL" placeholder="https://example.com/live/playlist.m3u8"
-            value={streamUrlInput} onChange={e=>setStreamUrlInput(e.target.value)}
-            className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm"/>
-          <button type="button" onClick={addStream} disabled={!ownerId}
-            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-            Save and select
-          </button>
-        </div>}
-        {streamSource && <button type="button" onClick={()=>{
-          if (!ownerId) return;
-          const sourceId = streamSource.id;
-          streamCatalog.remove(ownerId, sourceId);
-          setStreams(streamCatalog.list(ownerId));
-          removeVideo();
-          void streamCatalog.removeRemote(ownerId, sourceId).catch(error => {
-            setError('Stream removed here, but cloud removal is pending: ' + String(error));
-          });
-        }} className="text-xs font-medium text-red-600">Remove selected source</button>}
-        <p className="text-xs leading-5 text-slate-500">
-          Only one source is analyzed at a time, using the existing YOLO11s detector.
-          Remote feeds must allow browser playback and cross-origin frame access (CORS).
-          RTSP feeds need an authenticated HLS conversion service. Do not paste private camera passwords or secret-bearing URLs.
-        </p>
-      </section>}
+      {showCameraDirectory && <TrafficCameraDirectory />}
 
       {tabCaptureActive && <p className="text-xs text-slate-500">
         Analyzing the shared tab's live pixels. Stop sharing at any time using the button above
@@ -1329,10 +1040,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="relative aspect-video w-full overflow-hidden bg-[#080e20]">
           {url ? (
             <>
-              <video key={tabCaptureActive ? 'shared-browser-tab' : webcamActive ? 'browser-camera' :
-                  streamSource ? streamSource.id + ':' + streamReloadKey : 'uploaded-file'}
-                ref={videoRef} src={tabCaptureActive || webcamActive || streamSource?.format === 'hls' ? undefined : url}
-                crossOrigin={streamSource ? 'anonymous' : undefined}
+              <video key={tabCaptureActive ? 'shared-browser-tab' : webcamActive ? 'browser-camera' : 'uploaded-file'}
+                ref={videoRef} src={tabCaptureActive || webcamActive ? undefined : url}
                 controls autoPlay muted playsInline preload="auto"
                 className="h-full w-full object-contain"
                 onLoadedMetadata={event => {
@@ -1340,7 +1049,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   event.currentTarget.playbackRate = 1;
                 }}
                 onLoadedData={event => {
-                  mediaReadyRef.current = true;
                   setReadyVideo(true);
                   setOpenedSeconds((performance.now() - loadStartRef.current) / 1000);
                   firstFrameResolveRef.current?.();
@@ -1358,26 +1066,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   startDetector();
                 }}
                 onPlaying={() => {
-                  mediaReadyRef.current = true;
                   setPlaying(true);
-                  if (streamSourceRef.current || webcamRef.current) {
+                  if (webcamRef.current) {
                     setStreamHealth('playing');
-                    streamExhaustedRef.current = false;
                     lastPresentedAtRef.current = performance.now();
-                    setError(previous => previous.startsWith('Live stream stopped') ||
-                      previous.startsWith('This stream cannot') ||
-                      previous.startsWith('The stream has not produced') ? '' : previous);
                   }
                 }}
                 onWaiting={() => {
-                  if (streamSourceRef.current || webcamRef.current) setStreamHealth('buffering');
+                  if (webcamRef.current) setStreamHealth('buffering');
                 }}
                 onStalled={() => {
-                  if (streamSourceRef.current || webcamRef.current) setStreamHealth('buffering');
+                  if (webcamRef.current) setStreamHealth('buffering');
                 }}
                 onPause={event => {
                   setPlaying(false);
-                  if (!streamSource && !webcamActive && !tabCaptureActive)
+                  if (!webcamActive && !tabCaptureActive)
                     void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId ?? undefined).catch(() => {});
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
@@ -1386,21 +1089,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   setPlaying(false);
                   latestRef.current = null;
                   setVisibleCount(0);
-                  // Finite remote videos may complete naturally; don't keep
-                  // advertising them as LIVE or reconnect a finished file.
-                  if (streamSourceRef.current) {
-                    setStreamHealth('ended');
-                    streamExhaustedRef.current = true;
-                  }
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
                 onError={() => {
-                  if (streamSourceRef.current || webcamRef.current) setStreamHealth('error');
+                  if (webcamRef.current) setStreamHealth('error');
                   firstFrameResolveRef.current?.();
                   firstFrameResolveRef.current = null;
-                  setError(streamSource
-                    ? 'This stream cannot be played. Check its URL, media codec, availability and CORS headers.'
-                    : webcamRef.current ? 'The camera stream was interrupted.'
+                  setError(webcamRef.current ? 'The shared camera or browser tab was interrupted.'
                     : 'The browser cannot decode this video. Try converting it to H.264 MP4.');
                 }}
               />
@@ -1413,12 +1108,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   ) : webcamActive ? (
                     streamHealth === 'playing' ? 'CAMERA LIVE' :
                     streamHealth === 'buffering' ? 'CAMERA BUFFERING' : 'STARTING CAMERA'
-                  ) : streamSource ? (
-                    streamHealth === 'playing' ? 'STREAM LIVE' :
-                    streamHealth === 'reconnecting' ? 'RECONNECTING ' + streamRetries + '/' + MAX_STREAM_RETRIES :
-                    streamHealth === 'buffering' ? 'BUFFERING' :
-                    streamHealth === 'error' ? 'STREAM OFFLINE' :
-                    streamHealth === 'ended' ? 'PLAYBACK FINISHED' : 'CONNECTING'
                   ) : readyVideo ? (playing ? 'PLAYING VIDEO' : 'PAUSED') : 'OPENING VIDEO'}
                 </span>
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-medium text-white">
@@ -1446,16 +1135,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               <div className="truncate text-sm font-semibold text-slate-900">{filename}</div>
               <div className="mt-1 text-xs text-slate-500">
                 {tabCaptureActive ? 'LIVE BROWSER TAB' :
-                  webcamActive ? 'LIVE CAMERA' :
-                  streamSource ? 'LIVE STREAM' : readableTime(position) + ' / ' + readableTime(duration)} · Playback at 1×
+                  webcamActive ? 'LIVE CAMERA' : readableTime(position) + ' / ' + readableTime(duration)} · Playback at 1×
                 {openedSeconds !== null ? ' · Opened in ' + openedSeconds.toFixed(2) + 's' : ''}
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {streamSource && <button type="button" onClick={reconnectStream}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
-                <RefreshCw size={14} /> Reconnect stream
-              </button>}
               {detector === 'error' && <button type="button" onClick={startDetector}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
                 <RefreshCw size={14} /> Retry detector
@@ -1469,7 +1153,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
-      {!streamSource && !webcamActive && !tabCaptureActive && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+      {!webcamActive && !tabCaptureActive && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
         <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
           disabled={!ownerId} className="h-4 w-4 accent-indigo-600" />
         <span className="flex-1"><strong>Keep this video on this device</strong>
@@ -1479,7 +1163,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </span>
         </span>
       </label>}
-      {!streamSource && !webcamActive && !tabCaptureActive && currentFileRef.current && (
+      {!webcamActive && !tabCaptureActive && currentFileRef.current && (
         <div className="vg-panel p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
