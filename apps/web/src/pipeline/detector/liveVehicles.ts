@@ -103,10 +103,21 @@ export function decodeTrafficVehicles(
         : undefined
     });
   }
-  // Keep strongest candidates and suppress repeated car/bus/truck boxes.
+  // Most anchors around large vehicles overlap. A global top-200 cutoff
+  // can spend its entire budget on repeated car boxes before NMS even sees
+  // smaller motorcycles. Preserve the original top-200 vehicle budget, but
+  // also consider the strongest 80 two-wheelers without lowering thresholds.
   candidates.sort((a, b) => b.prob - a.prob);
+  const candidatePool = new Set(candidates.slice(0, 200));
+  let extraTwoWheelers = 0;
+  for (const candidate of candidates) {
+    if (extraTwoWheelers >= 80) break;
+    if (candidate.classId !== 1 && candidate.classId !== 3) continue;
+    candidatePool.add(candidate);
+    extraTwoWheelers++;
+  }
   const selected: BoundingBox[] = [];
-  for (const candidate of candidates.slice(0, 200)) {
+  for (const candidate of [...candidatePool].sort((a, b) => b.prob - a.prob)) {
     if (selected.some(existing => {
       if (groupOf(existing.classId) !== groupOf(candidate.classId)) return false;
       const o = overlap(candidate, existing);
