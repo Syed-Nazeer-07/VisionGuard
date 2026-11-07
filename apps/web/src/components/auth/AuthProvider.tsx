@@ -197,7 +197,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               supabase.from('profiles').select('*').eq('id', newSession.user.id).maybeSingle(),
               supabase.from('user_settings').select('*').eq('id', newSession.user.id).maybeSingle()
             ])
-            applyAuthState(newSession, pRes.data || null, sRes.data || null)
+            let foundProfile = pRes.data || null
+            let foundSettings = sRes.data || null
+            if (!foundProfile && !pRes.error) {
+              // A first-time Google OAuth account may have no profile yet.
+              // Insert-only prevents ever overwriting an existing Admin role.
+              const { data: created } = await supabase.from('profiles').insert([{
+                id: newSession.user.id,
+                email: newSession.user.email,
+                role: 'Viewer',
+                name: newSession.user.user_metadata?.full_name ||
+                  newSession.user.user_metadata?.name || 'Member',
+              }]).select().maybeSingle()
+              foundProfile = created
+              if (!foundProfile) {
+                const retry = await supabase.from('profiles')
+                  .select('*').eq('id', newSession.user.id).maybeSingle()
+                foundProfile = retry.data || null
+              }
+            }
+            if (!foundSettings && !sRes.error) {
+              const { data: created } = await supabase.from('user_settings')
+                .insert([{ id: newSession.user.id }]).select().maybeSingle()
+              foundSettings = created
+            }
+            if (foundProfile?.status === 'Disabled') {
+              await supabase.auth.signOut()
+              applyAuthState(null, null, null)
+            } else {
+              applyAuthState(newSession, foundProfile, foundSettings)
+            }
           } catch {
             applyAuthState(newSession, null, null)
           }
