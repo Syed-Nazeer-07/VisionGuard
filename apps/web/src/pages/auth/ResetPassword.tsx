@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -31,13 +32,13 @@ export function ResetPassword() {
       return;
     }
     let mounted = true;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
       if (mounted && event === 'PASSWORD_RECOVERY' && session) {
         setReady(true);
         setVerifying(false);
       }
     });
-    void supabase.auth.getSession().then(({ data: { session } }) => {
+    void supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       if (!mounted) return;
       setReady(Boolean(session));
       setVerifying(false);
