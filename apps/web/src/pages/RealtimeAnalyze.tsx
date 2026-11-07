@@ -644,6 +644,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           }, { replace: true });
           return;
         }
+        // Do not leave an unrelated previously opened video visible behind
+        // a "cloud original missing" notice. Preserve retained files in
+        // IndexedDB; clear only the currently displayed media source.
+        videoRef.current?.pause();
+        stopWebcam();
+        resetTracks();
+        if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+        urlRef.current = null;
+        currentFileRef.current = null;
+        currentHandleRef.current = null;
+        setUrl('');
+        setReadyVideo(false);
+        setPlaying(false);
+        setCloudPlaybackActive(false);
+        setFilename(data.filename);
         setUnavailableOriginal(data.filename);
         // Show a usable file-picker action, not a dead-end backend exception.
         setError('');
