@@ -908,7 +908,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (presentedId !== null) video.cancelVideoFrameCallback(presentedId);
       if (fallbackId !== null) cancelAnimationFrame(fallbackId);
     };
-  }, [url, clearInFlight]);
+  // Rebind callbacks when the media element is recreated for a HLS retry or
+  // a different saved source with the same URL. Otherwise AI continues
+  // sampling an orphaned video node while the new video plays untracked.
+  }, [url, streamSource?.id, streamReloadKey, webcamActive, clearInFlight]);
 
   // Paint each display frame using optical positions from the most recent
   // decoded video frame; hide boxes immediately when tracking loses them.
