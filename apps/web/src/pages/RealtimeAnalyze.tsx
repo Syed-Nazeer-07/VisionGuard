@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Camera, Film, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { YouTubeLivePanel } from '../components/analysis/YouTubeLivePanel';
-import { hiddenPagePolicy, shouldResumeSharedTab } from '../services/captureVisibility';
+import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { uploadStorageProvider } from '../services/videoStorage';
@@ -58,6 +58,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const lastPresentedAtRef = useRef(0);
   const lastDecodedMediaTimeRef = useRef<number | null>(null);
   const captureErrorRef = useRef(false);
+  const captureStalledRef = useRef(false);
   const webcamRef = useRef<MediaStream | null>(null);
   const captureKindRef = useRef<'camera' | 'tab' | null>(null);
   const [webcamActive, setWebcamActive] = useState(false);
@@ -122,6 +123,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const resetTracks = useCallback(() => {
     generationRef.current += 1;
     lastDecodedMediaTimeRef.current = null;
+    captureStalledRef.current = false;
     latestRef.current = null;
     captureErrorRef.current = false;
     flowTracksRef.current = [];
@@ -378,6 +380,19 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         activityLedger.begin(ownerId, activeRunRef.current, 'Shared browser tab', 'live-stream');
       } else activeRunRef.current = '';
       for (const track of capture.getVideoTracks()) {
+        track.onmute = () => {
+          if (webcamRef.current === capture) {
+            captureStalledRef.current = true;
+            setStreamHealth('buffering');
+          }
+        };
+        track.onunmute = () => {
+          if (webcamRef.current === capture) {
+            captureStalledRef.current = false;
+            lastPresentedAtRef.current = performance.now();
+            setStreamHealth('connecting');
+          }
+        };
         track.onended = () => {
           if (webcamRef.current !== capture) return;
           stopWebcam();
@@ -718,7 +733,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         performance.now(), lastPresentedAtRef.current,
         { paused: video.paused, ended: video.ended, seeking: video.seeking },
         STREAM_STALL_MS
-      )) setStreamHealth('buffering');
+      )) {
+        captureStalledRef.current = true;
+        setStreamHealth('buffering');
+      }
     }, 2_000);
     return () => window.clearInterval(timer);
   }, [tabCaptureActive, webcamActive, active]);
@@ -732,7 +750,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
     const video = videoRef.current;
     const wasCapturing = !!webcamRef.current;
-    if (wasCapturing && captureKindRef.current === 'tab' && keepTabConnected) {
+    if (wasCapturing && keepCaptureAcrossPages(captureKindRef.current, keepTabConnected)) {
       // Capture stays connected, but AI inference is suspended off this route.
       if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
       return;
@@ -826,6 +844,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           video.readyState >= 2 && hasAdvancedVideoFrame(lastDecodedMediaTimeRef.current, mediaTime)) {
         lastDecodedMediaTimeRef.current = mediaTime;
         lastPresentedAtRef.current = performance.now();
+        if (captureStalledRef.current && video.readyState >= 2) {
+          captureStalledRef.current = false;
+          setStreamHealth('playing');
+        }
       }
       if (captureErrorRef.current) return;
       if (stopped || !activeRef.current ||
