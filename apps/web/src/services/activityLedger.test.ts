@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeIncidentReviewStatus, clearResolvedCloudWarning, mergeEstimatedSpeeds, summarizeActivity, type AnalysisRecord } from './activityLedger';
+import { changeIncidentReviewStatus, clearResolvedCloudWarning, mergeEstimatedSpeeds, shouldRefreshCloudOnFocus, summarizeActivity, type AnalysisRecord } from './activityLedger';
 
 function record(id: string, vehicles: Record<string, { id:number; type:string;confidence:number;firstSeenAt:number;lastSeenAt:number;observations:number;estimatedSpeedKmh:number|null }>): AnalysisRecord {
   return {
@@ -107,5 +107,24 @@ describe('persisted review decisions', () => {
     expect(summarizeActivity(input)).toMatchObject({
       violations: 1, pendingReviews: 1, reviewedFlags: 0, dismissedFlags: 0,
     });
+  });
+});
+
+describe('returning to a live cloud-backed workspace', () => {
+  it('refreshes on the first foreground visit and after the bounded interval', () => {
+    expect(shouldRefreshCloudOnFocus(undefined, 100_000, true, true)).toBe(true);
+    expect(shouldRefreshCloudOnFocus(10_000, 40_000, true, true)).toBe(true);
+  });
+  it('throttles repeated focus or visibility events', () => {
+    expect(shouldRefreshCloudOnFocus(10_000, 10_010, true, true)).toBe(false);
+    expect(shouldRefreshCloudOnFocus(10_000, 39_999, true, true)).toBe(false);
+  });
+  it('never refreshes while the user is hidden or offline', () => {
+    expect(shouldRefreshCloudOnFocus(undefined, 10_000, false, true)).toBe(false);
+    expect(shouldRefreshCloudOnFocus(undefined, 10_000, true, false)).toBe(false);
+  });
+  it('recovers if the local clock moves backwards or a stored timestamp is corrupt', () => {
+    expect(shouldRefreshCloudOnFocus(20_000, 10_000, true, true)).toBe(true);
+    expect(shouldRefreshCloudOnFocus(Number.NaN, 10_000, true, true)).toBe(true);
   });
 });

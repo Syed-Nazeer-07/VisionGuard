@@ -46,6 +46,23 @@ const writeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const writeTasks = new Map<string, Promise<void>>();
 const cloudTasks = new Map<string, Promise<void>>();
 const lastCloudPush = new Map<string, number>();
+const lastCloudPull = new Map<string, number>();
+const CLOUD_FOCUS_REFRESH_MS = 30_000;
+
+/** Refresh a signed-in user's analysis metadata when they return to an
+ * already-open app. This doesn't grant tab capture or access video bytes.
+ * The throttle prevents one cloud query for every window-focus event.
+ */
+export function shouldRefreshCloudOnFocus(
+  lastAt: number | undefined,
+  now: number,
+  visible: boolean,
+  online: boolean,
+): boolean {
+  return visible && online && Number.isFinite(now) &&
+    (lastAt === undefined || !Number.isFinite(lastAt) ||
+      now < lastAt || now - lastAt >= CLOUD_FOCUS_REFRESH_MS);
+}
 const cloudLoads = new Set<string>();
 const cloudStatus = new Map<string, 'idle' | 'synced' | 'offline'>();
 // Avoid re-uploading hundreds of unchanged session snapshots on every pause.
@@ -146,6 +163,7 @@ async function mergeFromCloud(owner: string): Promise<void> {
       cloudStatus.set(owner, 'offline');
       return;
     }
+    lastCloudPull.set(owner, Date.now());
     const { data, error } = await (supabase as any).from('user_analysis_records')
       .select('run_id,payload,updated_at').eq('owner_id', owner)
       .order('updated_at', { ascending: false }).limit(150);
@@ -420,8 +438,23 @@ export function useActivityLedger(ownerId: string | null | undefined): ActivityS
         .then(() => activityLedger.flush(ownerId))
         .catch(error => console.warn('Activity reconnect failed:', error));
     };
+    const refreshOnReturn = () => {
+      if (!shouldRefreshCloudOnFocus(
+        lastCloudPull.get(ownerId), Date.now(), !document.hidden, navigator.onLine
+      )) return;
+      lastCloudPull.set(ownerId, Date.now());
+      void ensureLoaded(ownerId)
+        .then(() => mergeFromCloud(ownerId))
+        .catch(error => console.warn('Activity cloud refresh failed:', error));
+    };
     window.addEventListener('online', restore);
-    return () => window.removeEventListener('online', restore);
+    window.addEventListener('focus', refreshOnReturn);
+    document.addEventListener('visibilitychange', refreshOnReturn);
+    return () => {
+      window.removeEventListener('online', restore);
+      window.removeEventListener('focus', refreshOnReturn);
+      document.removeEventListener('visibilitychange', refreshOnReturn);
+    };
   }, [ownerId]);
 
   return useSyncExternalStore(
