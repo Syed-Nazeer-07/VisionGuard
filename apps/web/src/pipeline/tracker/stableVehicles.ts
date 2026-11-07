@@ -164,10 +164,13 @@ export function reconcileVehicles(
       lastDetectedAt: mediaTime
     });
   });
-  // Keep a missed YOLO track only if optical tracking *still* sees it.
-  // Drop it quickly after repeated detector misses or overlap with new boxes.
+  // Keep a missed YOLO track only if fresh optical evidence still sees it.
+  // Predicted-only boxes are a brief rendering bridge, NOT reliable evidence
+  // that a vehicle remains on screen after another YOLO detector miss.
   existing.forEach((old, index) => {
-    if (usedOld.has(index) || mediaTime - old.lastDetectedAt > 1.7 ||
+    if (usedOld.has(index) || old.isPredicted ||
+        mediaTime - (old.lastOpticalAt ?? old.lastDetectedAt) > 0.38 ||
+        mediaTime - old.lastDetectedAt > 1.7 ||
         assigned.some(track => track.id === old.id)) return;
     if (assigned.some(t => classFamily(t.className) === classFamily(old.className) &&
       getIOU(t, old) > .45)) return;
