@@ -4,12 +4,17 @@
   <p><strong>Traffic footage → vehicle tracking → reviewable insight.</strong></p>
   <p>Browser-based traffic video analysis with persistent tracking, session history, analytics and incident-review workflows.</p>
   <p>
+    <a href="https://visionguard.syednazeerofficial2007.workers.dev/"><img src="https://img.shields.io/badge/Live%20App-Open%20VisionGuard-2563EB?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Open the live VisionGuard application" /></a>
+  </p>
+  <p><a href="https://visionguard.syednazeerofficial2007.workers.dev/"><strong>🌐 Try VisionGuard live</strong></a></p>
+  <p>
     <a href="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml"><img src="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
     <img src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" alt="React 19" />
     <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white" alt="TypeScript 6" />
     <img src="https://img.shields.io/badge/YOLO11s-ONNX-263e61" alt="YOLO11s ONNX" />
   </p>
   <p>
+    <a href="https://visionguard.syednazeerofficial2007.workers.dev/">Live application</a> ·
     <a href="#features">Features</a> ·
     <a href="#quick-start">Quick start</a> ·
     <a href="#data-and-privacy">Privacy</a> ·
@@ -105,6 +110,16 @@ Restart Vite after changing environment variables. These are **browser-public** 
 **Without valid Supabase configuration**, VisionGuard uses a **local demo adapter**. Some legacy screens may show **sample records**, which are not real camera feeds, genuine detections or verified incidents. A configured account and correct database policies are necessary for authenticated cloud metadata synchronization.
 
 **Backblaze B2** is the optional destination for original cloud-saved video files. B2 requires a separately configured, authenticated server-side signing function and credentials. **Supabase Storage is not used for the original video files** in this workflow. For Google OAuth, follow the [Google sign-in guide](docs/GOOGLE_SIGN_IN.md).
+
+### Live deployment
+
+**[Open VisionGuard — live Cloudflare application](https://visionguard.syednazeerofficial2007.workers.dev/)**
+
+The application is deployed to Cloudflare Workers. Sign in to access the
+analysis workspace. The hosted URL is public; some workflows require
+browser capture permission, an available YOLO11s model and correctly
+configured authentication. **Deployment does not itself verify real-world
+vehicle-detection accuracy or every optional integration.**
 
 ### Deploy the browser app on Cloudflare
 
