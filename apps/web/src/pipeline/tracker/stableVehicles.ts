@@ -6,6 +6,10 @@ export interface PersistentTrack extends LiveTrack {
   speedKmh: number | null;
   speedIsEstimate: boolean;
   classVotes?: Record<string, number>;
+  /** Most recent frame with a reliable visual match (not a predicted position). */
+  lastOpticalAt?: number;
+  /** Short-lived prediction is display-only and must not drive measured speed. */
+  isPredicted?: boolean;
 }
 export interface TrajectoryPoint { time: number; x: number; y: number }
 export interface SpeedHistory {
@@ -73,6 +77,12 @@ export function reconcileVehicles(
     // finishes the frame that optical flow has already advanced through.
     const correction = .55;
     const mix = (x: number, y: number) => x + correction * (y - x);
+    // Box-size observations are noisier than center positions: suppress
+    // abrupt jumps, while still allowing approach/perspective size changes.
+    const smoothSize = (oldValue: number, observed: number) => {
+      const bounded = Math.max(oldValue * .78, Math.min(oldValue * 1.22, observed));
+      return oldValue * .72 + bounded * .28;
+    };
     // Keep labels stable, but allow a repeatedly confirmed BUS/TRUCK class
     // to correct an early CAR misclassification.
     const oldVotes = before.classVotes ?? { [before.className]: before.confidence * 2 };
@@ -86,12 +96,14 @@ export function reconcileVehicles(
       classVotes: votes,
       x: mix(before.x, after.x),
       y: mix(before.y, after.y),
-      w: mix(before.w, after.w),
-      h: mix(before.h, after.h),
+      w: smoothSize(before.w, after.w),
+      h: smoothSize(before.h, after.h),
       vx: before.vx,
       vy: before.vy,
       speedKmh: before.speedKmh,
       speedIsEstimate: true,
+      lastOpticalAt: mediaTime,
+      isPredicted: false,
       lastDetectedAt: mediaTime
     });
   }
@@ -113,6 +125,8 @@ export function reconcileVehicles(
       speedKmh: null,
       speedIsEstimate: true,
       classVotes: { [candidate.className]: candidate.confidence * 2 },
+      lastOpticalAt: mediaTime,
+      isPredicted: false,
       lastDetectedAt: mediaTime
     });
   });
@@ -166,4 +180,42 @@ export function updateScreenSpeed(
   const previous = history.smoothedKmh;
   const next = previous === null ? estimate : previous * .75 + estimate * .25;
   return { history: { points, smoothedKmh: next }, kmh: next };
+}
+
+/**
+ * A single failed optical match is NOT evidence that a vehicle disappeared.
+ * Hold a tightly bounded prediction for at most 0.33s while visual matching
+ * reacquires. After that, hide it. Never reuse a predicted point for speed.
+ */
+export function recoverBriefOpticalMisses(
+  previous: readonly PersistentTrack[],
+  observed: readonly PersistentTrack[],
+  previousTime: number,
+  mediaTime: number,
+  frameWidth: number,
+  frameHeight: number,
+): PersistentTrack[] {
+  const result = observed.map(track => ({
+    ...track, lastOpticalAt: mediaTime, isPredicted: false
+  }));
+  const present = new Set(result.map(t => t.id));
+  const elapsed = mediaTime - previousTime;
+  if (!(elapsed > 0 && elapsed <= .25)) return result;
+  for (const track of previous) {
+    if (present.has(track.id)) continue;
+    const sinceReliable = mediaTime - (track.lastOpticalAt ?? track.lastDetectedAt);
+    if (sinceReliable < 0 || sinceReliable > .33) continue;
+    const velocityLimit = Math.max(110, Math.max(track.w, track.h) * 2.5);
+    const rawSpeed = Math.hypot(track.vx, track.vy);
+    const scale = rawSpeed > velocityLimit ? velocityLimit / rawSpeed : 1;
+    const cx = track.x + track.vx * scale * elapsed;
+    const cy = track.y + track.vy * scale * elapsed;
+    const left = cx - track.w / 2, top = cy - track.h / 2;
+    const right = cx + track.w / 2, bottom = cy + track.h / 2;
+    const visibleWidth = Math.max(0, Math.min(frameWidth, right) - Math.max(0, left));
+    const visibleHeight = Math.max(0, Math.min(frameHeight, bottom) - Math.max(0, top));
+    if (visibleWidth * visibleHeight < track.w * track.h * .35) continue;
+    result.push({ ...track, x: cx, y: cy, isPredicted: true });
+  }
+  return result;
 }
