@@ -58,6 +58,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
   const [streamReloadKey, setStreamReloadKey] = useState(0);
   const lastPresentedAtRef = useRef(0);
+  const mediaReadyRef = useRef(false);
   const captureErrorRef = useRef(false);
   const streamRetryCountRef = useRef(0);
   const streamExhaustedRef = useRef(false);
@@ -312,7 +313,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       });
-      if (request !== uploadGenerationRef.current) {
+      if (request !== uploadGenerationRef.current || !activeRef.current) {
+        // Camera permission can finish after navigating away; do not create
+        // a hidden live capture in that case.
         camera.getTracks().forEach(track => track.stop());
         return;
       }
@@ -375,6 +378,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setCloudUpload(null);
     setCloudError('');
     setReadyVideo(false);
+    mediaReadyRef.current = false;
     setOpenedSeconds(null);
     setDuration(0);
     setPosition(0);
@@ -383,6 +387,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     streamSourceRef.current = source;
     setStreamSource(source);
     setStreamHealth('connecting');
+    mediaReadyRef.current = false;
     lastPresentedAtRef.current = performance.now();
     streamRetryCountRef.current = 0;
     streamExhaustedRef.current = false;
@@ -677,6 +682,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (video.srcObject === camera) video.srcObject = null;
     };
   }, [webcamActive, url]);
+
+  useEffect(() => {
+    if (!streamSource) return;
+    const timeout = window.setTimeout(() => {
+      if (streamSourceRef.current?.id !== streamSource.id || mediaReadyRef.current) return;
+      setStreamHealth('error');
+      setError('The stream has not produced a playable video frame. Check source availability, format and CORS; press Reconnect to retry.');
+    }, 20_000);
+    return () => window.clearTimeout(timeout);
+  }, [streamSource, streamReloadKey]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1178,6 +1193,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   event.currentTarget.playbackRate = 1;
                 }}
                 onLoadedData={event => {
+                  mediaReadyRef.current = true;
                   setReadyVideo(true);
                   setOpenedSeconds((performance.now() - loadStartRef.current) / 1000);
                   firstFrameResolveRef.current?.();
@@ -1195,13 +1211,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   startDetector();
                 }}
                 onPlaying={() => {
+                  mediaReadyRef.current = true;
                   setPlaying(true);
                   if (streamSourceRef.current || webcamRef.current) {
                     setStreamHealth('playing');
                     streamExhaustedRef.current = false;
                     lastPresentedAtRef.current = performance.now();
                     setError(previous => previous.startsWith('Live stream stopped') ||
-                      previous.startsWith('This stream cannot') ? '' : previous);
+                      previous.startsWith('This stream cannot') ||
+                      previous.startsWith('The stream has not produced') ? '' : previous);
                   }
                 }}
                 onWaiting={() => {
