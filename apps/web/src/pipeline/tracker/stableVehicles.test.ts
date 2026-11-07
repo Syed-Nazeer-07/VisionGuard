@@ -109,6 +109,19 @@ describe('persistent crowded vehicle tracking', () => {
     expect(recoverBriefOpticalMisses([before], [], 2, 2.20, 300, 300)).toEqual([]);
   });
 
+  it('removes partially exited optical predictions before they linger at the frame edge', () => {
+    const leaving: PersistentTrack = {
+      ...car(285, 120, 17), id: 17, lastDetectedAt: 3,
+      lastOpticalAt: 3, speedKmh: null, speedIsEstimate: true,
+      vx: 0, vy: 0
+    };
+    // 42.7% visible: the old 35% threshold left this ghost in the overlay.
+    expect(recoverBriefOpticalMisses([leaving], [], 3, 3.10, 300, 300)).toEqual([]);
+    // A mostly visible real road user must still be held for one brief miss.
+    expect(recoverBriefOpticalMisses([{ ...leaving, x: 270 }], [], 3, 3.10, 300, 300)).toHaveLength(1);
+    expect(recoverBriefOpticalMisses([{ ...leaving, x: 305 }], [], 3, 3.10, 300, 300)).toEqual([]);
+  });
+
   it('limits abrupt bus/truck box size changes during the same persistent track', () => {
     const before: PersistentTrack = {
       ...car(100, 120, 4), id: 4, w: 60, h: 80, lastDetectedAt: 1,

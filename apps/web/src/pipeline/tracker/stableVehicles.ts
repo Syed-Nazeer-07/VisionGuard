@@ -251,7 +251,10 @@ export function recoverBriefOpticalMisses(
     const right = cx + track.w / 2, bottom = cy + track.h / 2;
     const visibleWidth = Math.max(0, Math.min(frameWidth, right) - Math.max(0, left));
     const visibleHeight = Math.max(0, Math.min(frameHeight, bottom) - Math.max(0, top));
-    if (visibleWidth * visibleHeight < track.w * track.h * .35) continue;
+    // Match display projection: once most of a predicted box has exited the
+    // source image, remove it instead of pinning a ghost to the frame edge.
+    if (cx < 0 || cx > frameWidth || cy < 0 || cy > frameHeight ||
+        visibleWidth * visibleHeight < track.w * track.h * .60) continue;
     result.push({ ...track, x: cx, y: cy, isPredicted: true });
   }
   return result;
