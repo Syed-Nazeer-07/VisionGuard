@@ -60,6 +60,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const lastPresentedAtRef = useRef(0);
   const captureErrorRef = useRef(false);
   const streamRetryCountRef = useRef(0);
+  const streamExhaustedRef = useRef(false);
   const [streamRetries, setStreamRetries] = useState(0);
   const webcamRef = useRef<MediaStream | null>(null);
   const [webcamActive, setWebcamActive] = useState(false);
@@ -379,6 +380,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setStreamHealth('connecting');
     lastPresentedAtRef.current = performance.now();
     streamRetryCountRef.current = 0;
+    streamExhaustedRef.current = false;
     setStreamRetries(0);
     captureErrorRef.current = false;
     setStorage('not-saved');
@@ -449,6 +451,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       workerRef.current = null;
       readyRef.current = false;
       firstFrameResolveRef.current?.();
+      // Camera permissions must not leave a capture track running after
+      // this persistent analysis component unmounts or the user signs out.
+      webcamRef.current?.getTracks().forEach(track => track.stop());
+      webcamRef.current = null;
+      cloudUnsubscribeRef.current?.();
+      cloudUnsubscribeRef.current = null;
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     };
   }, [attachVideo, clearInFlight, ownerId]);
@@ -604,6 +612,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setStreamHealth('connecting');
     lastPresentedAtRef.current = performance.now();
     streamRetryCountRef.current = 0;
+    streamExhaustedRef.current = false;
     setStreamRetries(0);
     captureErrorRef.current = false;
     setStreamReloadKey(value => value + 1);
@@ -648,10 +657,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         });
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (closed || !data.fatal) return;
+        if (closed || !data.fatal || streamExhaustedRef.current) return;
         const attempt = ++streamRetryCountRef.current;
         setStreamRetries(attempt);
         if (attempt > MAX_STREAM_RETRIES) {
+          streamExhaustedRef.current = true;
           setStreamHealth('error');
           setError('Live stream stopped (' + data.details +
             '). Check its availability, codec and CORS settings, then press Reconnect.');
@@ -687,7 +697,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (!streamSource || !active) return;
     const timer = window.setInterval(() => {
       const video = videoRef.current;
-      if (!video || !isStreamStalled(
+      if (!video || streamExhaustedRef.current || !isStreamStalled(
         performance.now(), lastPresentedAtRef.current,
         { paused: video.paused, ended: video.ended, seeking: video.seeking },
         STREAM_STALL_MS
@@ -699,6 +709,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       const attempts = ++streamRetryCountRef.current;
       setStreamRetries(attempts);
       if (attempts > MAX_STREAM_RETRIES) {
+        streamExhaustedRef.current = true;
         setStreamHealth('error');
         setError('Live stream stopped producing video frames. Press Reconnect to try again.');
         return;
@@ -1124,6 +1135,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                     setStreamHealth('playing');
                     setStreamRetries(0);
                     streamRetryCountRef.current = 0;
+                    streamExhaustedRef.current = false;
                     lastPresentedAtRef.current = performance.now();
                   }
                 }}
