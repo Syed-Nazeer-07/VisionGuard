@@ -134,7 +134,9 @@ export function advanceOpticalTracks<T extends LiveTrack>(
   ];
 
   for (const track of tracks) {
-    if (track.w < 7 || track.h < 7 || track.confidence < .42) continue;
+    const minConf = track.className === 'motorcycle' ? .28 :
+      track.className === 'bicycle' ? .33 : .42;
+    if (track.w < 4 || track.h < 4 || track.confidence < minConf) continue;
     const centerX = track.x * sx;
     const centerY = track.y * sy;
     const isSmallTwoWheeler = track.className === 'motorcycle' || track.className === 'bicycle';
