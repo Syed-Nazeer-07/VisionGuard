@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
 import { Activity, ArrowRight, BarChart3, Download, FileText, Film, ShieldAlert } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -28,8 +29,9 @@ function Stat({ label, number, note }: { label: string; number: number; note: st
 
 function LocalScope() {
   return <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 text-sm text-indigo-900">
-    <strong>Saved on this device.</strong> Vehicle history survives page changes and browser restarts, but it is not a cloud backup.
-    Clearing browser site data or switching devices can erase it. Confirmed violations appear only when evidence is recorded.
+    <strong>Local-first activity, with account sync.</strong> Tracking summaries remain available on this device
+    and synchronize to your signed-in account when online. If sync fails, clearing browser data may lose unsynced records.
+    Source video files are saved to Backblaze B2 only when you explicitly request it.
   </div>;
 }
 
@@ -234,8 +236,39 @@ export function ActivityReports() {
 }
 
 
+interface B2VideoRow {
+  id: string;
+  filename: string;
+  file_size: number | null;
+  uploaded_at: string;
+  storage_path: string | null;
+  processing_status: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
 export function ActivityVideoLibrary() {
-  const { records, loaded, error } = useRuns();
+  const { records, loaded, error, userId } = useRuns();
+  const [b2Videos, setB2Videos] = useState<B2VideoRow[]>([]);
+  const [b2Loading, setB2Loading] = useState(false);
+  const [b2Error, setB2Error] = useState('');
+  useEffect(() => {
+    if (!userId) { setB2Videos([]); return; }
+    let alive = true;
+    setB2Loading(true);
+    void (async () => {
+      const { data, error: queryError } = await (supabase as any)
+        .from('video_assets')
+        .select('id,filename,file_size,uploaded_at,storage_path,processing_status,metadata')
+        .eq('uploaded_by',userId)
+        .eq('storage_provider','b2')
+        .order('uploaded_at',{ascending:false}).limit(50);
+      if (!alive) return;
+      if (queryError) setB2Error(queryError.message);
+      else { setB2Error(''); setB2Videos((data||[]) as B2VideoRow[]); }
+      setB2Loading(false);
+    })().catch(e => { if(alive) {setB2Loading(false);setB2Error(String(e));} });
+    return () => { alive = false; };
+  },[userId]);
   return <main className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-bold text-slate-900">Analysis history</h1>
@@ -246,9 +279,29 @@ export function ActivityVideoLibrary() {
       </Link>
     </div>
     <LocalScope/>
-    <p className="text-xs text-slate-600">Looking for previously uploaded cloud videos?
-      <Link className="ml-1 font-semibold text-indigo-600 hover:underline" to="/app/archive-videos">Open legacy video archive</Link>
-    </p>
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
+        <div><h2 className="font-semibold text-slate-900">Saved videos · Backblaze B2</h2>
+          <p className="mt-1 text-xs text-slate-500">Only files you chose to upload. The list is metadata; the video bytes stay in B2.</p>
+        </div>
+        <Link className="text-xs font-semibold text-indigo-600 hover:underline" to="/app/archive-videos">Manage cloud videos</Link>
+      </div>
+      {b2Error && <p role="alert" className="p-4 text-xs text-amber-700">Could not load B2 file list: {b2Error}</p>}
+      {b2Loading ? <p className="p-4 text-sm text-slate-500">Loading B2 video records…</p> :
+        !b2Videos.length ? <p className="p-4 text-sm text-slate-500">No B2 uploads found for this account.</p> :
+        b2Videos.map(video=><div key={video.id} className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4 last:border-0">
+          <Film size={19} className="text-indigo-500"/>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-slate-800">{video.filename}</div>
+            <div className="text-xs text-slate-500">{new Date(video.uploaded_at).toLocaleString()}
+              {video.file_size ? ' · '+(video.file_size/1048576).toFixed(1)+' MB' : ''}</div>
+          </div>
+          <span className="text-xs text-slate-600">{video.storage_path ? 'Stored in B2' :
+            video.processing_status === 'failed' ? 'Upload failed' : 'Upload pending'}</span>
+          <Link to={'/app/archive-videos?video='+encodeURIComponent(video.id)}
+            className="text-xs font-semibold text-indigo-600 hover:underline">Open</Link>
+        </div>)}
+    </section>
     {error && <p role="alert" className="text-sm text-amber-700">{error}</p>}
     {!loaded ? <p className="text-sm text-slate-500">Restoring activity history…</p> :
       !records.length ? <EmptyState/> :
