@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Film, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
+import { uploadManager, type ActiveUpload } from '../services/uploadManager';
+import { uploadStorageProvider } from '../services/videoStorage';
 import { activityLedger } from '../services/activityLedger';
 import { streamCatalog, type StreamSource } from '../services/streamCatalog';
 import Hls from 'hls.js';
@@ -40,6 +42,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const currentFileRef = useRef<File | null>(null);
   const currentHandleRef = useRef<FileSystemFileHandle | null>(null);
   const [saveVideo, setSaveVideo] = useState(false);
+  const cloudUploadIdRef = useRef<string | null>(null);
+  const cloudUnsubscribeRef = useRef<(() => void) | null>(null);
+  const [cloudUpload, setCloudUpload] = useState<ActiveUpload | null>(null);
+  const [cloudStarting, setCloudStarting] = useState(false);
+  const [cloudError, setCloudError] = useState('');
   const [streams, setStreams] = useState<StreamSource[]>([]);
   const [streamSource, setStreamSource] = useState<StreamSource | null>(null);
   const [showStreamForm, setShowStreamForm] = useState(false);
@@ -268,6 +275,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     urlRef.current = null;
     currentFileRef.current = null;
     currentHandleRef.current = null;
+    cloudUnsubscribeRef.current?.();
+    cloudUnsubscribeRef.current = null;
+    cloudUploadIdRef.current = null;
+    setCloudUpload(null);
+    setCloudError('');
     setReadyVideo(false);
     setOpenedSeconds(null);
     setDuration(0);
@@ -341,6 +353,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (ownerId) streamCatalog.select(ownerId, null);
     currentFileRef.current = file;
     currentHandleRef.current = handle ?? null;
+    cloudUnsubscribeRef.current?.();
+    cloudUnsubscribeRef.current = null;
+    cloudUploadIdRef.current = null;
+    setCloudUpload(null);
+    setCloudError('');
+    setCloudStarting(false);
     const generation = uploadGenerationRef.current;
     const decoded = new Promise<void>(resolve => {
       firstFrameResolveRef.current?.();
@@ -385,6 +403,32 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     } catch (error) { setError(error instanceof Error ? error.message : String(error)); }
   };
 
+  const saveCurrentVideoToB2 = async () => {
+    const file = currentFileRef.current;
+    if (!file || !ownerId || streamSource || cloudStarting || cloudUploadIdRef.current) return;
+    setCloudStarting(true);
+    setCloudError('');
+    try {
+      if (uploadStorageProvider().id !== 'b2') {
+        throw new Error('Cloud video saving is restricted to Backblaze B2.');
+      }
+      // The existing UploadManager writes a metadata row and uses the
+      // authenticated B2 signing function. File bytes go directly to B2.
+      // No upload occurs unless the user clicks this button.
+      const { videoId } = await uploadManager.startUpload(file);
+      cloudUploadIdRef.current = videoId;
+      cloudUnsubscribeRef.current?.();
+      cloudUnsubscribeRef.current = uploadManager.subscribe(videoId, upload => {
+        setCloudUpload(upload);
+        if (upload.status === 'failed') setCloudError(upload.error || 'B2 upload failed.');
+      });
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCloudStarting(false);
+    }
+  };
+
   const chooseVideo = async () => {
     const picker = (window as Window & {
       showOpenFilePicker?: (options?: { multiple?: boolean }) => Promise<FileSystemFileHandle[]>;
@@ -415,6 +459,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (ownerId) streamCatalog.select(ownerId, null);
     currentFileRef.current = null;
     currentHandleRef.current = null;
+    cloudUnsubscribeRef.current?.();
+    cloudUnsubscribeRef.current = null;
+    cloudUploadIdRef.current = null;
+    setCloudUpload(null);
+    setCloudError('');
     activeRunRef.current = '';
     setStorage('idle');
     setPosition(0);
@@ -868,6 +917,40 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </span>
         </span>
       </label>}
+      {!streamSource && currentFileRef.current && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Backblaze B2 · optional cloud storage</div>
+              <p className="mt-1 text-xs text-slate-500">This video stays local unless you explicitly save it.
+                Cloud saving uploads the original video to B2, never Supabase Storage.
+                Analysis statistics are stored separately.</p>
+            </div>
+            {!cloudUpload && (
+              <button type="button" onClick={() => void saveCurrentVideoToB2()} disabled={cloudStarting}
+                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {cloudStarting ? 'Preparing B2 upload…' : 'Save video to B2'}
+              </button>
+            )}
+          </div>
+          {cloudUpload && (
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span>{cloudUpload.status === 'uploaded' ? 'Saved in Backblaze B2' :
+                  cloudUpload.status === 'failed' ? 'B2 upload failed' : 'Uploading to Backblaze B2'}</span>
+                <span className="font-semibold tabular-nums">{cloudUpload.progress}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full bg-indigo-600 transition-[width]"
+                  style={{ width: Math.max(0, Math.min(100, cloudUpload.progress)) + '%' }}/>
+              </div>
+              {cloudUpload.status === 'uploaded' && <a href="/app/archive-videos"
+                className="inline-block text-xs font-semibold text-indigo-600 hover:underline">View cloud video archive</a>}
+            </div>
+          )}
+          {cloudError && <p role="alert" className="mt-2 text-xs text-red-700">{cloudError}</p>}
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500"><Activity size={14} /> Vehicles in frame</div>
