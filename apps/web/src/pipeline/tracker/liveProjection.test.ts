@@ -17,6 +17,17 @@ describe('live playback projected vehicle overlays', () => {
     const leaving = { ...vehicle, x: 203, w: 24, vx: 100 };
     expect(projectLiveTracks([leaving], 2, 2.18, 200, 100)).toEqual([]);
   });
+  it('removes a departing vehicle while a clipped ghost would still have been displayed', () => {
+    const leaving = { ...vehicle, x: 189, w: 46, vx: 0 };
+    // Only 73.9% visible initially (still on screen), but after moving
+    // farther off the image boundary less than 60% remains, so hide.
+    expect(projectLiveTracks([{ ...leaving, x: 198 }], 2, 2.1, 200, 100)).toEqual([]);
+    expect(projectLiveTracks([{ ...leaving, x: 182 }], 2, 2.1, 200, 100)).toHaveLength(1);
+  });
+  it('does not display a car whose center has already left the source image', () => {
+    const leaving = { ...vehicle, x: 201, w: 100, vx: 0 };
+    expect(projectLiveTracks([leaving], 2, 2.05, 200, 100)).toEqual([]);
+  });
   it('suppresses stale boxes rather than leaving them floating on the scene', () => {
     expect(projectLiveTracks([vehicle], 2, 2.56, 200, 100)).toEqual([]);
   });
