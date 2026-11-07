@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { supabase, supabaseConfig } from '../lib/supabase';
 
 export type VehicleClass = 'car' | 'bus' | 'truck' | 'motorcycle' | 'bicycle' | 'train' | 'bus/truck';
@@ -318,6 +318,20 @@ export const activityLedger = {
 export function useActivityLedger(ownerId: string | null | undefined): ActivitySnapshot {
   const owner = keyFor(ownerId);
   if (ownerId && !states.get(owner)?.loaded) void ensureLoaded(owner);
+
+  useEffect(() => {
+    if (!ownerId) return;
+    // Offline observations remain in IndexedDB. Reconcile cloud history and
+    // retry pending metadata when the connection returns, without reloading.
+    const restore = () => {
+      void ensureLoaded(ownerId).then(() => mergeFromCloud(ownerId))
+        .then(() => activityLedger.flush(ownerId))
+        .catch(error => console.warn('Activity reconnect failed:', error));
+    };
+    window.addEventListener('online', restore);
+    return () => window.removeEventListener('online', restore);
+  }, [ownerId]);
+
   return useSyncExternalStore(
     activityLedger.subscribe,
     () => ownerId ? getSnapshot(owner) : EMPTY,
