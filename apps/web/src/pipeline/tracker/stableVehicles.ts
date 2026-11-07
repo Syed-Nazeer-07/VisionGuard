@@ -5,6 +5,7 @@ export interface PersistentTrack extends LiveTrack {
   lastDetectedAt: number;
   speedKmh: number | null;
   speedIsEstimate: boolean;
+  classVotes?: Record<string, number>;
 }
 export interface TrajectoryPoint { time: number; x: number; y: number }
 export interface SpeedHistory {
@@ -69,10 +70,17 @@ export function reconcileVehicles(
     // finishes the frame that optical flow has already advanced through.
     const correction = .55;
     const mix = (x: number, y: number) => x + correction * (y - x);
+    // Keep labels stable, but allow a repeatedly confirmed BUS/TRUCK class
+    // to correct an early CAR misclassification.
+    const oldVotes = before.classVotes ?? { [before.className]: before.confidence * 2 };
+    const votes = Object.fromEntries(Object.entries(oldVotes).map(([key, value]) => [key, value * .84]));
+    votes[after.className] = (votes[after.className] ?? 0) + after.confidence;
+    const label = Object.entries(votes).sort((a, b) => b[1] - a[1])[0][0];
     assigned.push({
       ...after,
       id: before.id,
-      className: before.className === after.className ? after.className : before.className,
+      className: label,
+      classVotes: votes,
       x: mix(before.x, after.x),
       y: mix(before.y, after.y),
       w: mix(before.w, after.w),
@@ -94,6 +102,7 @@ export function reconcileVehicles(
       id: nextId++,
       speedKmh: null,
       speedIsEstimate: true,
+      classVotes: { [candidate.className]: candidate.confidence * 2 },
       lastDetectedAt: mediaTime
     });
   });
