@@ -1,0 +1,59 @@
+import { describe, expect, it } from 'vitest';
+import { reconcileVehicles, updateScreenSpeed, type PersistentTrack } from './stableVehicles';
+import type { LiveTrack } from './liveProjection';
+
+function car(x: number, y = 120, id = 0): LiveTrack {
+  return {
+    id, className: 'car', confidence: .88, x, y, w: 55, h: 35,
+    vx: 0, vy: 0, motionPxPerSec: null
+  };
+}
+
+describe('persistent crowded vehicle tracking', () => {
+  it('keeps all 24 cars uniquely identified even if new YOLO IDs are shuffled', () => {
+    const initial = Array.from({ length: 24 }, (_, i) =>
+      car(40 + (i % 8) * 86, 40 + Math.floor(i / 8) * 95, 300 + i)
+    );
+    const first = reconcileVehicles([], initial, 2, 1);
+    expect(first.tracks).toHaveLength(24);
+    expect(new Set(first.tracks.map(t => t.id)).size).toBe(24);
+    const secondDetections = initial.map((t, i) =>
+      ({ ...t, id: 600 + i, x: t.x + 4 })
+    ).reverse();
+    const second = reconcileVehicles(first.tracks, secondDetections, 2.9, first.nextId);
+    expect(second.tracks).toHaveLength(24);
+    expect(new Set(second.tracks.map(t => t.id)).size).toBe(24);
+    expect(second.nextId).toBe(first.nextId);
+  });
+
+  it('keeps the label identity and size smooth after YOLO correction', () => {
+    const old: PersistentTrack = { ...car(100, 120, 9), id: 9, lastDetectedAt: 1,
+      speedKmh: 0, speedIsEstimate: true };
+    const next = reconcileVehicles([old], [{ ...car(105), w: 60, id: 333 }], 2, 10);
+    expect(next.tracks).toHaveLength(1);
+    expect(next.tracks[0].id).toBe(9);
+    expect(next.tracks[0].x).toBeGreaterThan(100);
+    expect(next.tracks[0].x).toBeLessThan(105);
+    expect(next.tracks[0].w).toBeLessThan(60);
+  });
+
+  it('reports exact zero for stationary car after a 0.5s observation window', () => {
+    const history = { points: [], smoothedKmh: null };
+    const first = updateScreenSpeed(history, car(100), 0);
+    const second = updateScreenSpeed(first.history, car(100.2), 0.60);
+    expect(second.kmh).toBe(0);
+  });
+
+  it('reports an explicitly estimated nonzero km/h for moving car', () => {
+    const first = updateScreenSpeed({ points: [], smoothedKmh: null }, car(100), 0);
+    const next = updateScreenSpeed(first.history, car(130), .65);
+    expect(next.kmh).not.toBeNull();
+    expect(next.kmh).toBeGreaterThan(0);
+  });
+
+  it('drops tracks after repeated missed detections without creating duplicates', () => {
+    const first = reconcileVehicles([], [car(80)], 1, 1);
+    const missed = reconcileVehicles(first.tracks, [], 3, first.nextId);
+    expect(missed.tracks).toHaveLength(0);
+  });
+});
