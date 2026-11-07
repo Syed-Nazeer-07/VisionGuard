@@ -121,11 +121,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               let loadedSettings: any = null
 
               try {
-                const [profileRes, settingsRes] = await Promise.all([
+                // Profile requests may hang on a weak connection. Keep the
+                // verified Supabase session and show Viewer-safe UI after 6s,
+                // rather than blocking the entire workspace indefinitely.
+                let timer: ReturnType<typeof setTimeout> | undefined
+                const dataPromise = Promise.all([
                   supabase.from('profiles').select('*').eq('id', currentSession.user.id).maybeSingle(),
                   supabase.from('user_settings').select('*').eq('id', currentSession.user.id).maybeSingle()
                 ])
-
+                const timeout = new Promise<null>(resolve => {
+                  timer = setTimeout(() => resolve(null), 6_000)
+                })
+                const fetched = await Promise.race([dataPromise, timeout])
+                if (timer) clearTimeout(timer)
+                if (!fetched) {
+                  console.warn('Profile load is slow; continuing with verified session and Viewer access')
+                  return { session: currentSession, profile: null, settings: null }
+                }
+                const [profileRes, settingsRes] = fetched
                 loadedProfile = profileRes.data
                 loadedSettings = settingsRes.data
 
