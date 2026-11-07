@@ -684,13 +684,17 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
                   </div>
                 )}
 
-                <Link
+                {data.videoUrl ? <Link
                   to={`/app/analyze?video=${encodeURIComponent(asset.id)}&reanalyze=true`}
                   className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
                   title="Rerun inference on this video with chosen settings without overwriting prior results"
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Analyze Again
-                </Link>
+                </Link> : <Link to="/app/analyze"
+                  title="Original file unavailable in cloud storage. Select it again for analysis."
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  <Film className="w-3.5 h-3.5"/> Choose original file
+                </Link>}
               </div>
             </div>
 

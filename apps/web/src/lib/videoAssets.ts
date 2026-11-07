@@ -85,6 +85,15 @@ export function getAssetAvailability(
   return { kind: 'available' }
 }
 
+/** Only a completed upload path can authorize an Analyze Again action.
+ * This checks metadata; actual playback URL verification is still required.
+ */
+export function canReanalyzeStoredVideo(
+  asset: Pick<VideoAsset, 'storage_path' | 'metadata'>
+): boolean {
+  return getAssetAvailability(asset, undefined, false).kind === 'available';
+}
+
 export function availabilityMessage(a: AssetAvailability): string | null {
   switch (a.kind) {
     case 'available': return null

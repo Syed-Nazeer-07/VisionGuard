@@ -598,7 +598,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         .eq('id',videoId).eq('uploaded_by',ownerId).maybeSingle();
       if (queryError) throw queryError;
       if (!data) throw Error('Saved video not found in your account.');
-      if (!data.storage_path) throw Error('This video has no completed cloud file yet.');
+      if (!data.storage_path) throw Error('Original video was not uploaded to cloud storage. Choose the file again, or explicitly upload it to B2. Saved analysis history alone cannot replay footage.');
       const videoUrl = await storageProviderFor(data).getVideoUrl({
         id:data.id, storage_path:data.storage_path
       });

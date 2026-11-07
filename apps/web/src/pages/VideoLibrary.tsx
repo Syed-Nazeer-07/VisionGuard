@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
 import type { VideoAsset } from '../services/db'
-import { fallbackVideoNumbers, formatBytes, videoDisplayName } from '../lib/videoAssets'
+import { canReanalyzeStoredVideo, fallbackVideoNumbers, formatBytes, videoDisplayName } from '../lib/videoAssets'
 import { deleteVideoWithArtifacts } from '../services/videoStorage'
 import { getActiveBackendJob } from '../services/backendAnalysis'
 import { Film, Search, Play, Trash2, Clock, Upload, RefreshCw, Eye, RotateCcw, Loader2 } from 'lucide-react'
@@ -62,29 +62,8 @@ export function VideoLibrary() {
         setRunsByVideo(byVideo)
       }
 
-      const activeJob = getActiveBackendJob()
-
-      // Reconcile stale processing runs where the job is no longer running
-      const reconciled = rawVideos.map(v => {
-        const meta = (v.metadata && typeof v.metadata === 'object' && !Array.isArray(v.metadata) ? v.metadata : {}) as Record<string, any>
-        const hasArtifact = Boolean(meta.artifact_storage_path)
-        const isJobActiveLocally = Boolean(activeJob && activeJob.videoId === v.id && (activeJob.status === 'running' || activeJob.status === 'queued'))
-
-        if (!isJobActiveLocally && ((v.processing_status as string) === 'processing' || (v.processing_status as string) === 'queued')) {
-          if (hasArtifact) {
-            void supabase.from('video_assets').update({ processing_status: 'completed' }).eq('id', v.id)
-            return { ...v, processing_status: 'completed' as const }
-          } else {
-            const uploadAgeMs = v.uploaded_at ? Date.now() - new Date(v.uploaded_at).getTime() : Infinity
-            if (uploadAgeMs > 5 * 60 * 1000) {
-              void supabase.from('video_assets').update({ processing_status: 'failed' }).eq('id', v.id)
-              return { ...v, processing_status: 'failed' as const }
-            }
-          }
-        }
-        return v
-      })
-      setVideos(reconciled as VideoAsset[])
+      // Loading History must not silently mutate server-owned job statuses.
+      setVideos(rawVideos)
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -219,13 +198,14 @@ export function VideoLibrary() {
                   const videoRuns = runsByVideo[video.id] || []
                   const activeJob = getActiveBackendJob()
 
-                  // Check if a durable analysis artifact or completed run actually exists to review
+                  const canReplay = canReanalyzeStoredVideo(video)
+                  // Analysis metadata and original video bytes are separate.
                   const hasCompletedArtifact =
                     Boolean(meta.artifact_storage_path) ||
-                    video.processing_status === 'completed' ||
                     videoRuns.some(r => r.status === 'completed' && Boolean(
-                      (r.metrics && typeof r.metrics === 'object' && (r.metrics.artifact_storage_path || r.metrics.summary || r.metrics.total_frames || r.metrics.incidents_saved || r.metrics.tracked_objects)) ||
-                      r.ended_at
+                      r.metrics && typeof r.metrics === 'object' &&
+                      (r.metrics.artifact_storage_path || r.metrics.summary ||
+                        r.metrics.total_frames || r.metrics.incidents_saved || r.metrics.tracked_objects)
                     ))
 
                   // Check if currently active or queued in background
@@ -277,6 +257,11 @@ export function VideoLibrary() {
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/80">
                             <Loader2 className="w-3 h-3 animate-spin text-amber-500" /> Analyzing
                           </span>
+                        ) : !canReplay ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200/80"
+                            title="Original video not in cloud storage, even when analysis metadata exists.">
+                            {hasCompletedArtifact ? 'Analysis only' : 'No video file'}
+                          </span>
                         ) : hasCompletedArtifact ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/80">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Analyzed
@@ -325,21 +310,31 @@ export function VideoLibrary() {
                               >
                                 <Eye className="w-3.5 h-3.5" /> Review Analysis
                               </button>
-                              <button
+                              {canReplay ? <button
                                 onClick={() => handleAnalyze(true)}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 rounded-md text-xs font-medium transition-colors cursor-pointer shadow-2xs shrink-0"
                                 title={`Run fresh inference on ${name}`}
                               >
                                 <RotateCcw className="w-3 h-3 text-slate-500" /> Analyze Again
-                              </button>
+                              </button> : <button type="button" onClick={() => navigate('/app/analyze')}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-600 border border-slate-200 rounded-md text-xs font-medium hover:bg-slate-50"
+                                title="No cloud video file. Choose the original video again.">
+                                <Upload className="w-3 h-3"/> Choose file
+                              </button>}
                             </>
-                          ) : (
+                          ) : canReplay ? (
                             <button
                               onClick={() => handleAnalyze(false)}
                               className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-xs font-medium transition-colors cursor-pointer shadow-2xs shrink-0"
                               title={`Start analysis for ${name}`}
                             >
                               <Play className="w-3 h-3 fill-current" /> Analyze Video
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => navigate('/app/analyze')}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 rounded-md text-xs text-slate-700 font-medium hover:bg-slate-50"
+                              title="Original footage is not uploaded. Choose it again in Live Analysis.">
+                              <Upload className="w-3 h-3"/> Choose file
                             </button>
                           )}
                           <button
