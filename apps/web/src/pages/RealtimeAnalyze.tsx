@@ -575,6 +575,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   };
 
   const removeVideo = () => {
+    // Stopping a live stream/camera must NEVER delete an unrelated video
+    // previously saved by the user on this device.
+    const removingLocalFile = !!currentFileRef.current &&
+      !streamSourceRef.current && !webcamRef.current;
     videoRef.current?.pause();
     uploadGenerationRef.current += 1;
     resetTracks();
@@ -599,18 +603,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setCloudUpload(null);
     setCloudError('');
     activeRunRef.current = '';
-    if (ownerId) localStorage.removeItem('visionguard:video-run:' + ownerId);
+    if (ownerId && removingLocalFile) localStorage.removeItem('visionguard:video-run:' + ownerId);
     setStorage('idle');
     setPosition(0);
     setDuration(0);
     setError('');
-    // Serialize deletion after any pending previous file save.
-    persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
-      await localAnalysisStorage.clearVideo(ownerId ?? undefined);
-      await localAnalysisStorage.clearPosition(ownerId ?? undefined);
-      await localAnalysisStorage.clearAnalysis(ownerId ?? undefined);
-    });
-    void persistenceQueueRef.current.catch(e => setError('Could not clear local video: ' + String(e)));
+    if (removingLocalFile) {
+      // Explicitly removing a selected local video also clears its retained
+      // file; closing a remote stream or a camera never touches that file.
+      persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
+        await localAnalysisStorage.clearVideo(ownerId ?? undefined);
+        await localAnalysisStorage.clearPosition(ownerId ?? undefined);
+        await localAnalysisStorage.clearAnalysis(ownerId ?? undefined);
+      });
+      void persistenceQueueRef.current.catch(e => setError('Could not clear local video: ' + String(e)));
+    }
   };
 
   const reconnectStream = () => {
