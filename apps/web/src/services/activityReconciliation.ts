@@ -1,0 +1,122 @@
+import type { AnalysisRecord, VehicleRecord, ViolationRecord } from './activityLedger';
+
+/** Deterministic best-effort reconciliation of two *same-owner* revisions.
+ *
+ * Neither side is assumed to contain every observation after offline edits:
+ * - preserve all distinct vehicles and incidents
+ * - keep newest per-incident human review decisions (NOT legal verdicts)
+ * - avoid adding frame counts and thereby manufacturing observations
+ * - bump the document revision only if the cloud lacks combined information
+ *
+ * Independent concurrent edits with incorrect device clocks cannot be
+ * perfectly ordered client-side. The server timestamp guards the document;
+ * a future transactional RPC would be needed for strict shared editing.
+ */
+function validRevision(value: number | undefined): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+function mergeVehicle(local: VehicleRecord, remote: VehicleRecord, newerLocal: boolean): VehicleRecord {
+  const last = (local.lastSeenAt > remote.lastSeenAt ||
+    (local.lastSeenAt === remote.lastSeenAt && newerLocal)) ? local : remote;
+  const other = last === local ? remote : local;
+  return {
+    ...other, ...last,
+    confidence: Math.max(local.confidence, remote.confidence),
+    firstSeenAt: Math.min(local.firstSeenAt, remote.firstSeenAt),
+    lastSeenAt: Math.max(local.lastSeenAt, remote.lastSeenAt),
+    observations: Math.max(local.observations, remote.observations),
+    estimatedSpeedKmh: last.estimatedSpeedKmh ?? other.estimatedSpeedKmh,
+  };
+}
+function mergeEvent(local: ViolationRecord, remote: ViolationRecord, newerLocal: boolean): ViolationRecord {
+  const localAt = validRevision(local.statusUpdatedAt);
+  const remoteAt = validRevision(remote.statusUpdatedAt);
+  const useLocal = localAt === remoteAt ? newerLocal : localAt > remoteAt;
+  const winning = useLocal ? local : remote;
+  // Evidence fields are source observations, not reviewer-editable text.
+  // Prefer the original nonblank evidence if one side has an empty field.
+  return {
+    ...(useLocal ? remote : local), ...winning,
+    evidenceNote: winning.evidenceNote?.trim() ? winning.evidenceNote :
+      (useLocal ? remote : local).evidenceNote,
+  };
+}
+function sameVehicle(a: VehicleRecord, b: VehicleRecord): boolean {
+  return a.id === b.id && a.type === b.type && a.confidence === b.confidence &&
+    a.firstSeenAt === b.firstSeenAt && a.lastSeenAt === b.lastSeenAt &&
+    a.observations === b.observations &&
+    a.estimatedSpeedKmh === b.estimatedSpeedKmh;
+}
+function sameEvent(a: ViolationRecord, b: ViolationRecord): boolean {
+  return a.id === b.id && a.type === b.type && a.trackId === b.trackId &&
+    a.observedAt === b.observedAt && a.status === b.status &&
+    a.evidenceNote === b.evidenceNote &&
+    validRevision(a.statusUpdatedAt) === validRevision(b.statusUpdatedAt);
+}
+function equivalentContent(a: AnalysisRecord, b: AnalysisRecord): boolean {
+  if (a.id !== b.id || a.sourceName !== b.sourceName ||
+      a.sourceType !== b.sourceType || a.createdAt !== b.createdAt ||
+      a.analyzedFrames !== b.analyzedFrames ||
+      a.maximumVisibleVehicles !== b.maximumVisibleVehicles) return false;
+  const aVehicleKeys = Object.keys(a.vehicles);
+  const bVehicleKeys = Object.keys(b.vehicles);
+  if (aVehicleKeys.length !== bVehicleKeys.length ||
+      aVehicleKeys.some(id => !b.vehicles[id] ||
+        !sameVehicle(a.vehicles[id], b.vehicles[id]))) return false;
+  if (a.violations.length !== b.violations.length) return false;
+  const byId = new Map(b.violations.map(event => [event.id, event]));
+  return a.violations.every(event => {
+    const other = byId.get(event.id);
+    return !!other && sameEvent(event, other);
+  });
+}
+
+export type ReconciledRun = {
+  record: AnalysisRecord;
+  /** True only if the remote copy actually lacks local observations/reviews. */
+  needsUpload: boolean;
+};
+
+export function reconcileAnalysisRun(
+  local: AnalysisRecord,
+  remote: AnalysisRecord,
+  remoteRevisionAt = remote.updatedAt,
+): ReconciledRun {
+  if (local.id !== remote.id) throw Error('Cannot reconcile two different analysis sessions.');
+  const newerLocal = local.updatedAt > remote.updatedAt;
+  const winner = newerLocal ? local : remote;
+  const older = newerLocal ? remote : local;
+  const vehicles: Record<string, VehicleRecord> = { ...older.vehicles, ...winner.vehicles };
+  for (const id of Object.keys(local.vehicles)) {
+    const remoteVehicle = remote.vehicles[id];
+    if (remoteVehicle) vehicles[id] = mergeVehicle(local.vehicles[id], remoteVehicle, newerLocal);
+  }
+  const remoteEvents = new Map(remote.violations.map(event => [event.id, event]));
+  const localEvents = new Map(local.violations.map(event => [event.id, event]));
+  const ids = [...new Set([...remoteEvents.keys(), ...localEvents.keys()])];
+  const violations = ids.map(id => {
+    const l = localEvents.get(id), r = remoteEvents.get(id);
+    return l && r ? mergeEvent(l, r, newerLocal) : (l ?? r)!;
+  });
+  const combined: AnalysisRecord = {
+    ...winner, createdAt: Math.min(local.createdAt, remote.createdAt),
+    analyzedFrames: Math.max(local.analyzedFrames, remote.analyzedFrames),
+    maximumVisibleVehicles: Math.max(local.maximumVisibleVehicles, remote.maximumVisibleVehicles),
+    vehicles, violations,
+  };
+  if (equivalentContent(combined, remote)) {
+    // If the server already has all information, adopt its source revision.
+    return { record: remote, needsUpload: false };
+  }
+  const serverRevision = validRevision(remoteRevisionAt);
+  // Existing local newer revisions can be sent as-is, unless a server-side
+  // trigger rejected them. Always exceed the actual remote document revision.
+  return {
+    record: {
+      ...combined,
+      updatedAt: Math.max(local.updatedAt, remote.updatedAt, serverRevision) + 1,
+    },
+    needsUpload: true,
+  };
+}

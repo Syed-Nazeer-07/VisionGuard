@@ -19,6 +19,8 @@ export interface ViolationRecord {
   observedAt: number;
   status: 'pending_review' | 'approved' | 'rejected';
   evidenceNote: string;
+  /** When a reviewer last changed the decision; absent in historical flags. */
+  statusUpdatedAt?: number;
 }
 export interface AnalysisRecord {
   id: string;
@@ -303,11 +305,12 @@ export function changeIncidentReviewStatus(
     if (run.id !== runId || !run.violations.some(event => event.id === eventId &&
         event.status !== status)) return run;
     changed = true;
+    const revision = Math.max(Number.isFinite(now) ? now : Date.now(), run.updatedAt + 1);
     return {
       ...run,
-      updatedAt: Math.max(Number.isFinite(now) ? now : Date.now(), run.updatedAt + 1),
+      updatedAt: revision,
       violations: run.violations.map(event =>
-        event.id === eventId ? { ...event, status } : event),
+        event.id === eventId ? { ...event, status, statusUpdatedAt: revision } : event),
     };
   });
   return changed ? next : records;
