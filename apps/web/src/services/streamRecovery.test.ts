@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isStreamStalled, liveRetryDelay } from './streamRecovery';
+import { hasAdvancedVideoFrame, isStreamStalled, liveRetryDelay } from './streamRecovery';
 
 const playing = { paused: false, ended: false, seeking: false };
 
@@ -22,5 +22,18 @@ describe('live video stall detection', () => {
     expect(liveRetryDelay(1)).toBe(1_500);
     expect(liveRetryDelay(3)).toBe(4_500);
     expect(liveRetryDelay(50)).toBe(7_500);
+  });
+});
+
+describe('video progress signal for live feeds', () => {
+  it('recognizes the first decoded frame and advancing timestamps', () => {
+    expect(hasAdvancedVideoFrame(null, 0)).toBe(true);
+    expect(hasAdvancedVideoFrame(4.2, 4.24)).toBe(true);
+  });
+  it('rejects frozen, reversed and invalid media timestamps', () => {
+    expect(hasAdvancedVideoFrame(8, 8)).toBe(false);
+    expect(hasAdvancedVideoFrame(8, 7.9)).toBe(false);
+    expect(hasAdvancedVideoFrame(8, Number.NaN)).toBe(false);
+    expect(hasAdvancedVideoFrame(8, Number.POSITIVE_INFINITY)).toBe(false);
   });
 });
