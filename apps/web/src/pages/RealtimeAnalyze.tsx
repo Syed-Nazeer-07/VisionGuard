@@ -574,6 +574,36 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
   };
 
+  const reopenSavedVideo = async () => {
+    if (!ownerId) return;
+    try {
+      const [saved, savedPosition] = await Promise.all([
+        localAnalysisStorage.loadVideo(ownerId),
+        localAnalysisStorage.loadPosition(ownerId),
+      ]);
+      if (!saved) {
+        setError('No retained video was found. Choose a file and enable “Keep this video on this device” first.');
+        return;
+      }
+      videoRef.current?.pause();
+      uploadGenerationRef.current += 1;
+      stopWebcam();
+      streamSourceRef.current = null;
+      setStreamSource(null);
+      setStreamHealth('idle');
+      streamCatalog.select(ownerId, null);
+      const file = saved.file instanceof File
+        ? saved.file : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
+      currentFileRef.current = file;
+      currentHandleRef.current = null;
+      attachVideo(file, saved.name, savedPosition,
+        localStorage.getItem('visionguard:video-run:' + ownerId) || undefined);
+      setStorage('saved');
+    } catch (error) {
+      setError('Cannot reopen saved video: ' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
   const removeVideo = () => {
     // Stopping a live stream/camera must NEVER delete an unrelated video
     // previously saved by the user on this device.
@@ -1053,6 +1083,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">
             <Camera size={16} /> {cameraStarting ? 'Opening camera…' : webcamActive ? 'Stop camera' : 'Use camera'}
           </button>
+          {(streamSource || webcamActive) && saveVideo && <button type="button"
+            onClick={() => void reopenSavedVideo()}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+            <Film size={16}/> Saved video
+          </button>}
           <button type="button" onClick={() => setShowStreamForm(v=>!v)}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
             {showStreamForm ? 'Close sources' : 'Live sources'}
