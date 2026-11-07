@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Activity, AlertTriangle, Camera, ExternalLink, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
+import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
+import { canReanalyzeStoredVideo } from '../lib/videoAssets';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
 import { supabase } from '../lib/supabase';
@@ -50,6 +52,7 @@ type Observation = { time: number; tracks: LiveTrack[] };
 
 export default function RealtimeAnalyze({ active = true }: { active?: boolean }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const qualityEnabled = new URLSearchParams(location.search).get('quality') === '1';
   const qualityEnabledRef = useRef(false);
   qualityEnabledRef.current = qualityEnabled;
@@ -129,6 +132,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [storage, setStorage] = useState<'idle' | 'saving' | 'saved' | 'error' | 'not-saved'>('idle');
   const [cloudPlaybackActive, setCloudPlaybackActive] = useState(false);
   const [cloudPlaybackLoading, setCloudPlaybackLoading] = useState(false);
+  const [unavailableOriginal, setUnavailableOriginal] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const downloadQualityTrace = () => {
@@ -555,7 +559,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   useEffect(() => {
     let alive = true;
-    if (!ownerId || localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
+    // A request for a specific cloud archive ID takes precedence over the
+    // generic most-recent local video. Otherwise unrelated footage can appear
+    // behind the archive failure and look like a successful recovery.
+    if (!ownerId || new URLSearchParams(location.search).has('video') ||
+        currentFileRef.current || urlRef.current ||
+        localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
     const generation = uploadGenerationRef.current;
     void Promise.all([
       localAnalysisStorage.loadVideo(ownerId ?? undefined),
@@ -577,7 +586,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       }
     });
     return () => { alive = false; };
-  }, [attachVideo, ownerId]);
+  }, [attachVideo, ownerId, location.search]);
 
   // Deep links from the B2 archive must really open the stored video,
   // not silently discard ?video=<id> and show the previous local clip.
@@ -591,14 +600,55 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     let alive = true;
     const request = ++uploadGenerationRef.current;
     setCloudPlaybackLoading(true);
+    setUnavailableOriginal(null);
     setError('');
     void (async () => {
       const { data, error: queryError } = await supabase.from('video_assets')
-        .select('id,filename,storage_path,storage_provider,uploaded_by')
+        .select('id,filename,file_size,metadata,storage_path,storage_provider,uploaded_by')
         .eq('id',videoId).eq('uploaded_by',ownerId).maybeSingle();
       if (queryError) throw queryError;
       if (!data) throw Error('Saved video not found in your account.');
-      if (!data.storage_path) throw Error('Original video was not uploaded to cloud storage. Choose the file again, or explicitly upload it to B2. Saved analysis history alone cannot replay footage.');
+
+      if (!canReanalyzeStoredVideo(data)) {
+        // Analysis metadata does not contain video pixels. The only automatic
+        // recovery permitted is an opted-in local original matching both its
+        // filename and exact byte length. Never play a different local file.
+        let retained: Awaited<ReturnType<typeof localAnalysisStorage.loadVideo>>;
+        try {
+          if (localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes') {
+            retained = await localAnalysisStorage.loadVideo(ownerId);
+          }
+        } catch (error) {
+          console.warn('Retained video is inaccessible; choose the original file:', error);
+        }
+        if (!alive || request !== uploadGenerationRef.current || !activeRef.current) return;
+        if (retained && savedLocalMatchesArchive(data, retained)) {
+          const file = retained.file instanceof File ? retained.file :
+            new File([retained.file], retained.name, {
+              type: retained.file.type || 'video/mp4',
+            });
+          videoRef.current?.pause();
+          stopWebcam();
+          currentFileRef.current = file;
+          currentHandleRef.current = null;
+          attachVideo(file, retained.name);
+          setStorage('saved');
+          setUnavailableOriginal(null);
+          setError('The cloud original was not uploaded. Opened the matching video retained on this device instead.');
+          setCloudPlaybackLoading(false);
+          // The cloud query no longer represents the source being played.
+          // Remove it so a re-render cannot retry the missing B2 object.
+          navigate({
+            pathname: location.pathname,
+            search: qualityEnabled ? '?quality=1' : '',
+          }, { replace: true });
+          return;
+        }
+        setUnavailableOriginal(data.filename);
+        // Show a usable file-picker action, not a dead-end backend exception.
+        setError('');
+        return;
+      }
       const videoUrl = await storageProviderFor(data).getVideoUrl({
         id:data.id, storage_path:data.storage_path
       });
@@ -612,6 +662,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       currentFileRef.current = null;
       currentHandleRef.current = null;
       setCloudPlaybackActive(true);
+      setUnavailableOriginal(null);
       setStorage('not-saved');
       setFilename(data.filename);
       setOpenedSeconds(null);
@@ -627,14 +678,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       activityLedger.begin(ownerId, activeRunRef.current, data.filename, 'uploaded-video');
     })().catch(error => {
       if (alive && request === uploadGenerationRef.current) {
-        setError('Could not open the stored video for analysis: ' +
-          (error instanceof Error ? error.message : String(error)));
+        setUnavailableOriginal(null);
+        setError('Could not open the cloud video. The signed link or storage connection may be unavailable: ' +
+          (error instanceof Error ? error.message : String(error)) +
+          '. You can choose the original file above and analyze it locally.');
       }
     }).finally(() => {
       if (alive) setCloudPlaybackLoading(false);
     });
     return () => { alive = false; };
-  }, [location.search, active, ownerId, resetTracks]);
+  }, [location.search, location.pathname, active, ownerId, resetTracks, attachVideo, navigate, qualityEnabled]);
 
   // This cleanup must be unconditional. The saved-video restoration effect
   // above can return early when local retention is disabled or a stream is
@@ -663,6 +716,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       return;
     }
     uploadGenerationRef.current += 1;
+    setUnavailableOriginal(null);
+    // A file deliberately chosen in response to an archive-recovery link is
+    // a NEW local analysis, not a remotely stored video or the old session.
+    if (new URLSearchParams(location.search).has('video')) {
+      navigate({
+        pathname: location.pathname,
+        search: qualityEnabled ? '?quality=1' : '',
+      }, { replace: true });
+    }
     stopWebcam();
     setStreamHealth('idle');
     currentFileRef.current = file;
@@ -1334,8 +1396,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       </div>}
 
       {cloudPlaybackLoading && <p role="status" className="vg-panel px-4 py-3 text-sm text-slate-600">
-        Opening your saved video from Backblaze B2…
+        Checking the saved video…
       </p>}
+      {unavailableOriginal && !cloudPlaybackLoading && <div role="status"
+        className="vg-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-800">Original video not saved to cloud</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">
+            {unavailableOriginal} · Analysis history is saved, but footage was not uploaded.
+            Choose the original file on this device to analyze it again.
+          </p>
+        </div>
+        <button type="button" onClick={() => void chooseVideo()}
+          className="vg-primary"><Upload size={15}/> Choose original video</button>
+      </div>}
       {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
       </div>}
