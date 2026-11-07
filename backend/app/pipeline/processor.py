@@ -66,6 +66,7 @@ class VideoProcessor:
             vehicle_track_classes: Dict[int, Dict[str, int]] = {}
             max_vehicles_in_frame = 0
             overspeed_events = OverspeedEventCounter()
+            speeding_event_records: List[Dict[str, Any]] = []
             detections_generated = 0
             speeds_recorded: List[float] = []
 
@@ -151,11 +152,35 @@ class VideoProcessor:
                             t["is_overspeed"] = speed_res["is_overspeed"]
                             # Count a new episode only after confirmed consecutive
                             # detector observations, not for every flagged frame.
-                            overspeed_events.observe(
+                            is_fresh_detection = t.get("observation_type") == "detection"
+                            confirmed_episode = overspeed_events.observe(
                                 track_id,
                                 bool(speed_res["is_overspeed"]),
-                                observed=t.get("observation_type") == "detection",
+                                observed=is_fresh_detection,
                             )
+                            if confirmed_episode and speed_estimator.is_calibrated:
+                                # A review candidate, NOT a legal speeding conviction.
+                                # Keep a verifiable reference to the decoded video frame
+                                # and matched detection; no fabricated image or plate.
+                                speeding_event_records.append({
+                                    "event_id": f"track-{track_id}-frame-{frame_idx}",
+                                    "track_id": track_id,
+                                    "frame_id": frame_idx,
+                                    "media_time": round(media_time, 4),
+                                    "speed_kmh": float(speed_res["speed"]),
+                                    "speed_limit_kmh": float(speed_estimator.speed_limit),
+                                    "tolerance_kmh": float(speed_estimator.tolerance),
+                                    "vehicle_class": cname,
+                                    "confidence": float(t["prob"]),
+                                    "bbox": {
+                                        "x": float(t["x"]), "y": float(t["y"]),
+                                        "w": float(t["w"]), "h": float(t["h"])
+                                    },
+                                    "source_width": width,
+                                    "source_height": height,
+                                    "observation_type": "detection",
+                                    "is_calibrated": True,
+                                })
                             if speed_res["speed"] is not None:
                                 speeds_recorded.append(speed_res["speed"])
                         else:
@@ -279,7 +304,8 @@ class VideoProcessor:
             return {
                 "video_metadata": video_metadata,
                 "summary": summary,
-                "frames": frame_records
+                "frames": frame_records,
+                "speeding_events": speeding_event_records
             }
         finally:
             cap.release()

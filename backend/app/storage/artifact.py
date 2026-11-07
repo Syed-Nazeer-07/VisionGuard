@@ -24,11 +24,12 @@ class ArtifactManager:
         job_id: str,
         video_metadata: Dict[str, Any],
         summary: Dict[str, Any],
-        frames: List[Dict[str, Any]]
+        frames: List[Dict[str, Any]],
+        speeding_events: Optional[List[Dict[str, Any]]] = None,
     ) -> Path:
         artifact_path = self.get_artifact_path(job_id)
         payload = {
-            "version": "1.0",
+            "version": "1.1",
             "job_id": job_id,
             "detection_profile": summary.get("detection_profile", "balanced"),
             "confidence_threshold": summary.get("confidence_threshold", 0.20),
@@ -38,7 +39,8 @@ class ArtifactManager:
             "video_metadata": video_metadata,
             "summary": summary,
             "total_frames": len(frames),
-            "frames": frames
+            "frames": frames,
+            "speeding_events": speeding_events if speeding_events is not None else [],
         }
 
         # Atomic write to temporary file first, then rename to destination

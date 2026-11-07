@@ -49,6 +49,7 @@ import {
   PROCESSING_SPEEDS
 } from '../services/backendAnalysis';
 import { countBackendDetections } from '../services/analysisMetrics';
+import { buildBackendSpeedIncidents, type BackendSpeedingEvent } from '../services/backendSpeedIncidents';
 import type { TrackedObject } from '../pipeline/types';
 import { TrackStateStore } from '../pipeline/tracker/trackStore';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
@@ -2094,10 +2095,14 @@ export default function Analyze() {
 
           let frames: BackendFrameResult[] = [];
           let artifactBlob: Blob | null = null;
+          let speedingEvents: BackendSpeedingEvent[] | undefined;
+          let artifactVersion: string | null = null;
           try {
             const { blob, json } = await fetchJobArtifactBlobAndJson(currentJobId);
             artifactBlob = blob;
             frames = json.frames || [];
+            speedingEvents = json.speeding_events;
+            artifactVersion = json.version;
           } catch {
             frames = await getAllJobResults(currentJobId);
           }
@@ -2136,7 +2141,10 @@ export default function Analyze() {
             try {
               // 1. Download artifact blob from local backend (reuse if already downloaded)
               if (!artifactBlob) {
-                artifactBlob = await downloadJobArtifactBlob(currentJobId);
+                const downloaded = await fetchJobArtifactBlobAndJson(currentJobId);
+                artifactBlob = downloaded.blob;
+                speedingEvents = downloaded.json.speeding_events;
+                artifactVersion = downloaded.json.version;
               }
 
               // 2. Create analysis run
@@ -2245,6 +2253,42 @@ export default function Analyze() {
                 }
               }
 
+              // Convert the backend's calibrated speeding episodes into
+              // review-only incidents linked to a specific video frame and
+              // archived analysis artifact. Counts alone are not evidence.
+              let persistedIncidentCount = 0;
+              if (speedingEvents !== undefined) {
+                const incidentRows = buildBackendSpeedIncidents({
+                  events: speedingEvents,
+                  videoId: vid,
+                  runId: run.id,
+                  videoName: displayName,
+                  artifactPath: storagePath,
+                  artifactBucket: bucket,
+                  reportedEventCount: st.summary?.speed_violations_count
+                });
+                if (incidentRows.length) {
+                  const { data: createdIncidents, error: incidentError } = await supabase
+                    .from('incidents')
+                    .insert(incidentRows)
+                    .select('id');
+                  if (incidentError) {
+                    throw new Error(`Speeding incident persistence failed: ${incidentError.message}`);
+                  }
+                  if (createdIncidents?.length !== incidentRows.length) {
+                    throw new Error('Incomplete speeding incident persistence');
+                  }
+                  persistedIncidentCount = createdIncidents.length;
+                }
+              } else if (artifactVersion === '1.1') {
+                throw new Error('New backend artifact omitted its speeding event records');
+              } else if ((st.summary?.speed_violations_count ?? 0) > 0) {
+                analysisLogger.log({
+                  category: 'SYSTEM',
+                  message: 'Legacy backend artifact has speeding counts but no frame-localized event evidence; no new incident records created.'
+                });
+              }
+
               // 5. Update video_assets ONLY AFTER artifact is persisted
               const { data: currentAsset } = await supabase.from('video_assets').select('metadata').eq('id', vid).maybeSingle();
               const existingMeta = (currentAsset?.metadata && typeof currentAsset.metadata === 'object' && !Array.isArray(currentAsset.metadata) ? currentAsset.metadata : {}) as Record<string, any>;
@@ -2273,16 +2317,17 @@ export default function Analyze() {
 
               await db.analysisRuns.update(run.id, {
                 status: 'completed',
+                incidents_created: persistedIncidentCount,
                 ended_at: st.completed_at || new Date().toISOString()
               });
               if (activeBackendJobIdRef.current === currentJobId) {
-                setSaved({ incidents: 0, tracks: trackMap.size, runs: 1 });
+                setSaved({ incidents: persistedIncidentCount, tracks: trackMap.size, runs: 1 });
                 setSaveError(null);
                 setAnalysisStage('completed');
               }
               analysisLogger.log({
                 category: 'PERSISTENCE',
-                message: `Persisted analysis artifact and ${trackMap.size} tracks to History for video "${displayName}"`
+                message: `Persisted analysis artifact, ${trackMap.size} tracks and ${persistedIncidentCount} reviewable speeding incident(s) for video "${displayName}"`
               });
             } catch (err) {
               const message = describeError(err);
