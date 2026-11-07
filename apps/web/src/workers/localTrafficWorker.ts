@@ -1,8 +1,9 @@
 import { env, InferenceSession, Tensor } from 'onnxruntime-web';
-import { correctClearFreightTrailer, decodeTrafficVehicles } from '../pipeline/detector/liveVehicles';
+import { decodeTrafficVehicles } from '../pipeline/detector/liveVehicles';
 import { ByteTracker } from '../pipeline/tracker/bytetrack';
 import { calculateMotion, type LiveTrack } from '../pipeline/tracker/liveProjection';
 import { getIOU } from '../pipeline/tracker/matching';
+import { TwoWheelerAssociator } from '../pipeline/tracker/twoWheelerAssociator';
 
 if (import.meta.env.DEV) env.wasm.wasmPaths = '/';
 
@@ -19,6 +20,7 @@ let executionProvider = '';
 let working = false;
 let epoch = 0;
 const tracker = new ByteTracker();
+const twoWheelers = new TwoWheelerAssociator();
 tracker.trackThreshold = 0.45;
 tracker.maxTimeLost = 3;
 const observations = new Map<number, {
@@ -102,23 +104,20 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
       });
       return;
     }
-    const decoded = decodeTrafficVehicles(
+    const boxes = decodeTrafficVehicles(
       output[session.outputNames[0]].data as Float32Array,
       message.sourceWidth, message.sourceHeight,
       processed.ratio, processed.padW, processed.padH
     );
-    // Only correct BUS -> TRUCK when the sampled image has strong evidence of
-    // a separate dark coloured cab and bright neutral freight trailer.
-    const boxes = correctClearFreightTrailer(
-      decoded, processed.tensor.data as Float32Array,
-      processed.ratio, processed.padW, processed.padH
-    );
-    const freightEvidence = boxes.filter((box, index) =>
-      decoded[index].classId === 5 && box.classId === 7);
+    // Let motorcycle/bicycle detections bypass the car tracker's .45/.60
+    // confidence gates. A separate, conservative two-wheeler tracker runs
+    // only on class 1 and class 3, leaving all other vehicle paths unchanged.
+    const motorTracks = twoWheelers.update(boxes, message.mediaTime);
+    const fourWheelBoxes = boxes.filter(box => box.classId !== 1 && box.classId !== 3);
     // With slow WASM inference vehicles often move too far between detections
     // for 2-hit confirmation. Display high-confidence NEW detections directly;
     // continue assigning stable IDs once matching succeeds.
-    const observedTracks = tracker.update(boxes)
+    const observedTracks = tracker.update(fourWheelBoxes)
       .filter(track => track.timeSinceUpdate === 0 &&
         (track.state === 'Confirmed' || (track.hitCount ?? 0) >= 2 || track.prob >= 0.58));
     const tracks: LiveTrack[] = observedTracks.map(track => {
@@ -128,11 +127,14 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
         x: track.x, y: track.y, h: track.h, time: message.mediaTime,
         vx: velocity.vx, vy: velocity.vy
       });
-      const clearlyFreight = freightEvidence.some(box => getIOU(track, box) >= .50);
+      const box = fourWheelBoxes.reduce((best, candidate) => {
+        const overlap = getIOU(track, candidate);
+        return overlap > best.overlap ? { box: candidate, overlap } : best;
+      }, { box: undefined as (typeof fourWheelBoxes)[number] | undefined, overlap: 0 });
       return {
         id: track.trackId,
-        className: clearlyFreight ? 'truck' : track.className,
-        freightEvidence: clearlyFreight,
+        className: track.className,
+        classScores: box.overlap > .35 ? box.box?.classScores : undefined,
         confidence: track.prob,
         x: track.x, y: track.y, w: track.w, h: track.h,
         vx: velocity.vx, vy: velocity.vy,
@@ -144,7 +146,8 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
     }
     self.postMessage({
       type: 'result', requestId: message.requestId, generation: message.generation,
-      mediaTime: message.mediaTime, tracks, detectionCount: boxes.length,
+      mediaTime: message.mediaTime, tracks: [...tracks, ...motorTracks],
+      detectionCount: boxes.length,
       provider: executionProvider,
       inferenceMs: performance.now() - start
     });
@@ -164,6 +167,7 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
   if (message.type === 'reset') {
     epoch += 1;
     tracker.reset();
+    twoWheelers.reset();
     observations.clear();
   } else if (message.type === 'init') {
     void initialize(message.modelPath).catch(error =>
