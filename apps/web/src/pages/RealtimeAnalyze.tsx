@@ -11,7 +11,7 @@ import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
-import { hasAdvancedVideoFrame, isStreamStalled, shouldPaintLiveOverlay } from '../services/streamRecovery';
+import { hasAdvancedVideoFrame, isLiveFrameDiscontinuity, isStreamStalled, shouldPaintLiveOverlay } from '../services/streamRecovery';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
 import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
@@ -981,11 +981,29 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
     const maybeInfer = (mediaTime: number) => {
       if (stopped || !activeRef.current) return;
-      if (webcamRef.current && !video.paused && !video.ended &&
-          video.readyState >= 2 && hasAdvancedVideoFrame(lastDecodedMediaTimeRef.current, mediaTime)) {
-        lastDecodedMediaTimeRef.current = mediaTime;
-        lastPresentedAtRef.current = performance.now();
-        if (captureStalledRef.current && video.readyState >= 2) {
+      if (webcamRef.current && !video.paused && !video.ended && video.readyState >= 2) {
+        const now = performance.now();
+        const discontinuity = isLiveFrameDiscontinuity(
+          lastDecodedMediaTimeRef.current, mediaTime, lastPresentedAtRef.current, now
+        );
+        if (discontinuity) {
+          // Lost frames or a restarted stream clock: discard stale optical
+          // trajectories, previous speed estimates and incident streaks.
+          // Preserve the session and monotonically assigned vehicle IDs.
+          generationRef.current += 1;
+          latestRef.current = null;
+          flowTracksRef.current = [];
+          grayHistoryRef.current = [];
+          speedHistoryRef.current.clear();
+          autoIncidentDetectorRef.current.reset();
+          detectorToStableIdRef.current.clear();
+          lastOpticalSampleRef.current = -Infinity;
+          lastEstimateSaveAtRef.current = -Infinity;
+          workerRef.current?.postMessage({ type: 'reset' });
+        }
+        if (discontinuity || hasAdvancedVideoFrame(lastDecodedMediaTimeRef.current, mediaTime)) {
+          lastDecodedMediaTimeRef.current = mediaTime;
+          lastPresentedAtRef.current = now;
           captureStalledRef.current = false;
           setStreamHealth('playing');
         }

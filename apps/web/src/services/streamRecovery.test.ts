@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hasAdvancedVideoFrame, isStreamStalled, liveRetryDelay, shouldPaintLiveOverlay, LIVE_OVERLAY_FRESHNESS_MS } from './streamRecovery';
+import { hasAdvancedVideoFrame, isStreamStalled, liveRetryDelay, shouldPaintLiveOverlay, LIVE_OVERLAY_FRESHNESS_MS, isLiveFrameDiscontinuity } from './streamRecovery';
 
 const playing = { paused: false, ended: false, seeking: false };
 
@@ -62,5 +62,24 @@ describe('live overlay freshness and privacy', () => {
   it('clears overlays on ended and seeking captures', () => {
     expect(shouldPaintLiveOverlay('tab', 10_000, 9_900, { ...playing, ended: true }, false)).toBe(false);
     expect(shouldPaintLiveOverlay('tab', 10_000, 9_900, { ...playing, seeking: true }, false)).toBe(false);
+  });
+});
+
+describe('stale live-tracking resynchronization', () => {
+  it('keeps optical tracks during normal video playback', () => {
+    expect(isLiveFrameDiscontinuity(10, 10.05, 1000, 1050)).toBe(false);
+    expect(isLiveFrameDiscontinuity(10, 11, 1000, 1300)).toBe(false);
+    expect(isLiveFrameDiscontinuity(null, 11, 0, 2000)).toBe(false);
+  });
+  it('requires a reset after missing many seconds of decoded video', () => {
+    expect(isLiveFrameDiscontinuity(10, 13, 1000, 1500)).toBe(true);
+  });
+  it('requires a reset if the browser stopped delivering frames while source time barely moved', () => {
+    expect(isLiveFrameDiscontinuity(10, 10.05, 1000, 10000)).toBe(true);
+  });
+  it('detects a live media clock restart without accepting tiny timing jitter', () => {
+    expect(isLiveFrameDiscontinuity(20, 0, 1000, 2000)).toBe(true);
+    expect(isLiveFrameDiscontinuity(20, 19.9, 1000, 1100)).toBe(false);
+    expect(isLiveFrameDiscontinuity(20, 20, 1000, 20000)).toBe(false);
   });
 });

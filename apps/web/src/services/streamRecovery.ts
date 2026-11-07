@@ -14,6 +14,30 @@ export function isStreamStalled(
     nowMs - lastPresentedAtMs >= thresholdMs;
 }
 
+/** Browser-tab capture can skip frames or restart its media timestamp
+ * after focus changes. Never reconnect a stale optical path across a long
+ * gap, because that can fabricate vehicle motion and speed estimates.
+ */
+export const MAX_LIVE_MEDIA_GAP_SEC = 2.5;
+export const MAX_LIVE_WALL_GAP_MS = 8000;
+export function isLiveFrameDiscontinuity(
+  previousMediaTime: number | null,
+  currentMediaTime: number,
+  previousFrameAtMs: number,
+  nowMs: number,
+): boolean {
+  if (previousMediaTime === null || !Number.isFinite(previousMediaTime) ||
+      !Number.isFinite(currentMediaTime) || currentMediaTime < 0) return false;
+  // Some live MediaStreams rebase their clock after reconnection. A small
+  // out-of-order timestamp is not a reset, but a large rollback is.
+  if (currentMediaTime < previousMediaTime - 0.5) return true;
+  if (currentMediaTime <= previousMediaTime + 0.001) return false;
+  if (currentMediaTime - previousMediaTime > MAX_LIVE_MEDIA_GAP_SEC) return true;
+  return Number.isFinite(nowMs) && Number.isFinite(previousFrameAtMs) &&
+    previousFrameAtMs > 0 && nowMs > previousFrameAtMs &&
+    nowMs - previousFrameAtMs > MAX_LIVE_WALL_GAP_MS;
+}
+
 /** A paused local file can legitimately keep its last visible boxes.
  * A browser-tab/camera stream cannot: a muted, stalled or nonadvancing feed
  * otherwise leaves ghosts drawn over a video frame that is no longer live.
