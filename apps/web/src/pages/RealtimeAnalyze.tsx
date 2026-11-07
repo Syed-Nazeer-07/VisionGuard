@@ -894,17 +894,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   useEffect(() => {
     if (active) return;
     const video = videoRef.current;
+    const wasCapturing = !!webcamRef.current;
     video?.pause();
-    if (webcamRef.current) {
-      // Releasing the camera on navigation is a deliberate privacy safeguard.
+    if (wasCapturing) {
+      // Camera and user-approved tab capture are released on navigation.
       stopWebcam();
       setUrl('');
       setStreamHealth('idle');
       resetTracks();
     }
-    if (video && !streamSourceRef.current && !webcamRef.current &&
+    // Never overwrite a saved file's position with a now-closed camera or
+    // YouTube tab capture timestamp.
+    if (video && !wasCapturing && !streamSourceRef.current && ownerId &&
         Number.isFinite(video.currentTime)) {
-      void localAnalysisStorage.savePosition(video.currentTime, ownerId ?? undefined).catch(() => {});
+      void localAnalysisStorage.savePosition(video.currentTime, ownerId).catch(() => {});
     }
   }, [active]);
 
