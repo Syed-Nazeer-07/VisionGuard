@@ -54,6 +54,7 @@ import { TrackStateStore } from '../pipeline/tracker/trackStore';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { liveAnalysisSession } from '../services/liveAnalysisSession';
 import { analysisLogger } from '../services/analysisLogger';
+import { runScopedTrackUpsertOptions } from '../services/runTrackIdentity';
 import { availabilityMessage, fetchStorageInfo, getAssetAvailability, resolveVideoUrl, storageProviderLabel, videoDisplayName } from '../lib/videoAssets';
 import type { Json } from '../types/supabase';
 
@@ -497,7 +498,7 @@ export default function Analyze() {
     }));
     const { error: upsertErr } = await supabase
       .from('tracked_objects')
-      .upsert(rows, { onConflict: isVideo ? 'video_id,track_id' : 'camera_id,track_id' });
+      .upsert(rows, runScopedTrackUpsertOptions(rows, session.runId));
     if (upsertErr) {
       console.error('Tracked objects upsert failed:', upsertErr);
       analysisLogger.log({ ...logFor(session), category: 'ERROR', message: `Tracking persistence failed: ${describeError(upsertErr)}` });
@@ -1809,19 +1810,12 @@ export default function Analyze() {
 
       // 2. Exactly one analysis run for this session.
       let runId: string;
-      let trackIdOffset = 0;
+      // IDs are scoped to this run; no cross-run global offset/query is needed.
+      const trackIdOffset = 0;
       if (source.isLocalOnly) {
         runId = `local-run-${Date.now()}`;
-        trackIdOffset = 0;
       } else {
         try {
-          const col = 'video_id';
-          const { data: maxRow, error: maxErr } = await supabase
-            .from('tracked_objects').select('track_id').eq(col, source.id)
-            .order('track_id', { ascending: false }).limit(1);
-          if (maxErr) throw maxErr;
-          trackIdOffset = Number((maxRow as Array<{ track_id: number }> | null)?.[0]?.track_id ?? 0);
-
           const run = await db.analysisRuns.create({
             camera_id: null,
             video_id: source.id,
@@ -2239,7 +2233,7 @@ export default function Analyze() {
 
                 const { error: upsertErr } = await supabase
                   .from('tracked_objects')
-                  .upsert(rows, { onConflict: 'video_id,track_id' });
+                  .upsert(rows, runScopedTrackUpsertOptions(rows, run.id));
                 if (upsertErr) {
                   throw new Error(`Backend tracking persistence failed: ${upsertErr.message}`);
                 }
