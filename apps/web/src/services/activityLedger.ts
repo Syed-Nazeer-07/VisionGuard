@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import { supabase, supabaseConfig } from '../lib/supabase';
+import { readCloudAnalysisRow, reconcileAnalysisRun, sameAnalysisRecord } from './activityReconciliation';
 
 export type VehicleClass = 'car' | 'bus' | 'truck' | 'motorcycle' | 'bicycle' | 'train' | 'bus/truck';
 
@@ -71,6 +72,12 @@ const cloudStatus = new Map<string, 'idle' | 'synced' | 'offline'>();
 const uploadedRevisions = new Map<string, Map<string, number>>();
 
 
+/** Record revisions must change even when multiple optical observations or
+ * review actions occur in the same millisecond. */
+export function nextActivityRevision(previous: number, now = Date.now()): number {
+  return Math.max(Number.isFinite(now) ? now : Date.now(), previous + 1);
+}
+
 const keyFor = (owner: string | null | undefined) => owner || 'signed-out';
 const getSnapshot = (owner: string) => states.get(owner) ?? EMPTY;
 function emit() {
@@ -130,33 +137,73 @@ async function write(owner: string, records: AnalysisRecord[]): Promise<void> {
 }
 
 async function syncToCloud(owner: string, records: AnalysisRecord[]): Promise<void> {
-  // Cloud sync needs authenticated metadata access; local inference does not.
-  // Do not emit a failed network write every few seconds in demo mode.
   if (supabaseConfig.isMock || !navigator.onLine || !records.length) {
     if (supabaseConfig.isMock || !navigator.onLine) cloudStatus.set(owner, 'offline');
     return;
   }
-  // The caller only supplies an authenticated user ID. Supabase RLS separately
-  // verifies the true auth.uid() on every row read/write.
   const revisions = uploadedRevisions.get(owner) ?? new Map<string, number>();
-  const changed = records.filter(run =>
-    run.updatedAt > (revisions.get(run.id) ?? 0));
-  // No video bytes leave the device, and unchanged historical sessions do
-  // not need to be serialized/reuploaded every 15 seconds.
+  const changed = records.filter(run => run.updatedAt > (revisions.get(run.id) ?? 0));
   for (let i = 0; i < changed.length; i += 15) {
-    const batch = changed.slice(i, i + 15);
-    const rows = batch.map(run => ({
-      owner_id: owner, run_id: run.id, payload: run,
-      updated_at: new Date(run.updatedAt).toISOString()
-    }));
-    const { error } = await (supabase as any).from('user_analysis_records')
-      .upsert(rows, { onConflict: 'owner_id,run_id' });
-    if (error) throw error;
-    for (const run of batch) revisions.set(run.id, run.updatedAt);
-    uploadedRevisions.set(owner, revisions);
+    // Concurrent browser devices can update different fields of the same
+    // document. A trigger may return OLD for stale writes without an error.
+    // Inspect the actual server response, reconcile the two versions, and
+    // retry a bounded number of times. Never report success for a rejected
+    // revision, and never fetch/re-upload original video bytes.
+    let pending = changed.slice(i, i + 15);
+    for (let attempt = 0; pending.length && attempt < 3; attempt++) {
+      const rows = pending.map(run => ({
+        owner_id: owner, run_id: run.id, payload: run,
+        updated_at: new Date(run.updatedAt).toISOString()
+      }));
+      const { data, error } = await (supabase as any).from('user_analysis_records')
+        .upsert(rows, { onConflict: 'owner_id,run_id' })
+        .select('run_id,payload,updated_at');
+      if (error) throw error;
+      if (!Array.isArray(data) || data.length !== pending.length) {
+        throw Error('Cloud did not acknowledge every analysis record; local history was preserved.');
+      }
+      const returned = new Map<string, ReturnType<typeof readCloudAnalysisRow>>();
+      for (const raw of data) {
+        const value = readCloudAnalysisRow(raw);
+        if (returned.has(value.runId)) throw Error('Cloud returned duplicate analysis records.');
+        returned.set(value.runId, value);
+      }
+      const retry: AnalysisRecord[] = [];
+      for (const sent of pending) {
+        const acknowledged = returned.get(sent.id);
+        if (!acknowledged) {
+          throw Error('Cloud omitted an analysis record; local history was preserved.');
+        }
+        // The column timestamp is what the database trigger compares.
+        // Never mark the *sent* revision as synced unless it was accepted.
+        revisions.set(sent.id, acknowledged.revisionAt);
+        uploadedRevisions.set(owner, revisions);
+        const latest = getSnapshot(owner).records.find(run => run.id === sent.id) ?? sent;
+        const resolution = reconcileAnalysisRun(
+          latest, acknowledged.record, acknowledged.revisionAt
+        );
+        if (resolution.needsUpload) {
+          // Keep the newer local edits and remote events together first.
+          change(owner, runs => runs.map(run => run.id === sent.id ? resolution.record : run));
+          retry.push(resolution.record);
+        } else if (!sameAnalysisRecord(latest, acknowledged.record)) {
+          // Another device may already contain the complete newer record.
+          // Adopt it only after a server ACK, keeping IndexedDB in sync.
+          change(owner, runs => runs.map(run =>
+            run.id === sent.id ? acknowledged.record : run));
+        }
+      }
+      pending = retry;
+    }
+    if (pending.length) {
+      throw Error('Cloud changed during sync; merged activity remains local. Retry when online.');
+    }
   }
-  markCloudSynced(owner);
+  const remaining = getSnapshot(owner).records.some(run =>
+    run.updatedAt > (revisions.get(run.id) ?? 0));
+  if (!remaining) markCloudSynced(owner);
 }
+
 async function mergeFromCloud(owner: string): Promise<void> {
   if (cloudLoads.has(owner)) return;
   cloudLoads.add(owner);
@@ -172,37 +219,43 @@ async function mergeFromCloud(owner: string): Promise<void> {
     if (error) throw error;
     const current = getSnapshot(owner);
     const byId = new Map(current.records.map(r => [r.id, r]));
+    const revisions = uploadedRevisions.get(owner) ?? new Map<string, number>();
     let changed = false;
+    let needsPush = false;
     for (const row of data || []) {
-      const run = row.payload as AnalysisRecord;
-      if (!run || typeof run.id !== 'string' || !run.vehicles ||
-          !Array.isArray(run.violations) || !Number.isFinite(run.updatedAt)) continue;
-      const revisions = uploadedRevisions.get(owner) ?? new Map<string, number>();
-      revisions.set(run.id, run.updatedAt);
-      uploadedRevisions.set(owner, revisions);
-      const local = byId.get(run.id);
-      if (!local || run.updatedAt > local.updatedAt) {
-        byId.set(run.id, run);
+      const { runId, record: cloudRun, revisionAt } = readCloudAnalysisRow(row);
+      revisions.set(runId, revisionAt);
+      const local = byId.get(runId);
+      const reconciled = local ?
+        reconcileAnalysisRun(local, cloudRun, revisionAt) :
+        { record: cloudRun, needsUpload: false };
+      needsPush ||= reconciled.needsUpload;
+      if (!local || !sameAnalysisRecord(local, reconciled.record)) {
+        byId.set(runId, reconciled.record);
         changed = true;
       }
     }
+    uploadedRevisions.set(owner, revisions);
     if (changed) {
-      const records = [...byId.values()].sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,150);
-      setState(owner, { loaded:true, records, error: current.error });
-      // Merge remote back to local browser storage without re-uploading it.
+      const records = [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 150);
+      setState(owner, { loaded: true, records, error: current.error });
       const prior = writeTasks.get(owner) ?? Promise.resolve();
-      // Snapshot at execution time. A vehicle may have been observed while
-      // the previous IndexedDB transaction was completing.
-      const queued = prior.catch(()=>{}).then(()=>write(owner,getSnapshot(owner).records));
-      writeTasks.set(owner,queued);
+      const queued = prior.catch(() => {}).then(() => write(owner, getSnapshot(owner).records));
+      writeTasks.set(owner, queued);
       await queued;
     }
-    markCloudSynced(owner);
+    if (needsPush) {
+      // A local decision/observation survived reconciliation. Re-upload it
+      // after the remote revision has been recorded, without recursion.
+      persist(owner);
+    } else {
+      markCloudSynced(owner);
+    }
   } catch (e) {
-    // Local analysis works offline. Surface a warning without discarding data.
     cloudStatus.set(owner, 'offline');
     const state = getSnapshot(owner);
-    setState(owner, { ...state, error: 'Cloud sync unavailable; activity remains saved locally. ' + String(e) });
+    setState(owner, { ...state,
+      error: 'Cloud sync unavailable; activity remains saved locally. ' + String(e) });
   } finally { cloudLoads.delete(owner); }
 }
 
@@ -362,7 +415,8 @@ export const activityLedger = {
         };
       }
       return {
-        ...run, updatedAt: Date.now(), analyzedFrames: run.analyzedFrames + 1,
+        ...run, updatedAt: nextActivityRevision(run.updatedAt),
+        analyzedFrames: run.analyzedFrames + 1,
         maximumVisibleVehicles: Math.max(run.maximumVisibleVehicles, vehicles.length),
         vehicles: updated
       };
@@ -381,7 +435,7 @@ export const activityLedger = {
         const vehicles = mergeEstimatedSpeeds(run.vehicles, tracks);
         if (vehicles === run.vehicles) return run;
         changed = true;
-        return {...run, updatedAt:Date.now(), vehicles};
+        return {...run, updatedAt:nextActivityRevision(run.updatedAt), vehicles};
       });
       return changed ? next : records;
     });
@@ -422,7 +476,8 @@ export const activityLedger = {
           !run.violations.some(v => v.id === event.id))) return records;
       return records.map(run =>
         run.id !== runId || run.violations.some(v => v.id === event.id)
-          ? run : { ...run, updatedAt: Date.now(), violations: [...run.violations, event] }
+          ? run : { ...run, updatedAt: nextActivityRevision(run.updatedAt),
+            violations: [...run.violations, event] }
       );
     });
   }

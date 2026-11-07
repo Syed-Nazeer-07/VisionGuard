@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeIncidentReviewStatus, clearResolvedCloudWarning, mergeEstimatedSpeeds, shouldRefreshCloudOnFocus, summarizeActivity, type AnalysisRecord } from './activityLedger';
+import { changeIncidentReviewStatus, clearResolvedCloudWarning, mergeEstimatedSpeeds, nextActivityRevision, shouldRefreshCloudOnFocus, summarizeActivity, type AnalysisRecord } from './activityLedger';
 
 function record(id: string, vehicles: Record<string, { id:number; type:string;confidence:number;firstSeenAt:number;lastSeenAt:number;observations:number;estimatedSpeedKmh:number|null }>): AnalysisRecord {
   return {
@@ -126,5 +126,15 @@ describe('returning to a live cloud-backed workspace', () => {
   it('recovers if the local clock moves backwards or a stored timestamp is corrupt', () => {
     expect(shouldRefreshCloudOnFocus(20_000, 10_000, true, true)).toBe(true);
     expect(shouldRefreshCloudOnFocus(Number.NaN, 10_000, true, true)).toBe(true);
+  });
+});
+
+describe('cloud revision monotonicity', () => {
+  it('increments multiple observations and decisions in the same millisecond', () => {
+    expect(nextActivityRevision(1000, 1000)).toBe(1001);
+    expect(nextActivityRevision(1001, 1000)).toBe(1002);
+  });
+  it('keeps real clock time if later than current revision', () => {
+    expect(nextActivityRevision(1000, 1100)).toBe(1100);
   });
 });

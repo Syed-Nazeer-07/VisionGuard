@@ -147,3 +147,10 @@ export function readCloudAnalysisRow(value: unknown): {
   return { runId: row.run_id, revisionAt,
     record: row.payload as AnalysisRecord };
 }
+
+/** Compare the revision and every history field relevant to the UI.
+ * Avoid unnecessary refresh writes and preserve cloud conflict detection.
+ */
+export function sameAnalysisRecord(a: AnalysisRecord, b: AnalysisRecord): boolean {
+  return a.updatedAt === b.updatedAt && equivalentContent(a, b);
+}
