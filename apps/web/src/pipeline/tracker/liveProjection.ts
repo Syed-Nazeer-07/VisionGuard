@@ -15,7 +15,8 @@ export interface LiveTrack {
   vy: number;
   motionPxPerSec: number | null;
   /** Strong image evidence of a distinct freight cab/trailer, not just YOLO class confidence. */
-  freightEvidence?: boolean;
+  /** Original YOLO bus/truck evidence, not a colour-based guess. */
+  classScores?: { bus: number; truck: number };
 }
 
 export const MAX_TRACK_AGE_SEC = 0.55;
