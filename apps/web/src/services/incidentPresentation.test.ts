@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  groupIncidentRecords, incidentLabel, manualIncidentEvidence,
+  groupIncidentRecords, incidentLabel, incidentReviewLabel, manualIncidentEvidence,
 } from './incidentPresentation';
 import type { AnalysisRecord, ViolationRecord } from './activityLedger';
 
@@ -30,6 +30,11 @@ describe('Incident page automatic-first presentation', () => {
   it('uses concise incident names rather than raw detector rule types', () => {
     expect(incidentLabel('speed_estimate_review')).toBe('High speed estimate');
     expect(incidentLabel('stationary_vehicle_review')).toBe('Stationary vehicle');
+  });
+  it('uses human-review labels, never legal approval wording', () => {
+    expect(incidentReviewLabel('pending_review')).toBe('Needs review');
+    expect(incidentReviewLabel('approved')).toBe('Reviewed');
+    expect(incidentReviewLabel('rejected')).toBe('Dismissed');
   });
   it('allows short or empty manual notes; no twelve-character minimum', () => {
     expect(manualIncidentEvidence('observed_event', 'Bus', null)).toBe('Bus');

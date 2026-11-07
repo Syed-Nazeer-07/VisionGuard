@@ -15,6 +15,14 @@ export function groupIncidentRecords(records: readonly AnalysisRecord[]) {
     manual: entries.filter(item => !item.event.id.startsWith('auto:')),
   };
 }
+/** A reviewer decision is not a verified legal violation.
+ * Keep language consistent in the UI, CSV and PDF exports.
+ */
+export function incidentReviewLabel(status: ViolationRecord['status']): string {
+  if (status === 'approved') return 'Reviewed';
+  if (status === 'rejected') return 'Dismissed';
+  return 'Needs review';
+}
 export function incidentLabel(type: string): string {
   if (type === 'speed_estimate_review') return 'High speed estimate';
   if (type === 'stationary_vehicle_review') return 'Stationary vehicle';

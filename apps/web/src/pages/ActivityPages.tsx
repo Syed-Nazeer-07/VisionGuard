@@ -9,7 +9,7 @@ import autoTable from 'jspdf-autotable';
 import { useAuthStore } from '../store/auth';
 import { activityLedger, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
 import { csvCell } from '../services/csvExport';
-import { groupIncidentRecords, incidentLabel, manualIncidentEvidence } from '../services/incidentPresentation';
+import { groupIncidentRecords, incidentLabel, incidentReviewLabel, manualIncidentEvidence } from '../services/incidentPresentation';
 
 const niceDate = (time: number) => new Date(time).toLocaleString();
 const fmt = (n: number) => n.toLocaleString();
@@ -212,8 +212,8 @@ function exportPDF(records: AnalysisRecord[]) {
   const flags = records.flatMap(run => run.violations.map(flag => [
     run.sourceName.slice(0,25),
     flag.trackId == null ? '—' : String(flag.trackId),
-    title(flag.type),
-    flag.status.replace('_',' '),
+    incidentLabel(flag.type),
+    incidentReviewLabel(flag.status),
     flag.evidenceNote.slice(0,160)
   ]));
   if (flags.length) {
@@ -221,7 +221,7 @@ function exportPDF(records: AnalysisRecord[]) {
       .lastAutoTable?.finalY ?? 54;
     autoTable(pdf,{
       startY: previousTableEnd + 12,
-      head:[['Session','Track','Review reason','Status','Reviewer note']],
+      head:[['Session','Track','Review reason','Status','Evidence / note']],
       body:flags, theme:'striped', styles:{fontSize:7},
       headStyles:{fillColor:[36,67,112]},
       columnStyles:{4:{cellWidth:60}}
@@ -231,10 +231,10 @@ function exportPDF(records: AnalysisRecord[]) {
 }
 
 function exportIncidentsCSV(records: AnalysisRecord[]) {
-  const columns = ['Session','Source','Flag ID','Track ID','Review reason','Status','Observed at','Reviewer note'];
+  const columns = ['Session','Source','Flag ID','Track ID','Review reason','Status','Observed at','Evidence / note'];
   const rows = records.flatMap(run => run.violations.map(event => [
-    run.id, run.sourceName, event.id, event.trackId ?? '', event.type,
-    event.status, new Date(event.observedAt).toISOString(), event.evidenceNote
+    run.id, run.sourceName, event.id, event.trackId ?? '', incidentLabel(event.type),
+    incidentReviewLabel(event.status), new Date(event.observedAt).toISOString(), event.evidenceNote
   ]));
   const csv = '\uFEFF'+[columns,...rows].map(row=>row.map(csvCell).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
@@ -264,7 +264,9 @@ export function ActivityReports() {
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <Stat label="Sessions" number={totals.runs} note="Included in report"/>
           <Stat label="Unique vehicles" number={totals.vehicles} note="Tracked objects"/>
-          <Stat label="Review flags" number={totals.violations} note="Require human verification"/>
+          <Stat label="Review flags" number={totals.violations}
+            note={totals.pendingReviews + ' pending · ' +
+              (totals.reviewedFlags + totals.dismissedFlags) + ' handled'}/>
         </div>
         <div className="mt-6 flex flex-wrap gap-2">
           <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportPDF(filtered)}
@@ -412,8 +414,7 @@ function IncidentRow({
   onReview: (runId: string, eventId: string, status: ViolationRecord['status']) => void;
 }) {
   const automatic = event.id.startsWith('auto:');
-  const statusLabel = event.status === 'approved' ? 'Reviewed' :
-    event.status === 'rejected' ? 'Dismissed' : 'Needs review';
+  const statusLabel = incidentReviewLabel(event.status);
   const statusClass = event.status === 'approved'
     ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
     : event.status === 'rejected'
