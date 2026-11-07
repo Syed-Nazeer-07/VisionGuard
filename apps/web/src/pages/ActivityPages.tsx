@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
+import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { Link } from 'react-router-dom';
 import { Activity, Download, Film } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -291,8 +292,25 @@ interface B2VideoRow {
 export function ActivityVideoLibrary() {
   const { records, loaded, error, userId } = useRuns();
   const [b2Videos, setB2Videos] = useState<B2VideoRow[]>([]);
+  const [localVideo, setLocalVideo] = useState<{name:string;size:number}|null>(null);
+  const [localError, setLocalError] = useState('');
   const [b2Loading, setB2Loading] = useState(false);
   const [b2Error, setB2Error] = useState('');
+  useEffect(() => {
+    if (!userId) { setLocalVideo(null); setLocalError(''); return; }
+    let alive = true;
+    void localAnalysisStorage.loadVideo(userId).then(saved => {
+      if (!alive) return;
+      setLocalError('');
+      setLocalVideo(saved ? {name:saved.name,size:saved.file.size} : null);
+    }).catch(error => {
+      if (!alive) return;
+      setLocalVideo(null);
+      setLocalError('Could not access the retained local file: ' +
+        (error instanceof Error ? error.message : String(error)));
+    });
+    return () => { alive = false; };
+  }, [userId]);
   useEffect(() => {
     if (!userId) { setB2Videos([]); return; }
     let alive = true;
@@ -318,6 +336,24 @@ export function ActivityVideoLibrary() {
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     <div className="space-y-5">
+      <section className="vg-panel overflow-hidden">
+        <div className="vg-section-head">
+          <h2>On this device</h2>
+          <Link to="/app/analyze">Video analysis</Link>
+        </div>
+        {localError && <p role="alert" className="vg-empty-row text-amber-700">{localError}</p>}
+        {!localError && !localVideo && <p className="vg-empty-row">No local recording retained for this account.</p>}
+        {localVideo && <div className="flex flex-wrap items-center gap-3 px-5 py-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+            <Film size={17}/>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-slate-800">{localVideo.name}</p>
+            <p className="mt-1 text-xs text-slate-500">Local only · {(localVideo.size/1048576).toFixed(1)} MB · Not uploaded to cloud</p>
+          </div>
+          <Link to="/app/analyze" className="text-xs font-semibold text-[#2356a8] hover:underline">Resume analysis</Link>
+        </div>}
+      </section>
       <section className="vg-panel overflow-hidden">
         <div className="vg-section-head">
           <h2>Video storage · Backblaze B2</h2>
