@@ -20,12 +20,15 @@ and on the target Windows/Edge computer before promoting the release.
 | Capture privacy | Global Stop button ends sharing; webcam releases on page hide |
 | Live session history | Tracks persist across dashboard, history, analytics and reports |
 | Review flags | Sustained high-speed estimates and stopped vehicles amid moving traffic automatically create review candidates, alongside manual flags; confirm they appear in Incidents and report exports |
+| Incident decisions | Mark automatic/manual flags **Reviewed**, **Dismissed**, and **Reopen**. Refresh and verify preserved evidence, IDs, status filter totals and monotonic history revisions |
+| Review export consistency | PDF and incident CSV display human-readable statuses, including dismissed items; reviewed never means confirmed traffic enforcement |
+| Cross-device metadata | After another signed-in browser changes a review status, focus this browser and check that newer metadata refreshes without reloading the page; validate concurrent edit behavior before claiming multi-user collaboration |
 | Reload persistence | Saved session data survives reload without duplicating IDs |
 | Local video opt-in | Unchecked means original bytes are not retained across reloads |
 | Optional local retention | Checked retains video only within available browser quota |
 | B2 storage | Explicit upload completes, appears in History, opens via signed GET URL |
 | B2 re-analysis | Archive **Analyze Again** loads video into browser detector; bucket CORS permits reading its frames |
-| Offline and reconnect | Metadata stays local offline and can sync after reconnect |
+| Offline and reconnect | Metadata and reviewer decisions stay local offline, sync after reconnect, and refresh from cloud on foreground return (throttled) |
 | Account switching | Account settings, video/capture state and tracked history do not leak between users |
 | Device performance | Sustainable inference speed verified on Surface Laptop 7 / Windows ARM |
 | Report clarity | Estimated speeds never described as verified offences |

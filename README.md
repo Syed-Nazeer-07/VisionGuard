@@ -35,8 +35,8 @@ VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime
 | **Fullscreen** | Expand the composite video **with the detection canvas**, not the video alone |
 | **Overview & analytics** | Inspect saved sessions, unique vehicle tracks, frame counts and vehicle-class distribution |
 | **History** | Revisit account-scoped analysis summaries and see locally retained or explicitly cloud-saved video assets |
-| **Incidents** | Automatic high-speed-estimate and stationary-vehicle review candidates plus manual flags; none are confirmed offences |
-| **Reports** | Export session/vehicle data as PDF or CSV, and incident-review records as CSV |
+| **Incidents** | Automatic high-speed-estimate and stationary-vehicle candidates, compact manual entry, and **Mark reviewed / Dismiss / Reopen** actions with status filters; none are confirmed offences |
+| **Reports** | Export session/vehicle data as PDF or CSV, and incident-review records as CSV; **pending, reviewed and dismissed** flags retain their status |
 | **Accounts & settings** | Email/password access, configurable Google sign-in, user-specific start pages and account settings |
 
 **A single video source is analyzed at a time.** There is no automatic YouTube downloader, unattended stream scraping or multi-camera inference grid.
@@ -45,8 +45,8 @@ VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime
 
 1. **Choose footage:** select a local recording, open a permitted device camera or approve browser-tab sharing.
 2. **Track vehicles:** YOLO11s identifies candidates; optical tracking smooths boxes and associates IDs over time.
-3. **Review observations:** examine counts and **approximate** speeds. The detector automatically flags sustained high speed estimates and unusually stationary vehicles for review; other events can be flagged manually.
-4. **Revisit the session:** use **Overview**, **History**, **Analytics**, **Incidents** and **Reports**. Session metadata is stored locally and synchronized when cloud metadata is configured and available.
+3. **Review observations:** examine counts and **approximate** speeds. Sustained high-speed estimates and unusually stationary vehicles create **automatic review candidates**. Use Incidents to review, dismiss or reopen them; optional manual flags remain available.
+4. **Revisit the session:** use **Overview**, **History**, **Analytics**, **Incidents** and **Reports**. Session metadata and reviewer decisions are stored locally and synchronized when cloud metadata is configured and available. Returning to a visible page can refresh newer account-scoped cloud records.
 5. **Keep video only if you choose:** optionally retain the local original or explicitly upload it to Backblaze B2. Analyzing a file does not automatically upload the video.
 
 ### Browser tabs and YouTube Live
@@ -145,7 +145,7 @@ The active video/capture component resets when the signed-in account changes, ke
 
 Image movement alone cannot reliably determine a vehicle's real road speed without appropriate camera geometry and calibration. The live card displays the **highest valid speed estimate for a currently visible tracked vehicle**, not the speed limit, a measured maximum for the entire video or a verified speeding event. Prediction-only boxes do not generate new speed measurements.
 
-**Never use VisionGuard's current speed estimates or review flags as legal enforcement evidence.** Misclassification, occlusion, camera movement, lighting and dropped frames can also affect counts and tracking.
+**Never use VisionGuard's current speed estimates or review flags as legal enforcement evidence.** A flag marked **Reviewed** only records a user workflow decision; it does not establish a violation. Misclassification, occlusion, camera movement, lighting and dropped frames can also affect counts and tracking.
 
 ## Architecture
 
