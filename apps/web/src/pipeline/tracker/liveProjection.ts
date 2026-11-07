@@ -57,8 +57,12 @@ export function projectLiveTracks(
     const visibleHeight = Math.min(bottom, frameHeight) - Math.max(top, 0);
     if (visibleWidth <= 0 || visibleHeight <= 0) return [];
     const fractionVisible = (visibleWidth * visibleHeight) / (track.w * track.h);
-    // Departing vehicles disappear as soon as most of the object is outside the frame.
-    if (fractionVisible < 0.25) return [];
+    // Do not leave partial vehicle boxes stuck to the frame border.
+    // Require the box center to remain inside the source frame AND at least
+    // 60% of its area to be visible. This also suppresses off-frame ghosts
+    // from stale optical velocity while a vehicle is exiting.
+    if (cx < 0 || cx > frameWidth || cy < 0 || cy > frameHeight ||
+        fractionVisible < 0.60) return [];
     return [{ ...track, x: cx, y: cy }];
   });
 }
