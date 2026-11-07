@@ -1,32 +1,20 @@
-# React + TypeScript + Vite
+# VisionGuard web workspace
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+This is the React, TypeScript and Vite frontend of [VisionGuard](../../README.md).
 
-Currently, two official plugins are available:
+Run commands from the repository root:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+npm install
+npm run dev
+npm run build
+npm run test -w web
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Or from this folder: `npm run dev`.
+
+The live analysis page uses `public/models/yolo11s.onnx`. Model weights are **not committed**. The viewer supports local video files, device-camera permission and explicitly approved Edge/Chrome browser-tab capture. Camera-sharing permission does not persist across browser restarts.
+
+**Configuration:** Copy `.env.example` to `.env.local` in this **same directory** (not only at repo root) and supply your public Supabase URL/publishable key. Original video cloud uploads use the Backblaze B2 server-side signing service. Do not put private keys in `VITE_*` variables.
+
+See [live video usage](../../docs/LIVE_ANALYSIS.md) and [Google OAuth setup](../../docs/GOOGLE_SIGN_IN.md).
