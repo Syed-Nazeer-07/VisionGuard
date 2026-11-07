@@ -6,7 +6,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuthStore } from '../store/auth';
-import { summarizeActivity, useActivityLedger, type AnalysisRecord } from '../services/activityLedger';
+import { activityLedger, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
 import { csvCell } from '../services/csvExport';
 
 const niceDate = (time: number) => new Date(time).toLocaleString();
@@ -334,36 +334,130 @@ export function ActivityVideoLibrary() {
 }
 
 export function ActivityIncidents() {
-  const { records, loaded, error } = useRuns();
-  const incidents = records.flatMap(run=>run.violations.map(event=>({ run, event })))
+  const { records, loaded, error, userId } = useRuns();
+  const [runId, setRunId] = useState('');
+  const [trackId, setTrackId] = useState('');
+  const [flagType, setFlagType] = useState<'speed_estimate_review' | 'observed_event'>('speed_estimate_review');
+  const [note, setNote] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const run = records.find(r => r.id === runId) ?? records[0];
+  const tracks = run ? Object.values(run.vehicles).sort((a,b)=>a.id-b.id) : [];
+  const chosenTrack = tracks.find(t => String(t.id) === trackId);
+  const incidents = records.flatMap(item => item.violations.map(event => ({ run: item, event })))
     .sort((a,b)=>b.event.observedAt-a.event.observedAt);
+  const submitFlag = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFeedback('');
+    if (!userId || !run) return;
+    if (flagType === 'speed_estimate_review' && !chosenTrack) {
+      setFeedback('Choose a tracked vehicle before opening a speed review.');
+      return;
+    }
+    if (note.trim().length < 12) {
+      setFeedback('Add at least 12 characters describing what should be reviewed.');
+      return;
+    }
+    const speedContext = flagType === 'speed_estimate_review'
+      ? 'Uncalibrated speed estimate; not a verified speeding violation. ' +
+        (chosenTrack?.estimatedSpeedKmh == null
+          ? 'No speed estimate was available. '
+          : 'Displayed estimate ≈' + Math.round(chosenTrack.estimatedSpeedKmh) + ' km/h. ')
+      : '';
+    const record: ViolationRecord = {
+      id: crypto.randomUUID(),
+      trackId: chosenTrack?.id ?? null,
+      type: flagType,
+      observedAt: Date.now(),
+      status: 'pending_review',
+      evidenceNote: speedContext + note.trim()
+    };
+    activityLedger.addReviewedViolation(userId, run.id, record);
+    void activityLedger.flush(userId).catch(console.warn);
+    setNote('');
+    setFeedback('Review flag saved to this analysis session.');
+  };
   return <main className="vg-page">
     <header className="vg-page-header">
-      <div><h1>Incidents</h1><p>Recorded events and review status</p></div>
+      <div><h1>Incidents</h1><p>Review flags linked to saved video and live sessions</p></div>
       <Link className="vg-secondary" to="/app/archive-cases">Case archive</Link>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
+    <section className="vg-panel mb-5 overflow-hidden">
+      <div className="vg-section-head"><h2>Flag an observation for review</h2></div>
+      <form onSubmit={submitFlag} className="space-y-4 p-5">
+        <p className="text-xs leading-5 text-slate-500">
+          A detector observation is not proof of a violation. Speed estimates
+          require camera calibration, a documented speed limit, and human verification.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label htmlFor="flag-session" className="mb-1.5 block text-xs font-semibold text-slate-700">Analysis session</label>
+            <select id="flag-session" className="vg-field w-full" value={run?.id ?? ''}
+              onChange={event => { setRunId(event.target.value); setTrackId(''); }} disabled={!records.length}>
+              {records.length ? records.map(item =>
+                <option key={item.id} value={item.id}>{item.sourceName} · {niceDate(item.createdAt)}</option>) :
+                <option value="">No sessions yet</option>}
+            </select>
+          </div>
+          <div>
+            <label htmlFor="flag-type" className="mb-1.5 block text-xs font-semibold text-slate-700">Review reason</label>
+            <select id="flag-type" className="vg-field w-full" value={flagType}
+              onChange={event => setFlagType(event.target.value as typeof flagType)}>
+              <option value="speed_estimate_review">Possible speeding · estimate only</option>
+              <option value="observed_event">Other observed traffic event</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="flag-track" className="mb-1.5 block text-xs font-semibold text-slate-700">Vehicle track</label>
+            <select id="flag-track" className="vg-field w-full" value={trackId}
+              onChange={event => setTrackId(event.target.value)}>
+              <option value="">Select track{flagType === 'observed_event' ? ' (optional)' : ''}</option>
+              {tracks.map(track => <option key={track.id} value={String(track.id)}>
+                #{track.id} · {track.type}
+                {track.estimatedSpeedKmh === null ? '' : ' · ≈' + Math.round(track.estimatedSpeedKmh) + ' km/h'}
+              </option>)}
+            </select>
+          </div>
+          <div className="flex items-end text-xs leading-5 text-slate-500">
+            {chosenTrack ? 'Track #' + chosenTrack.id + ': ' + chosenTrack.type +
+              '. Estimated speed ' + (chosenTrack.estimatedSpeedKmh == null
+                ? 'unavailable' : '≈' + Math.round(chosenTrack.estimatedSpeedKmh) + ' km/h') :
+              'Choose a saved track. Each number belongs only to its analysis session.'}
+          </div>
+        </div>
+        <div>
+          <label htmlFor="flag-note" className="mb-1.5 block text-xs font-semibold text-slate-700">Reviewer note</label>
+          <textarea id="flag-note" className="vg-field min-h-24 w-full" rows={3} value={note}
+            onChange={event => setNote(event.target.value)}
+            placeholder="Describe what you observed and what evidence still needs checking…"/>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" className="vg-primary" disabled={!loaded || !run || !userId}>
+            Save review flag
+          </button>
+          {feedback && <p role="status" className="text-xs text-slate-600">{feedback}</p>}
+        </div>
+      </form>
+    </section>
     <section className="vg-panel overflow-hidden">
-      <div className="vg-section-head">
-        <h2>Event records</h2>
-        <span className="text-xs text-slate-500">{incidents.length} total</span>
-      </div>
-      {!loaded ? <p className="vg-empty-row">Loading incidents…</p> :
-        !incidents.length ? <p className="vg-empty-row">No recorded incidents.</p> :
+      <div className="vg-section-head"><h2>Recorded review flags</h2>
+        <span className="text-xs text-slate-500">{incidents.length} total</span></div>
+      {!loaded ? <p className="vg-empty-row">Loading events…</p> :
+        !incidents.length ? <p className="vg-empty-row">No incident review flags on record.</p> :
         <div className="divide-y divide-slate-100">
-          {incidents.map(({run,event}) =>
+          {incidents.map(({run: item,event}) =>
             <div key={event.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 text-sm">
-              <div>
+              <div className="min-w-0">
                 <p className="font-semibold text-slate-800">{title(event.type)}</p>
-                <p className="mt-1 text-xs text-slate-500">{run.sourceName} · Track #{event.trackId ?? 'N/A'}</p>
-                <p className="mt-1.5 text-xs text-slate-600">{event.evidenceNote}</p>
+                <p className="mt-1 text-xs text-slate-500">{item.sourceName} · Track {event.trackId === null ? 'not specified' : '#' + event.trackId}</p>
+                <p className="mt-1.5 text-xs leading-5 text-slate-600">{event.evidenceNote}</p>
               </div>
-              <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+              <span className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-900">
                 {event.status.replace('_',' ')}
               </span>
             </div>)}
         </div>}
     </section>
-    <p className="vg-footnote">Uncalibrated speed estimates are not treated as verified violations.</p>
+    <p className="vg-footnote">Flags and detector estimates are saved per session for review. They do not establish legal violations.</p>
   </main>;
 }
