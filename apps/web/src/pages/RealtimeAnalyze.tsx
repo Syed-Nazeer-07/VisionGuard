@@ -324,9 +324,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
       });
-      if (request !== uploadGenerationRef.current || !activeRef.current) {
-        // Camera permission can finish after navigating away; do not create
-        // a hidden live capture in that case.
+      if (request !== uploadGenerationRef.current || !activeRef.current ||
+          document.hidden) {
+        // Camera permission can finish after navigating away or hiding
+        // the tab; never start a background capture from a late response.
         camera.getTracks().forEach(track => track.stop());
         return;
       }
