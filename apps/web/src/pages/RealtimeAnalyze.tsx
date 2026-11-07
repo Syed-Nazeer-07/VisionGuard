@@ -97,6 +97,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const detectorToStableIdRef = useRef<Map<number, number>>(new Map());
   const speedHistoryRef = useRef<Map<number, SpeedHistory>>(new Map());
   const lastOpticalSampleRef = useRef(-Infinity);
+  const lastEstimateSaveAtRef = useRef(-Infinity);
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const firstFrameResolveRef = useRef<(() => void) | null>(null);
   const paintCountRef = useRef(0);
@@ -164,6 +165,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     // not reuse #1 for an entirely different vehicle in the saved ledger.
     grayHistoryRef.current = [];
     lastOpticalSampleRef.current = -Infinity;
+    lastEstimateSaveAtRef.current = -Infinity;
     lastCapturedTimeRef.current = -Infinity;
     setVisibleCount(0);
     // Do not release an in-flight request here. It must finish or time out;
@@ -993,6 +995,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 if (!activeIds.has(id)) speedHistoryRef.current.delete(id);
               }
               latestRef.current = { time: current.time, tracks: flowTracksRef.current };
+              // Save the estimates seen on screen, not just the first sparse
+              // YOLO result (which may have no optical speed yet). Rate limit
+              // to keep IndexedDB/cloud history efficient.
+              if (current.time - lastEstimateSaveAtRef.current >= 1) {
+                lastEstimateSaveAtRef.current = current.time;
+                const account = useAuthStore.getState().user?.id;
+                if (account && activeRunRef.current) {
+                  activityLedger.updateSpeedEstimates(
+                    account, activeRunRef.current, flowTracksRef.current
+                  );
+                }
+              }
             }
             history.push(current);
             while (history.length && mediaTime - history[0].time > HISTORY_WINDOW) history.shift();
