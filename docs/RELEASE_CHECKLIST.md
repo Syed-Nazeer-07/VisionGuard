@@ -29,6 +29,31 @@ and on the target Windows/Edge computer before promoting the release.
 | Report clarity | Estimated speeds never described as verified offences |
 | Deployment | HTTPS, secure server-side B2 credentials, RLS, rate limits and backup/recovery policy verified |
 
+## Connected staging database review (7 November 2026)
+
+The connected `visionguard-staging` Supabase project has the analysis-history tables
+and row-level security enabled on the public application tables checked. The
+following advisor findings still require production-readiness review:
+
+- **Role lookup:** `public.auth_user_role()` is a `SECURITY DEFINER` function
+  used by many access-control policies. It reads the role only for
+  `auth.uid()` from `public.profiles`, excluding disabled accounts. The
+  advisor flags its `authenticated` EXECUTE permission; do **not** blindly
+  revoke it, as doing so would break dependent policies. Audit the function,
+  grants and policy dependencies before changing authorization.
+- **Password protection:** Enable leaked-password protection in Supabase Auth
+  where supported and appropriate. It was reported as disabled in staging.
+- **Query optimization:** The advisor found 29 authentication/RLS function
+  initialization warnings and 16 multiple-permissive-policy warnings. Review
+  policy behavior and query plans before restructuring; do not weaken RLS to
+  remove a warning. See the [RLS optimization guide](https://supabase.com/docs/guides/database/postgres/row-level-security#call-functions-with-select).
+- **Index review:** 27 unindexed foreign keys and 27 unused-index notices were
+  reported. Prioritize indexes on measured hot paths; unused-index findings
+  on a lightly populated staging database do not prove an index is unnecessary.
+
+These checks are a staging snapshot, **not** proof that deployment, B2 upload,
+auth recovery, YouTube capture, or real-world tracking accuracy are validated.
+
 ## Known release limitations
 
 - Browser object detection is not a certified traffic-enforcement system.
