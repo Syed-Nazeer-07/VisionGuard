@@ -9,7 +9,10 @@ export interface AutomaticReviewCandidate {
   type: 'speed_estimate_review' | 'stationary_vehicle_review';
   evidenceNote: string;
 }
-type Streak = { since: number; count: number; peak: number; x: number; y: number; movingPeers: Set<number> };
+type Streak = {
+  since: number; count: number; peak: number; x: number; y: number;
+  movingPeers: Set<number>; simultaneousTrafficFrames: number;
+};
 type State = {
   lastSeen: number; lastSample: number;
   speed: Streak | null; stopped: Streak | null;
@@ -27,7 +30,7 @@ function valid(t: IncidentObservation): boolean {
 }
 function streak(t: IncidentObservation, time: number): Streak {
   return { since: time, count: 1, peak: t.speedKmh ?? 0,
-    x: t.x, y: t.y, movingPeers: new Set<number>() };
+    x: t.x, y: t.y, movingPeers: new Set<number>(), simultaneousTrafficFrames: 0 };
 }
 /** Call once per optical sample; reset when seeking or changing sources. */
 export class AutomaticIncidentDetector {
@@ -58,13 +61,20 @@ export class AutomaticIncidentDetector {
         if (!state.speed || elapsed > STREAK_GAP) state.speed = streak(t, time);
         else { state.speed.count++; state.speed.peak = Math.max(state.speed.peak, speed); }
         const s = state.speed;
-        if (!state.speedFlagged && s.count >= 5 && time - s.since >= .9) {
+        // Uncalibrated speed readings can stay high while the tracked box
+        // itself is immobile. Require actual image-space displacement over
+        // the same streak, not just a stale smoothed km/h value.
+        const imageTravel = Math.hypot(t.x - s.x, t.y - s.y);
+        const minimumTravel = Math.max(8, t.w * .28);
+        if (!state.speedFlagged && s.count >= 5 && time - s.since >= .9 &&
+            imageTravel >= minimumTravel) {
           state.speedFlagged = true;
           candidates.push({ trackId: t.id, type: 'speed_estimate_review',
             evidenceNote: 'Automatically observed at least ' + s.count +
               ' consecutive uncalibrated optical estimates above ≈80 km/h over ' +
               (time - s.since).toFixed(1) + 's (peak ≈' + Math.round(s.peak) +
-              ' km/h). Road speed and speed limit are unknown. NOT verified speeding.' });
+              ' km/h; visible travel ≈' + Math.round(imageTravel) +
+              ' pixels). Road speed and limit are unknown. NOT verified speeding.' });
         }
       } else state.speed = null;
 
@@ -75,10 +85,14 @@ export class AutomaticIncidentDetector {
         const tolerance = Math.max(6, Math.min(t.w, t.h) * .22);
         if (!old || elapsed > STREAK_GAP || drift > tolerance) state.stopped = streak(t, time);
         else state.stopped!.count++;
-        for (const id of movingIds) if (id !== t.id) state.stopped!.movingPeers.add(id);
+        const movingPeers = movingIds.filter(id => id !== t.id);
+        for (const id of movingPeers) state.stopped!.movingPeers.add(id);
+        // One car now and one car much later do not establish surrounding
+        // moving traffic. Require repeated, simultaneous moving peers.
+        if (movingPeers.length >= 2) state.stopped!.simultaneousTrafficFrames++;
         const s = state.stopped!;
         if (!state.stoppedFlagged && s.count >= 20 && time - s.since >= 10 &&
-            s.movingPeers.size >= 2) {
+            s.movingPeers.size >= 2 && s.simultaneousTrafficFrames >= 6) {
           state.stoppedFlagged = true;
           candidates.push({ trackId: t.id, type: 'stationary_vehicle_review',
             evidenceNote: 'Automatically observed a stationary vehicle for ' +

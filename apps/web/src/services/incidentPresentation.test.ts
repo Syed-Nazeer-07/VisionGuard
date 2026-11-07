@@ -28,7 +28,7 @@ describe('Incident page automatic-first presentation', () => {
     expect(groupIncidentRecords([])).toEqual({ automatic: [], manual: [] });
   });
   it('uses concise incident names rather than raw detector rule types', () => {
-    expect(incidentLabel('speed_estimate_review')).toBe('Possible speeding');
+    expect(incidentLabel('speed_estimate_review')).toBe('High speed estimate');
     expect(incidentLabel('stationary_vehicle_review')).toBe('Stationary vehicle');
   });
   it('allows short or empty manual notes; no twelve-character minimum', () => {

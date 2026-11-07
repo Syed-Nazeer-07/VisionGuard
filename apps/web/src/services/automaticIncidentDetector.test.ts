@@ -11,10 +11,18 @@ describe('automatic incident review candidates', () => {
   });
   it('flags one sustained speed review, never verified speeding', () => {
     const d = new AutomaticIncidentDetector(), events = [];
-    for(let i=0;i<15;i++) events.push(...d.ingest([car(1,95)],i*.25));
+    for(let i=0;i<15;i++) events.push(...d.ingest([car(1,95,{x:120+i*5})],i*.25));
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({trackId:1,type:'speed_estimate_review'});
     expect(events[0].evidenceNote).toContain('NOT verified');
+  });
+  it('does not flag a motionless box from stale, high speed estimates', () => {
+    const detector = new AutomaticIncidentDetector();
+    const events = [];
+    for (let i = 0; i < 25; i++) {
+      events.push(...detector.ingest([car(1, 120)], i * .25));
+    }
+    expect(events).toEqual([]);
   });
   it('rejects alternating noise and low-confidence detections', () => {
     const d = new AutomaticIncidentDetector(), events = [];
@@ -36,6 +44,15 @@ describe('automatic incident review candidates', () => {
     ],i*.25));
     expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({trackId:1,type:'stationary_vehicle_review'});
+  });
+  it('does not confuse separate passing cars with simultaneous traffic evidence', () => {
+    const d = new AutomaticIncidentDetector();
+    const events = [];
+    for (let i = 0; i < 60; i++) {
+      const peer = i % 2 === 0 ? car(2, 25) : car(3, 25);
+      events.push(...d.ingest([car(1, 0), peer], i * .25));
+    }
+    expect(events).toEqual([]);
   });
   it('does not treat an isolated parked car as an incident', () => {
     const d = new AutomaticIncidentDetector(), events = [];

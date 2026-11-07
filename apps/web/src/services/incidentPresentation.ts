@@ -16,7 +16,7 @@ export function groupIncidentRecords(records: readonly AnalysisRecord[]) {
   };
 }
 export function incidentLabel(type: string): string {
-  if (type === 'speed_estimate_review') return 'Possible speeding';
+  if (type === 'speed_estimate_review') return 'High speed estimate';
   if (type === 'stationary_vehicle_review') return 'Stationary vehicle';
   if (type === 'observed_event') return 'Traffic observation';
   return type.replace(/[_-]/g, ' ').replace(/\b\w/g, s => s.toUpperCase());
