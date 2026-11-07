@@ -5,7 +5,7 @@ import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { uploadStorageProvider } from '../services/videoStorage';
 import { activityLedger } from '../services/activityLedger';
 import { streamCatalog, type StreamSource } from '../services/streamCatalog';
-import { isStreamStalled, liveRetryDelay } from '../services/streamRecovery';
+import { hasAdvancedVideoFrame, isStreamStalled, liveRetryDelay } from '../services/streamRecovery';
 import Hls from 'hls.js';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
@@ -28,7 +28,7 @@ type WorkerEvent =
   | { type: 'error'; requestId: number; generation: number; message: string };
 
 type DetectorState = 'idle' | 'loading' | 'ready' | 'error';
-type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecting' | 'error';
+type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecting' | 'ended' | 'error';
 const MAX_STREAM_RETRIES = 3;
 const STREAM_STALL_MS = 15_000;
 const BROWSER_CAMERA_SOURCE = 'visionguard:browser-camera';
@@ -58,6 +58,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
   const [streamReloadKey, setStreamReloadKey] = useState(0);
   const lastPresentedAtRef = useRef(0);
+  const lastDecodedMediaTimeRef = useRef<number | null>(null);
   const mediaReadyRef = useRef(false);
   const captureErrorRef = useRef(false);
   const streamRetryCountRef = useRef(0);
@@ -126,6 +127,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   const resetTracks = useCallback(() => {
     generationRef.current += 1;
+    lastDecodedMediaTimeRef.current = null;
     latestRef.current = null;
     captureErrorRef.current = false;
     flowTracksRef.current = [];
@@ -880,10 +882,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
     const maybeInfer = (mediaTime: number) => {
       if (stopped || !activeRef.current) return;
-      if (streamSourceRef.current || webcamRef.current) {
+      if ((streamSourceRef.current || webcamRef.current) &&
+          !video.paused && !video.ended && video.readyState >= 2 &&
+          hasAdvancedVideoFrame(lastDecodedMediaTimeRef.current, mediaTime)) {
+        lastDecodedMediaTimeRef.current = mediaTime;
         lastPresentedAtRef.current = performance.now();
-        // Reset retry budget only after a sustained healthy run, not after a
-        // one-frame recovery that fails again a moment later.
+        // A one-frame recovery must not immediately reset the retry budget.
         if (lastStreamFailureRef.current > 0 &&
             performance.now() - lastStreamFailureRef.current > 30_000) {
           lastStreamFailureRef.current = 0;
@@ -1265,6 +1269,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   setPlaying(false);
                   latestRef.current = null;
                   setVisibleCount(0);
+                  // Finite remote videos may complete naturally; don't keep
+                  // advertising them as LIVE or reconnect a finished file.
+                  if (streamSourceRef.current) {
+                    setStreamHealth('ended');
+                    streamExhaustedRef.current = true;
+                  }
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
                 onError={() => {
@@ -1287,7 +1297,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                     streamHealth === 'playing' ? 'STREAM LIVE' :
                     streamHealth === 'reconnecting' ? 'RECONNECTING ' + streamRetries + '/' + MAX_STREAM_RETRIES :
                     streamHealth === 'buffering' ? 'BUFFERING' :
-                    streamHealth === 'error' ? 'STREAM OFFLINE' : 'CONNECTING'
+                    streamHealth === 'error' ? 'STREAM OFFLINE' :
+                    streamHealth === 'ended' ? 'PLAYBACK FINISHED' : 'CONNECTING'
                   ) : readyVideo ? (playing ? 'PLAYING VIDEO' : 'PAUSED') : 'OPENING VIDEO'}
                 </span>
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-medium text-white">
