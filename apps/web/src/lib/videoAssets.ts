@@ -6,7 +6,7 @@ import { storageProviderFor } from '../services/videoStorage'
 export type UploadStatus = 'uploading' | 'uploaded' | 'failed'
 
 /** Upload lifecycle is tracked in metadata.upload_status (processing_status is reserved for analysis). */
-export function getUploadStatus(asset: Pick<VideoAsset, 'metadata' | 'storage_path'>): UploadStatus | null {
+export function getUploadStatus(asset: { metadata: VideoAsset['metadata']; storage_path: string | null | undefined }): UploadStatus | null {
   const meta = asset.metadata
   const status = meta && typeof meta === 'object' && !Array.isArray(meta) ? meta.upload_status : undefined
   if (status === 'uploading' || status === 'uploaded' || status === 'failed') return status
@@ -72,7 +72,7 @@ export type AssetAvailability =
  * uploadManager is still transferring the file. Never substitutes another asset's file.
  */
 export function getAssetAvailability(
-  asset: Pick<VideoAsset, 'storage_path' | 'metadata'>,
+  asset: { metadata: VideoAsset['metadata']; storage_path: string | null | undefined },
   info: StorageInfo | undefined,
   uploadingHere: boolean
 ): AssetAvailability {
@@ -89,7 +89,7 @@ export function getAssetAvailability(
  * This checks metadata; actual playback URL verification is still required.
  */
 export function canReanalyzeStoredVideo(
-  asset: Pick<VideoAsset, 'storage_path' | 'metadata'>
+  asset: { metadata: VideoAsset['metadata']; storage_path: string | null | undefined }
 ): boolean {
   return getAssetAvailability(asset, undefined, false).kind === 'available';
 }
