@@ -1,13 +1,27 @@
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from '../types/supabase'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim()
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim()
 
-const isMock = !supabaseUrl || supabaseUrl.includes('placeholder')
+function configuredApiUrl(value: string): boolean {
+  if (!value || /placeholder|your-project|<|>/i.test(value)) return false
+  try {
+    const parsed = new URL(value)
+    return (parsed.protocol === 'https:' || parsed.protocol === 'http:') && !!parsed.hostname
+  } catch { return false }
+}
+
+// A URL without the browser-safe publishable/anon key is NOT a configured
+// project. Treat both missing inputs as demo mode to avoid createClient crashes.
+const isMock = !configuredApiUrl(supabaseUrl) || !supabaseAnonKey ||
+  /placeholder|your-public|your-key|<|>/i.test(supabaseAnonKey)
 
 if (isMock) {
-  console.info('[VisionGuard] Running in preview/demo mode with in-memory store.')
+  console.warn('[VisionGuard] Cloud login and B2 storage are not configured. ' +
+    'Create apps/web/.env.local with VITE_SUPABASE_URL and ' +
+    'VITE_SUPABASE_ANON_KEY (Supabase publishable key), then restart Vite. ' +
+    'Local video analysis can still work without cloud storage.')
 }
 
 /** Endpoint details for calls supabase-js does not cover (e.g. resumable TUS uploads). */
