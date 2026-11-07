@@ -63,7 +63,7 @@ git pull --ff-only origin main
 npm run dev
 ```
 
-**Model setup:** The YOLO ONNX model binary is not tracked in Git. Place a compatible YOLO11s model at `apps/web/public/models/yolo11s.onnx` before using the in-browser detector. Verify the model's input and output contract and licensing.
+**Model setup:** The YOLO ONNX model binary is not tracked in Git. Place a compatible YOLO11s model at `apps/web/public/models/yolo11s.onnx` before using the in-browser detector. Verify the model's input/output contract and licensing; see [model setup](docs/MODEL_SETUP.md).
 
 The optional local Python backend is documented in [backend/README.md](backend/README.md). The current browser-side live-analysis flow does **not** require it.
 
@@ -138,3 +138,5 @@ GitHub Actions runs frontend lint, TypeScript/build, unit tests, and determinist
 - `scripts/` and `Start-VisionGuard.bat` — development helpers
 
 **Next planned capabilities (not part of the current release):** calibrated speed measurements, plate OCR, automated rule verification, multi-camera analysis, and independently validated enforcement evidence.
+
+See [release acceptance checklist](docs/RELEASE_CHECKLIST.md) for the real-device, OAuth, B2 playback and deployment checks required before marking a production installation verified.
