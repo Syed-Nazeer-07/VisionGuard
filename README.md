@@ -39,7 +39,7 @@ VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime
 | **Speed estimates** | See clearly marked **uncalibrated optical speed proxies** (km/h*), not measured road speeds; unavailable readings display **—** |
 | **Fullscreen** | Expand the composite video **with the detection canvas**, not the video alone |
 | **Overview & analytics** | Inspect saved sessions, **repeatedly observed track IDs** (excluding brief/noisy candidates), frame counts and class distribution |
-| **History** | Revisit analysis summaries; replay only uploaded/retained original footage. Missing cloud files get a **Choose file** action instead of broken reanalysis |
+| **History** | Revisit saved analysis; incomplete B2 uploads open a local-recovery screen. A matching opted-in retained original (filename + byte length) can reopen automatically; otherwise **Choose original video** |
 | **Incidents** | Automatic high-speed-estimate and stationary-vehicle candidates, compact manual entry, and **Mark reviewed / Dismiss / Reopen** actions with status filters; none are confirmed offences |
 | **Reports** | Export session/vehicle data as PDF or CSV, and incident-review records as CSV; **pending, reviewed and dismissed** flags retain their status |
 | **Accounts & settings** | Email/password access, configurable Google sign-in, user-specific start pages and account settings |
@@ -151,10 +151,30 @@ Review or commit any local modifications before pulling if Git reports a conflic
 | Vehicle tracks, session totals, review flags | Per-account browser IndexedDB; optional Supabase PostgreSQL sync | Local-first. Cloud writes verify server acknowledgments, retry bounded conflicting revisions and preserve merged local history if sync remains unavailable |
 | Original selected file | In memory during analysis | Not kept across reloads by default |
 | Opted-in local video | Browser-local storage | **Keep this video on this device** retains the most recently saved local file, subject to browser quotas/permissions; it does not upload it |
-| Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2**; incomplete uploads and metadata-only session records cannot be replayed |
+| Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2**. Metadata without the actual uploaded original cannot replay on another device |
 | Account credentials and preferences | Supabase Auth / PostgreSQL when configured | Protected by server-side access policies |
 
 The active video/capture component resets when the signed-in account changes, keeping in-memory capture and tracker state from crossing between users.
+
+### Recover an archived video without an uploaded original
+
+If you select a video in the cloud archive but its B2 upload is missing,
+**Live Analysis will no longer stop at a raw storage error**. It checks
+the opted-in retained copy on the **same device and signed-in account**.
+If the stored filename **and exact file size** match, it opens that local
+video as a new analysis. This is a conservative recovery heuristic, **not
+cryptographic identity verification**. The original remains local; the
+recovery does not automatically upload it to B2.
+
+Otherwise, VisionGuard shows **Choose original video**. Select your own
+footage from the device to analyze it afresh. Previously saved detection
+summaries remain available in History. A filename alone is not enough to
+assume an unrelated retained video belongs to an archived session.
+
+**Important:** analysis metadata cannot recreate the original footage.
+If its cloud copy was never uploaded and the local original is gone, it
+cannot be recovered from VisionGuard. For cross-device playback, explicitly
+use **Save video to B2** and confirm the upload finishes.
 
 ### Understanding the speed numbers
 

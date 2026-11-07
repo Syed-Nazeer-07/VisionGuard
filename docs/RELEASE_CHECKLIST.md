@@ -30,7 +30,9 @@ and on the target Windows/Edge computer before promoting the release.
 | Local video opt-in | Unchecked means original bytes are not retained across reloads |
 | Optional local retention | Checked retains video only within available browser quota |
 | B2 storage | Explicit upload completes, appears in History, opens via signed GET URL |
-| B2 re-analysis | **Analyze Again** is shown only for a completed stored original; metadata-only rows and failed/in-progress uploads instead offer **Choose file**. Signed URLs and bucket CORS must still permit playback |
+| B2 re-analysis | Completed originals can be replayed through a signed URL. Missing/failed/in-progress uploads route to the local recovery screen; a matching opted-in file (name + exact size) reopens, otherwise **Choose original video** is shown |
+| Archive recovery safety | Two videos with the same name but different sizes must not auto-match. Unknown archive size, no retained file, revoked file-handle permission, and account changes must not silently substitute unrelated footage |
+| Local recovery persistence | Opening a retained original or choosing a fresh file starts a local analysis without fabricating B2 storage success. Verify the old broken ?video= link clears after successful local selection and no longer replays the error |
 | Offline and reconnect | Metadata and reviewer decisions stay local offline, sync after reconnect, and refresh from cloud on foreground return (throttled) |
 | Account switching | Account settings, video/capture state and tracked history do not leak between users |
 | Device performance | Sustainable inference speed verified on Surface Laptop 7 / Windows ARM |
