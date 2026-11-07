@@ -22,7 +22,9 @@ and on the target Windows/Edge computer before promoting the release.
 | Review flags | Sustained high-speed estimates and stopped vehicles amid moving traffic automatically create review candidates, alongside manual flags; confirm they appear in Incidents and report exports |
 | Incident decisions | Mark automatic/manual flags **Reviewed**, **Dismissed**, and **Reopen**. Refresh and verify preserved evidence, IDs, status filter totals and monotonic history revisions |
 | Review export consistency | PDF and incident CSV display human-readable statuses, including dismissed items; reviewed never means confirmed traffic enforcement |
-| Cross-device metadata | After another signed-in browser changes a review status, focus this browser and check that newer metadata refreshes without reloading the page; validate concurrent edit behavior before claiming multi-user collaboration |
+| Cross-device metadata | Sign in to two browsers and test concurrent incident decisions; verify stale upserts return old DB revisions, conflicting flags are reconciled and retried, missing acknowledgments surface warnings, and local evidence remains intact |
+| Cloud recovery | Simulate offline work and return online; verify unacknowledged data stays in IndexedDB, automatic retry is bounded, and Supabase RLS still restricts each account to its own records |
+| Fast repeated updates | Create incident decisions and optical observations within the same millisecond; revisions stay monotonically increasing so the anti-stale trigger cannot silently discard changes |
 | Reload persistence | Saved session data survives reload without duplicating IDs |
 | Local video opt-in | Unchecked means original bytes are not retained across reloads |
 | Optional local retention | Checked retains video only within available browser quota |

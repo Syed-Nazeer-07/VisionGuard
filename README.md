@@ -133,7 +133,7 @@ Review or commit any local modifications before pulling if Git reports a conflic
 
 | Data | Stored where | Important behavior |
 | --- | --- | --- |
-| Vehicle tracks, session totals, review flags | Per-account browser IndexedDB; optional Supabase PostgreSQL sync | Local-first. Cloud history depends on working authentication, network access and database permissions |
+| Vehicle tracks, session totals, review flags | Per-account browser IndexedDB; optional Supabase PostgreSQL sync | Local-first. Cloud writes verify server acknowledgments, retry bounded conflicting revisions and preserve merged local history if sync remains unavailable |
 | Original selected file | In memory during analysis | Not kept across reloads by default |
 | Opted-in local video | Browser-local storage | **Keep this video on this device** depends on browser storage quotas and permissions |
 | Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2**; requires server-side configuration and may incur storage costs |
@@ -177,6 +177,24 @@ precision, recall, identity switches and lingering boxes after scene exits.
 The trace includes **no video bytes**, and synthetic tests do not establish
 real-world detector performance. The historical Python YOLO11n benchmark
 does **not** measure the browser YOLO11s system.
+
+
+### Cross-device incident history
+
+Review decisions retain their original incident evidence and include an
+optional decision timestamp. VisionGuard now checks the **actual returned
+Supabase revision** after each analysis-record upsert. If another signed-in
+browser has newer history, the app merges distinct incident flags and vehicle
+observations, keeps the newer explicitly timestamped review decision, and
+retries synchronization up to three times. Failed sync remains **local and
+visible as a warning** rather than being marked as a successful backup.
+
+This is *best-effort owner-scoped metadata synchronization*, **not**
+transactional multi-user collaboration. Simultaneous decisions from
+devices with incorrect clocks, separate offline edits to the same tracking
+fields, and network failures can still require manual verification. Testing
+on two signed-in devices is part of the release checklist. RLS and the
+database's existing anti-stale-update trigger remain unchanged.
 
 ## Testing
 
