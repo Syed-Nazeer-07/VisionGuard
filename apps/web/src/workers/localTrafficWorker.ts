@@ -2,6 +2,7 @@ import { env, InferenceSession, Tensor } from 'onnxruntime-web';
 import { correctClearFreightTrailer, decodeTrafficVehicles } from '../pipeline/detector/liveVehicles';
 import { ByteTracker } from '../pipeline/tracker/bytetrack';
 import { calculateMotion, type LiveTrack } from '../pipeline/tracker/liveProjection';
+import { getIOU } from '../pipeline/tracker/matching';
 
 if (import.meta.env.DEV) env.wasm.wasmPaths = '/';
 
@@ -112,6 +113,8 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
       decoded, processed.tensor.data as Float32Array,
       processed.ratio, processed.padW, processed.padH
     );
+    const freightEvidence = boxes.filter((box, index) =>
+      decoded[index].classId === 5 && box.classId === 7);
     // With slow WASM inference vehicles often move too far between detections
     // for 2-hit confirmation. Display high-confidence NEW detections directly;
     // continue assigning stable IDs once matching succeeds.
@@ -125,8 +128,11 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
         x: track.x, y: track.y, h: track.h, time: message.mediaTime,
         vx: velocity.vx, vy: velocity.vy
       });
+      const clearlyFreight = freightEvidence.some(box => getIOU(track, box) >= .50);
       return {
-        id: track.trackId, className: track.className,
+        id: track.trackId,
+        className: clearlyFreight ? 'truck' : track.className,
+        freightEvidence: clearlyFreight,
         confidence: track.prob,
         x: track.x, y: track.y, w: track.w, h: track.h,
         vx: velocity.vx, vy: velocity.vy,
