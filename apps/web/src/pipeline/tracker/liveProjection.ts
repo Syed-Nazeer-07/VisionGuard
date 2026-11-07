@@ -14,6 +14,10 @@ export interface LiveTrack {
   vx: number; // image motion, source px / media-second
   vy: number;
   motionPxPerSec: number | null;
+  /** Bridged optical miss; never new incident evidence. */
+  isPredicted?: boolean;
+  /** Last real optical observation; predictions must not refresh it. */
+  lastOpticalAt?: number;
   /** Strong image evidence of a distinct freight cab/trailer, not just YOLO class confidence. */
   /** Original YOLO bus/truck evidence, not a colour-based guess. */
   classScores?: { bus: number; truck: number };
@@ -23,6 +27,16 @@ export interface LiveTrack {
 // painting them over unrelated background after a vehicle has departed.
 export const MAX_TRACK_AGE_SEC = 0.22;
 export const MAX_PROJECTION_SEC = 0.14;
+export const MAX_PREDICTION_BRIDGE_SEC = 0.17;
+
+/** Prevent late asynchronous inference responses from wiping fresh evidence. */
+export function hasFreshOpticalObservation(
+  observedTime: number | undefined | null, currentMediaTime: number,
+): boolean {
+  if (observedTime == null || !Number.isFinite(currentMediaTime)) return false;
+  const age = currentMediaTime - observedTime;
+  return Number.isFinite(age) && age >= -0.065 && age <= MAX_TRACK_AGE_SEC;
+}
 
 /** Shared edge-exit policy for optical updates, predictions and canvas paint.
  * Do not retain a box once its observed motion is carrying it off-screen. */
@@ -70,6 +84,10 @@ export function projectLiveTracks(
       track.className === 'bicycle' ? .33 : .42;
     if (track.w < minimumSize || track.h < minimumSize ||
         track.confidence < minimumConfidence) return [];
+    if (track.isPredicted && (track.lastOpticalAt === undefined ||
+        !Number.isFinite(track.lastOpticalAt) ||
+        mediaTime - track.lastOpticalAt < -0.065 ||
+        mediaTime - track.lastOpticalAt > MAX_PREDICTION_BRIDGE_SEC)) return [];
 
     // Predict only briefly between consecutive real detector observations.
     // Never grow boxes indefinitely during a stalled inference.

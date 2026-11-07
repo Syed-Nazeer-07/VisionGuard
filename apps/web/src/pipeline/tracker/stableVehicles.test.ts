@@ -138,6 +138,25 @@ describe('persistent crowded vehicle tracking', () => {
     expect(recoverBriefOpticalMisses([{ ...leaving, x: 305 }], [], 3, 3.10, 300, 300)).toEqual([]);
   });
 
+  it('never promotes predicted-only catch-up into real optical evidence', () => {
+    const before: PersistentTrack = {
+      ...car(100, 120, 4), id: 4, lastOpticalAt: 2, lastDetectedAt: 2,
+      speedKmh: 55, speedIsEstimate: true
+    };
+    const next = reconcileVehicles([before],
+      [{ ...car(103, 120, 14), isPredicted: true }], 2.12, 5);
+    expect(next.tracks).toHaveLength(1);
+    expect(next.tracks[0].id).toBe(4);
+    expect(next.tracks[0].isPredicted).toBe(true);
+    expect(next.tracks[0].lastOpticalAt).toBe(2);
+    expect(next.tracks[0].lastDetectedAt).toBe(2);
+  });
+  it('does not create a new identity for an unobserved predicted-only vehicle', () => {
+    const next = reconcileVehicles([], [{ ...car(120, 100, 40), isPredicted: true }], 3, 1);
+    expect(next.tracks).toEqual([]);
+    expect(next.nextId).toBe(1);
+  });
+
   it('limits abrupt bus/truck box size changes during the same persistent track', () => {
     const before: PersistentTrack = {
       ...car(100, 120, 4), id: 4, w: 60, h: 80, lastDetectedAt: 1,

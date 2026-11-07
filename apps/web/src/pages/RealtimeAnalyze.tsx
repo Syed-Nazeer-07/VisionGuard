@@ -16,7 +16,7 @@ import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
 import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
 import {
-  projectLiveTracks, type LiveTrack
+  hasFreshOpticalObservation, projectLiveTracks, type LiveTrack
 } from '../pipeline/tracker/liveProjection';
 
 // A separate, public HTTPS model host (for example R2) avoids Pages' 25 MiB
@@ -250,8 +250,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           }
         }
         if (anchor < 0 || closestDistance > 0.14) {
-          flowTracksRef.current = [];
-          latestRef.current = null;
+          // One late inference result must not erase newer optically matched
+          // vehicles. Expire genuinely stale overlays as before.
+          if (!hasFreshOpticalObservation(latestRef.current?.time, video.currentTime)) {
+            flowTracksRef.current = [];
+            latestRef.current = null;
+          }
           return;
         }
         // Catch delayed YOLO results up to the present video frame. One weak
@@ -280,7 +284,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         latestRef.current = { time: latestTime, tracks: merged.tracks };
         const account = useAuthStore.getState().user?.id;
         if (account && activeRunRef.current) {
-          activityLedger.observe(account, activeRunRef.current, latestTime, merged.tracks);
+          // Predicted-only bridges are not confirmed vehicle observations.
+          activityLedger.observe(account, activeRunRef.current, latestTime,
+            merged.tracks.filter(track => !track.isPredicted));
         }
       } else if (message.type === 'error') {
         setError('Frame inference error: ' + message.message);

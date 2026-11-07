@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateMotion, projectLiveTracks, type LiveTrack } from './liveProjection';
+import { calculateMotion, hasFreshOpticalObservation, projectLiveTracks, type LiveTrack } from './liveProjection';
 
 const vehicle: LiveTrack = {
   id: 7, className: 'car', confidence: 0.92,
@@ -36,6 +36,19 @@ describe('live playback projected vehicle overlays', () => {
   it('does not display a car whose center has already left the source image', () => {
     const leaving = { ...vehicle, x: 201, w: 100, vx: 0 };
     expect(projectLiveTracks([leaving], 2, 2.05, 200, 100)).toEqual([]);
+  });
+  it('recognizes fresh optical observations during a late detector response', () => {
+    expect(hasFreshOpticalObservation(10, 10.10)).toBe(true);
+    expect(hasFreshOpticalObservation(10, 10.24)).toBe(false);
+    expect(hasFreshOpticalObservation(undefined, 10.1)).toBe(false);
+    expect(hasFreshOpticalObservation(10, Number.NaN)).toBe(false);
+  });
+  it('expires predicted overlays after the last observed pixel match', () => {
+    const predicted = { ...vehicle, isPredicted: true, lastOpticalAt: 2 };
+    expect(projectLiveTracks([predicted], 2.1, 2.14, 200, 100)).toHaveLength(1);
+    expect(projectLiveTracks([predicted], 2.18, 2.18, 200, 100)).toEqual([]);
+    expect(projectLiveTracks([{ ...predicted, lastOpticalAt: undefined }],
+      2.1, 2.1, 200, 100)).toEqual([]);
   });
   it('suppresses stale boxes rather than leaving them floating on the scene', () => {
     expect(projectLiveTracks([vehicle], 2, 2.56, 200, 100)).toEqual([]);

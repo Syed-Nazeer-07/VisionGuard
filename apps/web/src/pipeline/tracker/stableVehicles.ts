@@ -132,13 +132,16 @@ export function reconcileVehicles(
       vy: before.vy,
       speedKmh: before.speedKmh,
       speedIsEstimate: true,
-      lastOpticalAt: mediaTime,
-      isPredicted: false,
-      lastDetectedAt: mediaTime
+      // A predicted catch-up is display-only: never upgrade its provenance.
+      lastOpticalAt: after.isPredicted
+        ? (before.lastOpticalAt ?? before.lastDetectedAt) : mediaTime,
+      isPredicted: !!after.isPredicted,
+      lastDetectedAt: after.isPredicted ? before.lastDetectedAt : mediaTime
     });
   }
   viable.forEach((candidate, index) => {
-    if (usedNew.has(index)) return;
+    if (usedNew.has(index) || candidate.isPredicted) return;
+    // A predicted-only box cannot establish a fresh vehicle ID.
     // Avoid duplicated boxes for the same vehicle.
     if (assigned.some(t => classFamily(t.className) === classFamily(candidate.className) &&
       getIOU(t, candidate) > .4)) return;
