@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
-import { Activity, ArrowRight, BarChart3, Download, FileText, Film, ShieldAlert } from 'lucide-react';
+import { Activity, Download, Film, ShieldAlert } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -110,40 +110,56 @@ export function ActivityAnalytics() {
   }, [range, records]);
   const counts = useMemo(() => summarizeActivity(filtered), [filtered]);
   const byClass = distribution(filtered);
-  return <main className="mx-auto max-w-6xl space-y-5 p-4 sm:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-4"><div>
-      <h1 className="text-2xl font-bold text-slate-900">Traffic analytics</h1>
-      <p className="mt-1 text-sm text-slate-500">Measured detections, unique tracks and trends from your saved sessions</p>
-    </div><select aria-label="Time range" value={range} onChange={e=>setRange(e.target.value as typeof range)}
-      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
-      <option value="all">All time</option><option value="today">Past 24 hours</option>
-      <option value="week">Past 7 days</option><option value="month">Past 30 days</option>
-    </select></div>
-    
-    {error && <p className="text-sm text-amber-800">{error}</p>}
-    <div className="grid gap-3 sm:grid-cols-3">
-      <Stat label="Unique vehicles" number={counts.vehicles} note="Not repeated per frame"/>
-      <Stat label="Maximum vehicles in frame" number={counts.maximumVisible} note="Peak simultaneous tracks"/>
-      <Stat label="Actual inference frames" number={counts.analyzedFrames} note="Completed YOLO observations"/>
+  return <main className="vg-page">
+    <header className="vg-page-header">
+      <div><h1>Analytics</h1><p>Vehicle classifications and detection volume</p></div>
+      <select aria-label="Time range" value={range} onChange={e=>setRange(e.target.value as typeof range)}
+        className="vg-field">
+        <option value="all">All time</option>
+        <option value="today">Last 24 hours</option>
+        <option value="week">Last 7 days</option>
+        <option value="month">Last 30 days</option>
+      </select>
+    </header>
+    {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
+    <div className="mb-5 grid gap-3 sm:grid-cols-3">
+      <Stat label="Unique vehicles" number={counts.vehicles} note="Distinct tracks per session"/>
+      <Stat label="Peak simultaneous tracks" number={counts.maximumVisible} note="Maximum detected in one frame"/>
+      <Stat label="Inference frames" number={counts.analyzedFrames} note="Completed observations"/>
     </div>
-    {loaded && filtered.length ? <div className="grid gap-4 lg:grid-cols-2">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-4 font-semibold text-slate-900">Vehicle classification</h2>
-        <div className="h-72"><ResponsiveContainer width="100%" height="100%">
-          <BarChart data={byClass}><CartesianGrid strokeDasharray="3 3" vertical={false}/>
-            <XAxis dataKey="name" tick={{ fontSize: 11 }}/><YAxis allowDecimals={false}/>
-            <Tooltip/><Bar dataKey="count" name="Vehicles" fill="#4f46e5" radius={[5,5,0,0]}/></BarChart>
-        </ResponsiveContainer></div>
-      </div>
-      <div className="rounded-2xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-4 font-semibold text-slate-900">Sessions</h2>
-        {filtered.slice(0,10).map(run => <div key={run.id} className="flex justify-between gap-3 border-b border-slate-100 py-3 text-sm last:border-0">
-          <span className="min-w-0 truncate text-slate-700">{run.sourceName}</span>
-          <strong className="shrink-0 tabular-nums">{Object.keys(run.vehicles).length} vehicles</strong>
-        </div>)}
-      </div>
-    </div> : loaded ? <p className="vg-empty-row">No session records available.</p> : <p className="text-sm text-slate-500">Loading analytics…</p>}
-    <p className="text-xs text-slate-500">Counts represent detected tracked objects, not confirmed traffic violations. Approximate speed readings are excluded from violation totals.</p>
+    <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
+      <section className="vg-panel overflow-hidden">
+        <div className="vg-section-head"><h2>Classification breakdown</h2></div>
+        {loaded && byClass.length ?
+          <div className="h-72 p-5">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={byClass} margin={{left: 4, right: 12, bottom: 0}}>
+                <CartesianGrid stroke="#edf1f5" vertical={false}/>
+                <XAxis dataKey="name" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                <YAxis allowDecimals={false} tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                <Tooltip cursor={{fill:'#f5f8fb'}}/>
+                <Bar dataKey="count" name="Vehicles" fill="#3866a4" radius={[4,4,0,0]}/>
+              </BarChart>
+            </ResponsiveContainer>
+          </div> :
+          <p className="vg-empty-row">{loaded ? 'No classification data for this period.' : 'Loading data…'}</p>}
+      </section>
+      <section className="vg-panel overflow-hidden">
+        <div className="vg-section-head"><h2>Sessions in range</h2></div>
+        {filtered.length ?
+          <div className="divide-y divide-slate-100">
+            {filtered.slice(0,12).map(run =>
+              <div key={run.id} className="flex items-center justify-between gap-3 px-5 py-3.5 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate font-medium text-slate-800">{run.sourceName}</p>
+                  <p className="mt-1 text-xs text-slate-500">{niceDate(run.createdAt)}</p>
+                </div>
+                <span className="shrink-0 font-semibold tabular-nums text-slate-800">{Object.keys(run.vehicles).length}</span>
+              </div>)}
+          </div> : <p className="vg-empty-row">No sessions in the selected period.</p>}
+      </section>
+    </div>
+    <p className="vg-footnote">These are detector observations. Estimated speeds are not included in confirmed violation totals.</p>
   </main>;
 }
 
@@ -191,43 +207,35 @@ export function ActivityReports() {
   const [selected, setSelected] = useState('all');
   const filtered = selected === 'all' ? records : records.filter(r=>r.id===selected);
   const totals = summarizeActivity(filtered);
-  return <main className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
-    <div><h1 className="text-2xl font-bold text-slate-900">Reports</h1>
-      <p className="mt-1 text-sm text-slate-500">Export your actual tracked activity without unnecessary forms or fabricated incidents</p>
-    </div>
-    
-    {error && <p role="alert" className="text-amber-700">{error}</p>}
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <label htmlFor="report-run" className="mb-2 block text-sm font-semibold text-slate-800">Analysis session</label>
-      <select id="report-run" value={selected} onChange={e=>setSelected(e.target.value)}
-        className="w-full rounded-lg border border-slate-200 p-3 text-sm">
-        <option value="all">All saved sessions</option>
-        {records.map(r=><option key={r.id} value={r.id}>{r.sourceName} · {niceDate(r.createdAt)}</option>)}
-      </select>
-      <div className="mt-5 grid gap-3 sm:grid-cols-3">
-        <Stat label="Sessions" number={totals.runs} note="Selected scope"/>
-        <Stat label="Unique vehicles" number={totals.vehicles} note="Per-session unique tracks"/>
-        <Stat label="Recorded violations" number={totals.violations} note="Evidence-backed, not estimated"/>
+  return <main className="vg-page">
+    <header className="vg-page-header">
+      <div><h1>Reports</h1><p>Export tracked activity by session</p></div>
+    </header>
+    {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
+    <section className="vg-panel overflow-hidden">
+      <div className="vg-section-head"><h2>Export options</h2></div>
+      <div className="p-5 sm:p-6">
+        <label htmlFor="report-run" className="mb-2 block text-xs font-semibold text-slate-600">Select scope</label>
+        <select id="report-run" value={selected} onChange={e=>setSelected(e.target.value)} className="vg-field w-full max-w-xl">
+          <option value="all">All saved sessions</option>
+          {records.map(r=><option key={r.id} value={r.id}>{r.sourceName} · {niceDate(r.createdAt)}</option>)}
+        </select>
+        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+          <Stat label="Sessions" number={totals.runs} note="Included in report"/>
+          <Stat label="Unique vehicles" number={totals.vehicles} note="Tracked objects"/>
+          <Stat label="Recorded incidents" number={totals.violations} note="Evidence-backed events"/>
+        </div>
+        <div className="mt-6 flex flex-wrap gap-2">
+          <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportPDF(filtered)}
+            className="vg-primary"><Download size={15}/> Download PDF</button>
+          <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportCSV(filtered)}
+            className="vg-secondary"><Download size={15}/> Download CSV</button>
+        </div>
+        <p className="vg-footnote">Reports use saved analysis records. Image-derived speeds are approximate and not valid enforcement measurements.</p>
       </div>
-      <div className="mt-5 flex flex-wrap gap-3">
-        <button type="button" disabled={!loaded||!filtered.length} onClick={()=>exportPDF(filtered)}
-          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
-          <Download size={16}/> Export PDF
-        </button>
-        <button type="button" disabled={!loaded||!filtered.length} onClick={()=>exportCSV(filtered)}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 disabled:opacity-40">
-          <Download size={16}/> Export CSV
-        </button>
-      </div>
-    </div>
-    {records.length>0 && <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
-      <strong className="text-slate-900">Report integrity</strong>
-      <p className="mt-1">Only detected track records are exported. The speed column is explicitly approximate;
-        no overspeed or safety violation is inferred without calibrated measurements or verified evidence.</p>
-    </div>}
+    </section>
   </main>;
 }
-
 
 interface B2VideoRow {
   id: string;
