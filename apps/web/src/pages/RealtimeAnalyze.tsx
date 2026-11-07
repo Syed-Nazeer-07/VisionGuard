@@ -364,6 +364,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   };
 
   const chooseStream = (source: StreamSource) => {
+    // Clicking the already-selected source should not restart playback, reset
+    // vehicle IDs, or inflate the session history. Use Reconnect to restart.
+    if (streamSourceRef.current?.id === source.id) return;
     stopWebcam();
     videoRef.current?.pause();
     uploadGenerationRef.current += 1;
@@ -400,7 +403,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     restoreTimeRef.current = 0;
     if (ownerId) {
       streamCatalog.select(ownerId, source.id);
-      activeRunRef.current = 'stream:' + source.id + ':' + new Date().toISOString().slice(0,10);
+      // Every new selection is its own tracking session; the previous
+      // day-based key merged repeated sessions and reused vehicle IDs.
+      activeRunRef.current = 'stream:' + source.id + ':' + crypto.randomUUID();
       activityLedger.begin(ownerId, activeRunRef.current, source.name, 'live-stream');
     }
   };
@@ -456,22 +461,29 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         setError('Could not reopen the previously selected file. Choose it again: ' + String(e));
       }
     });
-    return () => {
-      alive = false;
-      clearInFlight();
-      workerRef.current?.terminate();
-      workerRef.current = null;
-      readyRef.current = false;
-      firstFrameResolveRef.current?.();
-      // Camera permissions must not leave a capture track running after
-      // this persistent analysis component unmounts or the user signs out.
-      webcamRef.current?.getTracks().forEach(track => track.stop());
-      webcamRef.current = null;
-      cloudUnsubscribeRef.current?.();
-      cloudUnsubscribeRef.current = null;
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    };
-  }, [attachVideo, clearInFlight, ownerId]);
+    return () => { alive = false; };
+  }, [attachVideo, ownerId]);
+
+  // This cleanup must be unconditional. The saved-video restoration effect
+  // above can return early when local retention is disabled or a stream is
+  // selected; previously that skipped camera/worker teardown on unmount.
+  useEffect(() => () => {
+    uploadGenerationRef.current += 1;
+    clearInFlight();
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    readyRef.current = false;
+    firstFrameResolveRef.current?.();
+    firstFrameResolveRef.current = null;
+    webcamRef.current?.getTracks().forEach(track => track.stop());
+    webcamRef.current = null;
+    cloudUnsubscribeRef.current?.();
+    cloudUnsubscribeRef.current = null;
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+    }
+  }, [clearInFlight]);
 
   const acceptFile = async (file: File, handle?: FileSystemFileHandle) => {
     if (!/\.(mp4|m4v|webm|mov|mkv)$/i.test(file.name) && !file.type.startsWith('video/')) {
