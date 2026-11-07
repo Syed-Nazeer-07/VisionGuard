@@ -9,7 +9,7 @@ const roots = [];
 afterEach(() => {
   for (const x of roots.splice(0)) rmSync(x, { force: true, recursive: true });
 });
-function fixture(version = '1.30.0', runtimeVersion = version) {
+function fixture(installedVersion = '1.30.0', emittedVersion = installedVersion) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'vg-ort-'));
   roots.push(root);
   const web = path.join(root, 'apps/web');
@@ -17,28 +17,31 @@ function fixture(version = '1.30.0', runtimeVersion = version) {
     mkdirSync(path.join(web, rel), { recursive: true });
   }
   writeFileSync(path.join(web, 'node_modules/onnxruntime-web/package.json'),
-    JSON.stringify({ version }));
+    JSON.stringify({ version: installedVersion }));
   writeFileSync(path.join(web, 'src/services/ortWasmPaths.ts'),
-    "export const ORT_WASM_CDN_VERSION = '" + runtimeVersion + "';");
+    'export const ORT_WASM_CDN_BASE = __ORT_WASM_CDN_BASE__;');
   writeFileSync(path.join(web, 'dist/assets/localTrafficWorker-TEST.js'),
-    'const url="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/";');
+    'const url="https://cdn.jsdelivr.net/npm/onnxruntime-web@' + emittedVersion + '/dist/";');
   writeFileSync(path.join(web, 'dist/assets/ort-wasm-simd-threaded.jsep-abc123.wasm'), 'wasm');
   writeFileSync(path.join(web, 'dist/assets/another.wasm'), 'another');
   return root;
 }
-test('removes only redundant JSEP WASM, preserving other assets', () => {
+test('removes only duplicated JSEP WASM, preserving other assets', () => {
   const root = fixture();
   const result = prepareCloudflareAssets(root);
   assert.equal(result.length, 1);
   assert.equal(result[0].file, 'ort-wasm-simd-threaded.jsep-abc123.wasm');
   assert.equal(existsSync(path.join(root, 'apps/web/dist/assets/another.wasm')), true);
 });
-test('rejects mismatch between the installed and CDN runtime versions', () => {
-  assert.throws(() => prepareCloudflareAssets(fixture('1.30.1')), /does not match/);
-  assert.throws(() => prepareCloudflareAssets(fixture('1.30.0', '1.30.2')), /versions differ/);
+test('accepts the exact installed ORT version even if npm upgraded it', () => {
+  const root = fixture('1.31.1');
+  assert.equal(prepareCloudflareAssets(root).length, 1);
 });
-test('rejects production assets lacking external CDN configuration', () => {
+test('rejects an emitted CDN URL for a different ONNX Runtime build', () => {
+  assert.throws(() => prepareCloudflareAssets(fixture('1.31.1', '1.30.0')), /lacks same-version/);
+});
+test('rejects production assets lacking the external CDN URL', () => {
   const root = fixture();
   writeFileSync(path.join(root, 'apps/web/dist/assets/localTrafficWorker-TEST.js'), 'offline only');
-  assert.throws(() => prepareCloudflareAssets(root), /does not configure/);
+  assert.throws(() => prepareCloudflareAssets(root), /lacks same-version/);
 });

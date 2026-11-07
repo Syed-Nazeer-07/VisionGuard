@@ -7,6 +7,13 @@ import { defineConfig, type Plugin } from 'vitest/config'
 
 const require = createRequire(import.meta.url)
 
+// Resolve the version actually installed by npm after optional native-binding
+// repairs. Using the identical ORT build on a public CDN is mandatory:
+// different JS/WASM versions can fail to initialize or silently malfunction.
+const ortPackagePath = path.resolve(path.dirname(require.resolve('onnxruntime-web')), '..', 'package.json')
+const ortVersion = JSON.parse(fs.readFileSync(ortPackagePath, 'utf8')).version as string
+const ortWasmCdnBase = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVersion}/dist/`
+
 /**
  * Dev server: serves ONNX Runtime Web's WebAssembly artifacts straight from the installed
  * `onnxruntime-web` package, so the binaries always match the JS runtime version (no stale copies
@@ -53,6 +60,9 @@ function onnxRuntimeWasmDevPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __ORT_WASM_CDN_BASE__: JSON.stringify(ortWasmCdnBase),
+  },
   plugins: [onnxRuntimeWasmDevPlugin(), react(), tailwindcss()],
   optimizeDeps: {
     // Pre-bundling relocates ORT's module and breaks its import.meta.url-relative loading.

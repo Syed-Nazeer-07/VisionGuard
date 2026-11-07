@@ -8,7 +8,6 @@ import { existsSync, readFileSync, readdirSync, statSync, rmSync } from 'node:fs
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const ORT_CDN_VERSION = '1.30.0';
 export const JSEP_NAME = /^ort-wasm-simd-threaded\.jsep(?:-[A-Za-z0-9_-]+)?\.wasm$/;
 
 export function prepareCloudflareAssets(rootDir = process.cwd()) {
@@ -20,20 +19,17 @@ export function prepareCloudflareAssets(rootDir = process.cwd()) {
   ].find(file => existsSync(file));
   if (!installed) throw new Error('ONNX Runtime Web is missing; run npm ci.');
   const version = JSON.parse(readFileSync(installed, 'utf8')).version;
-  if (version !== ORT_CDN_VERSION) {
-    throw new Error('Installed ONNX Runtime ' + version + ' does not match pinned CDN version ' +
-      ORT_CDN_VERSION + '. Both must match exactly.');
-  }
   const settings = readFileSync(path.join(web, 'src/services/ortWasmPaths.ts'), 'utf8');
-  if (!settings.includes("ORT_WASM_CDN_VERSION = '" + ORT_CDN_VERSION + "'")) {
-    throw new Error('The runtime CDN and deploy-script versions differ.');
+  if (!settings.includes('ORT_WASM_CDN_BASE = __ORT_WASM_CDN_BASE__')) {
+    throw new Error('Runtime source no longer uses Vite-injected ONNX CDN URL.');
   }
   const assets = readdirSync(assetDir);
+  const requiredUrl = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@' + version + '/dist/';
   const cdnConfigured = assets.filter(file => file.endsWith('.js'))
-    .some(file => readFileSync(path.join(assetDir, file), 'utf8')
-      .includes('cdn.jsdelivr.net/npm/onnxruntime-web@'));
+    .some(file => readFileSync(path.join(assetDir, file), 'utf8').includes(requiredUrl));
   if (!cdnConfigured) {
-    throw new Error('Built JS does not configure the public version-pinned ONNX Runtime CDN.');
+    throw new Error('Built JS lacks same-version ONNX Runtime CDN (' + version +
+      '). Verify the Vite define configuration and installed runtime version.');
   }
   const removed = [];
   for (const file of assets) {
@@ -51,7 +47,7 @@ if (process.argv[1] &&
     import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
     for (const removed of prepareCloudflareAssets()) {
-      console.log('[deploy] Matching ONNX Runtime WASM from public CDN v' + ORT_CDN_VERSION +
+      console.log('[deploy] Matching ONNX Runtime WASM from versioned public CDN' +
         '; excluded Vite duplicate:', removed.file,
         '(' + (removed.bytes / 1024 / 1024).toFixed(1) + ' MiB)');
     }
