@@ -34,6 +34,9 @@ jobs:
       - run: npm run test -w web
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
 
+      - name: Test Cloudflare Pages release guard
+        run: npm run test:deploy
+
   backend-source:
     name: Backend syntax and deterministic analysis tests
     runs-on: ubuntu-latest

@@ -14,7 +14,8 @@
     <a href="#quick-start">Quick start</a> ·
     <a href="#data-and-privacy">Privacy</a> ·
     <a href="#architecture">Architecture</a> ·
-    <a href="#release-status">Release status</a>
+    <a href="#release-status">Release status</a> ·
+    <a href="docs/CLOUDFLARE_PAGES.md">Deployment</a>
   </p>
 </div>
 
@@ -104,6 +105,18 @@ Restart Vite after changing environment variables. These are **browser-public** 
 **Without valid Supabase configuration**, VisionGuard uses a **local demo adapter**. Some legacy screens may show **sample records**, which are not real camera feeds, genuine detections or verified incidents. A configured account and correct database policies are necessary for authenticated cloud metadata synchronization.
 
 **Backblaze B2** is the optional destination for original cloud-saved video files. B2 requires a separately configured, authenticated server-side signing function and credentials. **Supabase Storage is not used for the original video files** in this workflow. For Google OAuth, follow the [Google sign-in guide](docs/GOOGLE_SIGN_IN.md).
+
+### Deploy the browser app on Cloudflare Pages
+
+VisionGuard includes a production build guard and support for hosting its
+YOLO11s model at a public HTTPS URL when ONNX weights exceed Cloudflare's
+25 MiB static-file limit. This lets the browser workflow run on static Pages
+hosting without a sleeping Python backend.
+
+**[Cloudflare Pages deployment guide](docs/CLOUDFLARE_PAGES.md)** covers
+the exact build settings, R2 model CORS, Supabase login/OAuth redirects and
+real-website acceptance tests. A passing CI badge does not mean a site has
+been published or that the model, authentication and uploads are verified.
 
 ### Returning to an existing clone
 
@@ -197,7 +210,7 @@ See the [release acceptance checklist](docs/RELEASE_CHECKLIST.md), including the
 | [`backend/`](backend/) | Optional FastAPI analysis service and evaluation utilities |
 | [`supabase/migrations/`](supabase/migrations/) | Versioned database schema and access-control policies |
 | [`supabase/functions/`](supabase/functions/) | Authenticated server-side operations and video signing |
-| [`docs/`](docs/) | Model setup, live analysis, authentication and release validation |
+| [`docs/`](docs/) | Model setup, [Cloudflare deployment](docs/CLOUDFLARE_PAGES.md), live analysis, authentication and release validation |
 | [`scripts/`](scripts/) | Development, model-validation and optional backend helpers |
 
 ---
