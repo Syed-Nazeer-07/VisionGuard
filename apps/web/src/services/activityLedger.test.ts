@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeActivity, type AnalysisRecord } from './activityLedger';
+import { mergeEstimatedSpeeds, summarizeActivity, type AnalysisRecord } from './activityLedger';
 
 function record(id: string, vehicles: Record<string, { id:number; type:string;confidence:number;firstSeenAt:number;lastSeenAt:number;observations:number;estimatedSpeedKmh:number|null }>): AnalysisRecord {
   return {
@@ -24,5 +24,27 @@ describe('persistent analysis aggregation',()=>{
     expect(data.runs).toBe(2);
     expect(data.vehicles).toBe(2);
     expect(data.violations).toBe(0);
+  });
+});
+
+describe('estimated speed persistence',()=>{
+  it('updates an already-detected vehicle without manufacturing extra tracks',()=>{
+    const original = {'1':{...a,estimatedSpeedKmh:null}, '2':{...a,id:2,estimatedSpeedKmh:0}};
+    const next = mergeEstimatedSpeeds(original,[{id:1,speedKmh:34.5},{id:999,speedKmh:70}]);
+    expect(Object.keys(next)).toHaveLength(2);
+    expect(next['1'].estimatedSpeedKmh).toBe(34.5);
+    expect(next['2'].estimatedSpeedKmh).toBe(0);
+    expect(original['1'].estimatedSpeedKmh).toBeNull();
+  });
+  it('does not save imagined speeds from short-term prediction',()=>{
+    const original = {'1':{...a,estimatedSpeedKmh:15}};
+    expect(mergeEstimatedSpeeds(original,[{id:1,speedKmh:155,isPredicted:true}])).toBe(original);
+  });
+  it('rejects impossible measurements and avoids needless writes for jitter',()=>{
+    const original = {'1':{...a,estimatedSpeedKmh:35}};
+    expect(mergeEstimatedSpeeds(original,[{id:1,speedKmh:NaN}])).toBe(original);
+    expect(mergeEstimatedSpeeds(original,[{id:1,speedKmh:-9}])).toBe(original);
+    expect(mergeEstimatedSpeeds(original,[{id:1,speedKmh:900}])).toBe(original);
+    expect(mergeEstimatedSpeeds(original,[{id:1,speedKmh:35.4}])).toBe(original);
   });
 });
