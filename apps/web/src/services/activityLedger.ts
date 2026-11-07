@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseConfig } from '../lib/supabase';
 
 export type VehicleClass = 'car' | 'bus' | 'truck' | 'motorcycle' | 'bicycle' | 'train' | 'bus/truck';
 
@@ -96,8 +96,10 @@ async function write(owner: string, records: AnalysisRecord[]): Promise<void> {
 }
 
 async function syncToCloud(owner: string, records: AnalysisRecord[]): Promise<void> {
-  if (!records.length || !navigator.onLine) {
-    if (!navigator.onLine) cloudStatus.set(owner, 'offline');
+  // Cloud sync needs authenticated metadata access; local inference does not.
+  // Do not emit a failed network write every few seconds in demo mode.
+  if (supabaseConfig.isMock || !navigator.onLine || !records.length) {
+    if (supabaseConfig.isMock || !navigator.onLine) cloudStatus.set(owner, 'offline');
     return;
   }
   // The caller only supplies an authenticated user ID. Supabase RLS separately
@@ -118,8 +120,13 @@ async function mergeFromCloud(owner: string): Promise<void> {
   if (cloudLoads.has(owner)) return;
   cloudLoads.add(owner);
   try {
+    if (supabaseConfig.isMock || !navigator.onLine) {
+      cloudStatus.set(owner, 'offline');
+      return;
+    }
     const { data, error } = await (supabase as any).from('user_analysis_records')
-      .select('run_id,payload,updated_at').eq('owner_id', owner).limit(150);
+      .select('run_id,payload,updated_at').eq('owner_id', owner)
+      .order('updated_at', { ascending: false }).limit(150);
     if (error) throw error;
     const current = getSnapshot(owner);
     const byId = new Map(current.records.map(r => [r.id, r]));
@@ -139,7 +146,9 @@ async function mergeFromCloud(owner: string): Promise<void> {
       setState(owner, { loaded:true, records, error: current.error });
       // Merge remote back to local browser storage without re-uploading it.
       const prior = writeTasks.get(owner) ?? Promise.resolve();
-      const queued = prior.catch(()=>{}).then(()=>write(owner,records));
+      // Snapshot at execution time. A vehicle may have been observed while
+      // the previous IndexedDB transaction was completing.
+      const queued = prior.catch(()=>{}).then(()=>write(owner,getSnapshot(owner).records));
       writeTasks.set(owner,queued);
       await queued;
     }
@@ -176,8 +185,9 @@ async function ensureLoaded(owner: string): Promise<void> {
 }
 
 function persist(owner: string) {
-  const existing = writeTimers.get(owner);
-  if (existing) clearTimeout(existing);
+  // Debounce-by-reset could indefinitely defer persistence when inference
+  // keeps running. Schedule a write at least once each interval instead.
+  if (writeTimers.has(owner)) return;
   writeTimers.set(owner, setTimeout(() => {
     writeTimers.delete(owner);
     const records = getSnapshot(owner).records;
@@ -198,11 +208,14 @@ function persist(owner: string) {
       const state = getSnapshot(owner);
       setState(owner, { ...state, error: 'Local or cloud activity save warning: ' + String(error) });
     });
-  }, 900));
+  }, 1500));
 }
 function change(owner: string, transform: (records: AnalysisRecord[]) => AnalysisRecord[]) {
   const state = getSnapshot(owner);
   const records = transform(state.records);
+  // If the session was closed/removed, do not rewrite the same snapshot
+  // and trigger network traffic for an inference result with no target run.
+  if (records === state.records) return;
   setState(owner, { loaded: state.loaded, records, error: state.error });
   persist(owner);
 }
@@ -234,7 +247,9 @@ export const activityLedger = {
   ) {
     if (!ownerId || !runId) return;
     const owner = keyFor(ownerId);
-    change(owner, records => records.map(run => {
+    change(owner, records => {
+      if (!records.some(run => run.id === runId)) return records;
+      return records.map(run => {
       if (run.id !== runId) return run;
       const updated = { ...run.vehicles };
       for (const track of vehicles) {
@@ -255,7 +270,8 @@ export const activityLedger = {
         maximumVisibleVehicles: Math.max(run.maximumVisibleVehicles, vehicles.length),
         vehicles: updated
       };
-    }));
+      });
+    });
   },
   async flush(ownerId: string) {
     const owner = keyFor(ownerId);
@@ -276,10 +292,14 @@ export const activityLedger = {
   cloudState(ownerId: string) { return cloudStatus.get(keyFor(ownerId)) ?? 'idle'; },
   addReviewedViolation(ownerId: string, runId: string, event: ViolationRecord) {
     if (!ownerId || !event.evidenceNote.trim()) return;
-    change(keyFor(ownerId), records => records.map(run =>
-      run.id !== runId || run.violations.some(v => v.id === event.id)
-        ? run : { ...run, updatedAt: Date.now(), violations: [...run.violations, event] }
-    ));
+    change(keyFor(ownerId), records => {
+      if (!records.some(run => run.id === runId &&
+          !run.violations.some(v => v.id === event.id))) return records;
+      return records.map(run =>
+        run.id !== runId || run.violations.some(v => v.id === event.id)
+          ? run : { ...run, updatedAt: Date.now(), violations: [...run.violations, event] }
+      );
+    });
   }
 };
 
