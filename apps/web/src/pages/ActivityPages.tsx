@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
-import { Activity, Download, Film, ShieldAlert } from 'lucide-react';
+import { Activity, Download, Film } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -270,56 +270,59 @@ export function ActivityVideoLibrary() {
     })().catch(e => { if(alive) {setB2Loading(false);setB2Error(String(e));} });
     return () => { alive = false; };
   },[userId]);
-  return <main className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h1 className="text-2xl font-bold text-slate-900">Analysis history</h1>
-        <p className="mt-1 text-sm text-slate-500">Saved tracking sessions for videos and live sources</p>
-      </div>
-      <Link to="/app/analyze" className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
-        Open analysis
-      </Link>
-    </div>
-    
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex items-center justify-between gap-3 border-b border-slate-100 p-4">
-        <div><h2 className="font-semibold text-slate-900">Saved videos · Backblaze B2</h2>
-          <p className="mt-1 text-xs text-slate-500">Only files you chose to upload. The list is metadata; the video bytes stay in B2.</p>
+  return <main className="vg-page">
+    <header className="vg-page-header">
+      <div><h1>History</h1><p>Analyzed sessions and retained footage</p></div>
+      <Link to="/app/analyze" className="vg-primary"><Activity size={15}/> New analysis</Link>
+    </header>
+    {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
+    <div className="space-y-5">
+      <section className="vg-panel overflow-hidden">
+        <div className="vg-section-head">
+          <h2>Video storage · Backblaze B2</h2>
+          <Link to="/app/archive-videos">Manage storage</Link>
         </div>
-        <Link className="text-xs font-semibold text-indigo-600 hover:underline" to="/app/archive-videos">Manage cloud videos</Link>
-      </div>
-      {b2Error && <p role="alert" className="p-4 text-xs text-amber-700">Could not load B2 file list: {b2Error}</p>}
-      {b2Loading ? <p className="p-4 text-sm text-slate-500">Loading B2 video records…</p> :
-        !b2Videos.length ? <p className="p-4 text-sm text-slate-500">No B2 uploads found for this account.</p> :
-        b2Videos.map(video=><div key={video.id} className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4 last:border-0">
-          <Film size={19} className="text-indigo-500"/>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold text-slate-800">{video.filename}</div>
-            <div className="text-xs text-slate-500">{new Date(video.uploaded_at).toLocaleString()}
-              {video.file_size ? ' · '+(video.file_size/1048576).toFixed(1)+' MB' : ''}</div>
-          </div>
-          <span className="text-xs text-slate-600">{video.storage_path ? 'Stored in B2' :
-            video.processing_status === 'failed' ? 'Upload failed' : 'Upload pending'}</span>
-          <Link to={'/app/archive-videos?video='+encodeURIComponent(video.id)}
-            className="text-xs font-semibold text-indigo-600 hover:underline">Open</Link>
-        </div>)}
-    </section>
-    {error && <p role="alert" className="text-sm text-amber-700">{error}</p>}
-    {!loaded ? <p className="text-sm text-slate-500">Restoring activity history…</p> :
-      !records.length ? <p className="vg-empty-row">No session records available.</p> :
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        {records.map(run=><div key={run.id} className="flex flex-wrap items-center gap-4 border-b border-slate-100 p-4 last:border-0">
-          <Film size={20} className="text-indigo-500"/>
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-slate-800">{run.sourceName}</p>
-            <p className="mt-1 text-xs text-slate-500">{niceDate(run.createdAt)} · {run.sourceType==='live-stream'?'Live stream':'Uploaded video'}</p>
-          </div>
-          <div className="text-right text-sm">
-            <strong className="tabular-nums">{Object.keys(run.vehicles).length} unique vehicles</strong>
-            <p className="text-xs text-slate-500">{run.analyzedFrames} analyzed frames</p>
-          </div>
-        </div>)}
-      </div>}
-    <p className="text-xs text-slate-500">An analysis record does not imply its source video was saved. Retaining footage is an independent opt-in inside Live Analysis.</p>
+        {b2Error && <p role="alert" className="p-4 text-sm text-amber-700">{b2Error}</p>}
+        {b2Loading ? <p className="vg-empty-row">Loading video records…</p> :
+          !b2Videos.length ? <p className="vg-empty-row">No videos stored in B2.</p> :
+          <div className="divide-y divide-slate-100">
+            {b2Videos.map(video =>
+              <div key={video.id} className="flex flex-wrap items-center gap-4 px-5 py-3.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <Film size={17}/>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-800">{video.filename}</p>
+                  <p className="mt-1 text-xs text-slate-500">{new Date(video.uploaded_at).toLocaleString()}
+                    {video.file_size ? ' · '+(video.file_size/1048576).toFixed(1)+' MB' : ''}</p>
+                </div>
+                <span className="text-xs text-slate-500">{video.storage_path ? 'Stored' :
+                  video.processing_status === 'failed' ? 'Failed' : 'Pending'}</span>
+                <Link to={'/app/archive-videos?video='+encodeURIComponent(video.id)}
+                  className="text-xs font-semibold text-[#2356a8] hover:underline">Details</Link>
+              </div>)}
+          </div>}
+      </section>
+      <section className="vg-panel overflow-hidden">
+        <div className="vg-section-head"><h2>Analysis sessions</h2><span className="text-xs text-slate-500">{records.length} total</span></div>
+        {!loaded ? <p className="vg-empty-row">Loading session history…</p> :
+          !records.length ? <p className="vg-empty-row">No sessions on record.</p> :
+          <div className="divide-y divide-slate-100">
+            {records.map(run =>
+              <div key={run.id} className="flex items-center gap-4 px-5 py-3.5 text-sm">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-slate-800">{run.sourceName}</div>
+                  <div className="mt-1 text-xs text-slate-500">{niceDate(run.createdAt)} · {run.sourceType==='live-stream'?'Live source':'Video'}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-semibold tabular-nums text-slate-800">{Object.keys(run.vehicles).length}</div>
+                  <div className="text-[11px] text-slate-500">vehicles</div>
+                </div>
+              </div>)}
+          </div>}
+      </section>
+    </div>
+    <p className="vg-footnote">Analysis records are retained separately from source video files. Saving a session does not upload its footage.</p>
   </main>;
 }
 
@@ -327,33 +330,33 @@ export function ActivityIncidents() {
   const { records, loaded, error } = useRuns();
   const incidents = records.flatMap(run=>run.violations.map(event=>({ run, event })))
     .sort((a,b)=>b.event.observedAt-a.event.observedAt);
-  return <main className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
-    <div><h1 className="text-2xl font-bold text-slate-900">Incidents and violations</h1>
-      <p className="mt-1 text-sm text-slate-500">Evidence-backed records only — no fabricated overspeed findings</p>
-    </div>
-    
-    <p className="text-xs text-slate-600">Older cloud incidents and case reviews are kept separately:
-      <Link className="ml-1 font-semibold text-indigo-600 hover:underline" to="/app/archive-cases">Open legacy cases</Link>.
-    </p>
-    {error && <p role="alert" className="text-sm text-amber-700">{error}</p>}
-    {!loaded ? <p className="text-sm text-slate-500">Restoring incident history…</p> :
-      !incidents.length ? <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center">
-        <ShieldAlert className="mx-auto text-indigo-400" size={30}/>
-        <h2 className="mt-3 font-semibold text-slate-900">No verified incidents recorded</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-          Analysis identifies vehicles, but uncalibrated speed estimates do not establish a violation.
-          Verified events will appear here when supported by actual evidence.
-        </p>
-      </div> :
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        {incidents.map(({run,event})=><div key={event.id} className="border-b border-slate-100 p-4 text-sm last:border-0">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <strong className="text-slate-900">{title(event.type)}</strong>
-            <span className="text-xs font-semibold text-slate-600">{event.status.replace('_',' ')}</span>
-          </div>
-          <p className="mt-1 text-slate-600">{run.sourceName} · Track #{event.trackId??'N/A'}</p>
-          <p className="mt-1 text-xs text-slate-500">{event.evidenceNote}</p>
-        </div>)}
-      </div>}
+  return <main className="vg-page">
+    <header className="vg-page-header">
+      <div><h1>Incidents</h1><p>Recorded events and review status</p></div>
+      <Link className="vg-secondary" to="/app/archive-cases">Case archive</Link>
+    </header>
+    {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
+    <section className="vg-panel overflow-hidden">
+      <div className="vg-section-head">
+        <h2>Event records</h2>
+        <span className="text-xs text-slate-500">{incidents.length} total</span>
+      </div>
+      {!loaded ? <p className="vg-empty-row">Loading incidents…</p> :
+        !incidents.length ? <p className="vg-empty-row">No recorded incidents.</p> :
+        <div className="divide-y divide-slate-100">
+          {incidents.map(({run,event}) =>
+            <div key={event.id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 text-sm">
+              <div>
+                <p className="font-semibold text-slate-800">{title(event.type)}</p>
+                <p className="mt-1 text-xs text-slate-500">{run.sourceName} · Track #{event.trackId ?? 'N/A'}</p>
+                <p className="mt-1.5 text-xs text-slate-600">{event.evidenceNote}</p>
+              </div>
+              <span className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
+                {event.status.replace('_',' ')}
+              </span>
+            </div>)}
+        </div>}
+    </section>
+    <p className="vg-footnote">Uncalibrated speed estimates are not treated as verified violations.</p>
   </main>;
 }
