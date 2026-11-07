@@ -388,9 +388,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         };
         track.onunmute = () => {
           if (webcamRef.current === capture) {
-            captureStalledRef.current = false;
+            // Don't show LIVE until a real frame has advanced.
+            captureStalledRef.current = true;
             lastPresentedAtRef.current = performance.now();
-            setStreamHealth('connecting');
+            setStreamHealth('buffering');
           }
         };
         track.onended = () => {
