@@ -51,6 +51,16 @@ describe('persistent crowded vehicle tracking', () => {
     expect(next.kmh).toBeGreaterThan(0);
   });
 
+  it('restores an existing ID after optical tracking temporarily loses a vehicle', () => {
+    const original = reconcileVehicles([], [car(100, 100, 401)], 1, 1);
+    const sourceIds = original.sourceAssignments;
+    expect(sourceIds.get(401)).toBe(1);
+    const restored = reconcileVehicles([], [car(115, 100, 401)], 2.2, original.nextId, sourceIds);
+    expect(restored.tracks).toHaveLength(1);
+    expect(restored.tracks[0].id).toBe(1);
+    expect(restored.nextId).toBe(original.nextId);
+  });
+
   it('drops tracks after repeated missed detections without creating duplicates', () => {
     const first = reconcileVehicles([], [car(80)], 1, 1);
     const missed = reconcileVehicles(first.tracks, [], 3, first.nextId);
