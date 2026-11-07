@@ -63,6 +63,19 @@ function setState(owner: string, next: ActivitySnapshot) {
   emit();
 }
 
+/** Clear only the stale cloud warning after cloud access recovers.
+ * Do not hide a local IndexedDB storage error. */
+export function clearResolvedCloudWarning(error: string | null): string | null {
+  return error?.startsWith('Cloud sync unavailable;') ||
+    error?.startsWith('Cloud backup unavailable;') ? null : error;
+}
+function markCloudSynced(owner: string) {
+  cloudStatus.set(owner, 'synced');
+  const current = getSnapshot(owner);
+  const error = clearResolvedCloudWarning(current.error);
+  if (error !== current.error) setState(owner, { ...current, error });
+}
+
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB, 1);
@@ -123,7 +136,7 @@ async function syncToCloud(owner: string, records: AnalysisRecord[]): Promise<vo
     for (const run of batch) revisions.set(run.id, run.updatedAt);
     uploadedRevisions.set(owner, revisions);
   }
-  cloudStatus.set(owner, 'synced');
+  markCloudSynced(owner);
 }
 async function mergeFromCloud(owner: string): Promise<void> {
   if (cloudLoads.has(owner)) return;
@@ -164,7 +177,7 @@ async function mergeFromCloud(owner: string): Promise<void> {
       writeTasks.set(owner,queued);
       await queued;
     }
-    cloudStatus.set(owner,'synced');
+    markCloudSynced(owner);
   } catch (e) {
     // Local analysis works offline. Surface a warning without discarding data.
     cloudStatus.set(owner, 'offline');

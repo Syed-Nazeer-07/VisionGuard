@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeEstimatedSpeeds, summarizeActivity, type AnalysisRecord } from './activityLedger';
+import { clearResolvedCloudWarning, mergeEstimatedSpeeds, summarizeActivity, type AnalysisRecord } from './activityLedger';
 
 function record(id: string, vehicles: Record<string, { id:number; type:string;confidence:number;firstSeenAt:number;lastSeenAt:number;observations:number;estimatedSpeedKmh:number|null }>): AnalysisRecord {
   return {
@@ -46,5 +46,17 @@ describe('estimated speed persistence',()=>{
     expect(mergeEstimatedSpeeds(original,[{id:1,speedKmh:-9}])).toBe(original);
     expect(mergeEstimatedSpeeds(original,[{id:1,speedKmh:900}])).toBe(original);
     expect(mergeEstimatedSpeeds(original,[{id:1,speedKmh:35.4}])).toBe(original);
+  });
+});
+
+describe('cloud reconnect warnings', () => {
+  it('clears obsolete cloud warnings when metadata synchronization succeeds', () => {
+    expect(clearResolvedCloudWarning('Cloud sync unavailable; activity remains saved locally. Timeout')).toBeNull();
+    expect(clearResolvedCloudWarning('Cloud backup unavailable; saved locally. Timeout')).toBeNull();
+  });
+  it('does not conceal local save errors or unrelated messages', () => {
+    expect(clearResolvedCloudWarning('Local activity save failed')).toBe('Local activity save failed');
+    expect(clearResolvedCloudWarning('Local or cloud activity save warning: disk full')).toBe('Local or cloud activity save warning: disk full');
+    expect(clearResolvedCloudWarning(null)).toBeNull();
   });
 });
