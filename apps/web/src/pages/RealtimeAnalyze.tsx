@@ -67,6 +67,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const lastStreamFailureRef = useRef(0);
   const [streamRetries, setStreamRetries] = useState(0);
   const webcamRef = useRef<MediaStream | null>(null);
+  const captureKindRef = useRef<'camera' | 'tab' | null>(null);
   const [webcamActive, setWebcamActive] = useState(false);
   const [tabCaptureActive, setTabCaptureActive] = useState(false);
   const [tabCaptureStarting, setTabCaptureStarting] = useState(false);
@@ -310,6 +311,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const stopWebcam = () => {
     const active = webcamRef.current;
     webcamRef.current = null;
+    captureKindRef.current = null;
     if (active && videoRef.current?.srcObject === active) videoRef.current.srcObject = null;
     active?.getTracks().forEach(track => track.stop());
     setWebcamActive(false);
@@ -328,11 +330,22 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setError('');
     const request = ++uploadGenerationRef.current;
     try {
+      // Chrome/Edge can otherwise focus the captured tab when sharing starts.
+      // Keep VisionGuard in focus when CaptureController is available; the
+      // underlying video stream must survive either focus choice.
+      const Controller = (window as unknown as {
+        CaptureController?: new () => { setFocusBehavior?: (value: 'no-focus-change') => void }
+      }).CaptureController;
+      const controller = Controller ? new Controller() : undefined;
       const capture = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
+        video: { frameRate: { ideal: 24, max: 30 } },
         audio: false,
+        ...(controller ? { controller } : {}),
       });
-      if (request !== uploadGenerationRef.current || !activeRef.current || document.hidden) {
+      try { controller?.setFocusBehavior?.('no-focus-change'); } catch { /* browser may reject focus control for screen capture */ }
+      if (request !== uploadGenerationRef.current || !activeRef.current) {
+        // Switching to the selected YouTube tab is NORMAL for getDisplayMedia.
+        // A hidden VisionGuard tab is not a reason to discard permission.
         capture.getTracks().forEach(track => track.stop());
         return;
       }
@@ -348,6 +361,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setStreamSource(null);
       if (ownerId) streamCatalog.select(ownerId, null);
       webcamRef.current = capture;
+      captureKindRef.current = 'tab';
       setTabCaptureActive(true);
       setWebcamActive(false);
       setUrl(BROWSER_TAB_SOURCE);
@@ -364,6 +378,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         activeRunRef.current = 'tab:' + crypto.randomUUID();
         activityLedger.begin(ownerId, activeRunRef.current, 'Shared browser tab', 'live-stream');
       } else activeRunRef.current = '';
+      const surface = capture.getVideoTracks()[0]?.getSettings().displaySurface;
+      if (surface === 'monitor') {
+        setError('Entire screen is being shared. To detect vehicles in YouTube while viewing VisionGuard, share the YouTube browser TAB instead; the entire screen will show VisionGuard when you switch back.');
+      }
       for (const track of capture.getVideoTracks()) {
         track.onended = () => {
           if (webcamRef.current !== capture) return;
@@ -420,6 +438,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setStreamSource(null);
       if (ownerId) streamCatalog.select(ownerId, null);
       webcamRef.current = camera;
+      captureKindRef.current = 'camera';
       setWebcamActive(true);
       setUrl(BROWSER_CAMERA_SOURCE);
       setFilename('Browser camera · live');
@@ -917,8 +936,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (document.hidden && video) {
         const account = useAuthStore.getState().user?.id;
         if (account) void activityLedger.flush(account).catch(console.warn);
+        // Selecting a YouTube/browser tab in the system share dialog often
+        // hides VisionGuard. Do not pause or end a user-approved tab capture.
+        if (captureKindRef.current === 'tab') return;
         video.pause();
-        if (webcamRef.current) {
+        if (captureKindRef.current === 'camera' && webcamRef.current) {
+          // Unlike a shared tab, the device camera is released on hide.
           stopWebcam();
           setUrl('');
           setStreamHealth('idle');
