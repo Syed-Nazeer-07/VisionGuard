@@ -104,11 +104,13 @@ export function ActivityDashboard() {
 export function ActivityAnalytics() {
   const { records, loaded, error } = useRuns();
   const [range, setRange] = useState<'all'|'today'|'week'|'month'>('all');
+  // Keep filter calculations pure during render.
+  const [asOf] = useState(Date.now);
   const filtered = useMemo(() => {
-    const now = Date.now();
+    const now = asOf;
     const ms = range === 'today' ? 86400000 : range === 'week' ? 7*86400000 : range === 'month' ? 30*86400000 : Infinity;
     return records.filter(r => now-r.createdAt <= ms);
-  }, [range, records]);
+  }, [range, records, asOf]);
   const counts = useMemo(() => summarizeActivity(filtered), [filtered]);
   const byClass = distribution(filtered);
   return <main className="vg-page">
