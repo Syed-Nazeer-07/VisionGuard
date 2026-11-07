@@ -5,6 +5,7 @@ import { calculateMotion, type LiveTrack } from '../pipeline/tracker/liveProject
 import { getIOU } from '../pipeline/tracker/matching';
 import { TwoWheelerAssociator } from '../pipeline/tracker/twoWheelerAssociator';
 import { ortWasmAssetsPath } from '../services/ortWasmPaths';
+import { disposeInferenceResources } from '../services/inferenceResources';
 
 env.wasm.wasmPaths = ortWasmAssetsPath(import.meta.env.DEV);
 
@@ -117,10 +118,14 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
   working = true;
   const thisEpoch = epoch;
   const start = performance.now();
+  let inputTensor: Tensor | null = null;
+  let outputTensors: Awaited<ReturnType<InferenceSession['run']>> | null = null;
   try {
     const processed = preprocess(message.bitmap, message.sourceWidth, message.sourceHeight);
+    inputTensor = processed.tensor;
     const feeds = { [session.inputNames[0]]: processed.tensor };
-    const output = await session.run(feeds);
+    outputTensors = await session.run(feeds);
+    const output = outputTensors;
     if (thisEpoch !== epoch) {
       self.postMessage({
         type: 'skipped', requestId: message.requestId, generation: message.generation
@@ -180,6 +185,12 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
       message: errorText(e)
     });
   } finally {
+    // ONNX Runtime may own GPU buffers for each output tensor. Release the
+    // output only AFTER decoding it; otherwise long video sessions can retain
+    // GPU memory until GC (or beyond). Also release the CPU input tensor.
+    disposeInferenceResources(inputTensor, outputTensors, error => {
+      console.warn('[YOLO11s] Failed to release inference tensor:', error);
+    });
     message.bitmap.close();
     working = false;
   }
