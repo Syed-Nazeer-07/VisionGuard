@@ -46,6 +46,7 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -97,6 +98,28 @@ export function Login() {
     } catch (err: any) {
       setIsLoading(false);
       setError(err?.message || 'Authentication failed');
+    }
+  };
+
+  const onGoogleContinue = async () => {
+    setError(null);
+    setSuccessMsg(null);
+    if (supabaseConfig.isMock) {
+      setError('Google sign-in requires a configured Supabase Auth connection.');
+      return;
+    }
+    setIsGoogleLoading(true);
+    try {
+      sessionStorage.removeItem('visionguard_logged_out');
+      // Supabase handles OAuth state and session persistence. Fixed callback.
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: new URL('/app', window.location.origin).toString() },
+      });
+      if (oauthError) throw oauthError;
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not start Google sign-in.');
+      setIsGoogleLoading(false);
     }
   };
 
@@ -179,8 +202,8 @@ export function Login() {
             <span className="text-xl font-bold text-white tracking-tight">VisionGuard</span>
           </Link>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/60 text-xs font-mono text-emerald-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>SYSTEM ONLINE</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>SECURE ACCESS</span>
           </div>
         </div>
 
@@ -188,50 +211,27 @@ export function Login() {
         <div className="relative z-10 my-auto py-8">
           <div className="max-w-[480px]">
             <div className="inline-block px-2.5 py-1 mb-4 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold tracking-wider uppercase font-mono">
-              Roadway Surveillance & Control
+              VisionGuard / Workspace
             </div>
             <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-4 tracking-tight">
-              Real-Time Situational Awareness for Modern Transit Networks
+              Traffic analysis in one workspace.
             </h1>
             <p className="text-[15px] text-slate-300 leading-relaxed mb-8">
-              Access the VisionGuard Operations Center to monitor active camera streams, analyze flow telemetry, and manage roadway alerts.
+              Review traffic footage, monitor vehicle detections, and keep reports organized in one place.
             </p>
           </div>
           
-          {/* Surveillance Telemetry HUD Card */}
-          <div className="rounded-xl bg-slate-900/80 backdrop-blur-md border border-slate-800 p-4 shadow-xl max-w-[480px]">
-            <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 mb-3 text-xs font-mono text-slate-400">
-              <span className="text-slate-200 font-medium">CAM-09B · INTERSTATE ARTERIAL</span>
-              <span className="text-emerald-400">FPS: 29.8 · 1080p</span>
-            </div>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
-                <div className="text-[11px] text-slate-400 uppercase">Detection</div>
-                <div className="text-sm font-bold text-white mt-0.5">YOLO11-Nano</div>
-              </div>
-              <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
-                <div className="text-[11px] text-slate-400 uppercase">Tracking</div>
-                <div className="text-sm font-bold text-white mt-0.5">ByteTrack</div>
-              </div>
-              <div className="p-2 rounded bg-slate-950/60 border border-slate-800/60">
-                <div className="text-[11px] text-slate-400 uppercase">Velocity</div>
-                <div className="text-sm font-bold text-indigo-300 mt-0.5">Calibration required</div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Feature Badges */}
-          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-[13px] font-medium text-slate-300">
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Multi-Camera Ingest</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> WebGPU & Local Backend</span>
-            <span className="flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4 text-emerald-400" /> Sub-Second Incident Alerting</span>
+          <div className="mt-7 flex flex-wrap gap-2 text-xs text-slate-200">
+            <span className="rounded-md border border-white/15 bg-slate-950/40 px-3 py-2">Video analysis</span>
+            <span className="rounded-md border border-white/15 bg-slate-950/40 px-3 py-2">Vehicle tracking</span>
+            <span className="rounded-md border border-white/15 bg-slate-950/40 px-3 py-2">Activity reports</span>
           </div>
         </div>
 
         {/* Bottom Security / Copyright */}
         <div className="relative z-10 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/60 pt-4">
-          <span>Enterprise Role-Based Access Control</span>
-          <span>© 2026 VisionGuard AI</span>
+          <span>Role-based workspace access</span>
+          <span>VisionGuard</span>
         </div>
       </div>
 
@@ -297,12 +297,12 @@ export function Login() {
                 transition={{ duration: 0.2 }}
               >
                 <h2 className="text-[22px] font-bold text-gray-900 mb-1 tracking-tight">
-                  {mode === 'login' ? 'Welcome Back' : 'Get Started'}
+                  {mode === 'login' ? 'Sign in to VisionGuard' : 'Create your account'}
                 </h2>
                 <p className="text-gray-500 text-[14px]">
                   {mode === 'login' 
-                    ? 'Sign in to access your operations dashboard.' 
-                    : 'Create a new account to deploy VisionGuard.'}
+                    ? 'Access your workspace, analysis history, and reports.' 
+                    : 'Join your workspace with standard user access.'}
                 </p>
               </motion.div>
             </AnimatePresence>
@@ -421,7 +421,7 @@ export function Login() {
                         <span className="text-[14px]">Authenticating...</span>
                       </div>
                     ) : (
-                      <span className="text-[14px]">Enter Control Room</span>
+                      <span className="text-[14px]">Sign in</span>
                     )}
                   </button>
                 </motion.form>
@@ -482,7 +482,7 @@ export function Login() {
                       </div>
                       <input
                         type="email"
-                        placeholder="admin@transport.gov"
+                        placeholder="you@example.com"
                         {...registerSignup('email')}
                         className={cn(
                           "w-full pl-10 pr-4 py-3 bg-white border rounded-lg outline-none transition-all text-[14px] text-gray-900 placeholder:text-gray-400 shadow-sm",
@@ -564,10 +564,25 @@ export function Login() {
             </AnimatePresence>
           </div>
 
-          {/* Bottom Trust Text */}
-          <div className="mt-8 pt-6">
-            <p className="text-[13px] leading-[1.6] text-gray-400 text-center font-medium">
-              Built for Transportation Authorities, Traffic Operations Centers, Smart City Programs, and Infrastructure Monitoring Teams.
+          <div className="mt-6">
+            <div className="flex items-center gap-3 pb-5 text-xs text-slate-400">
+              <span className="h-px flex-1 bg-slate-200"/>
+              <span>or continue with</span>
+              <span className="h-px flex-1 bg-slate-200"/>
+            </div>
+            <button type="button" onClick={() => void onGoogleContinue()}
+              disabled={isLoading || isGoogleLoading}
+              className="vg-google-button flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-800 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="19" height="19">
+                <path fill="#4285F4" d="M21.35 12.2c0-.67-.06-1.32-.18-1.95H12v3.7h5.23a4.5 4.5 0 0 1-1.94 2.95v2.45h3.14c1.83-1.7 2.92-4.2 2.92-7.15z"/>
+                <path fill="#34A853" d="M12 21.5c2.63 0 4.84-.87 6.45-2.35l-3.14-2.45c-.88.59-1.99.93-3.31.93-2.54 0-4.7-1.72-5.47-4.04H3.29v2.51A9.75 9.75 0 0 0 12 21.5z"/>
+                <path fill="#FBBC05" d="M6.53 13.59A5.9 5.9 0 0 1 6.2 12c0-.55.11-1.09.33-1.59V7.9H3.29A9.7 9.7 0 0 0 2.25 12c0 1.58.38 3.07 1.04 4.1l3.24-2.51z"/>
+                <path fill="#EA4335" d="M12 6.37c1.43 0 2.7.49 3.71 1.46l2.79-2.79A9.43 9.43 0 0 0 12 2.5a9.75 9.75 0 0 0-8.71 5.4l3.24 2.51C7.3 8.09 9.46 6.37 12 6.37z"/>
+              </svg>
+              {isGoogleLoading ? 'Connecting to Google…' : 'Continue with Google'}
+            </button>
+            <p className="mt-4 text-center text-xs leading-5 text-slate-500">
+              Access permissions are assigned by the workspace. New accounts do not receive administrator access.
             </p>
           </div>
 
