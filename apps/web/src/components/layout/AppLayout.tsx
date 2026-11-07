@@ -102,6 +102,12 @@ export function AppLayout() {
           </span>
           {!collapsed && <span className="truncate text-[16px] font-bold tracking-[-.035em] text-[#18283d]">VisionGuard</span>}
         </Link>
+        <button type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="hidden rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 md:inline-flex"
+          onClick={() => setCollapsed(value => !value)}>
+          {collapsed ? <PanelLeftOpen size={17}/> : <PanelLeftClose size={17}/>}
+        </button>
         <button type="button" aria-label="Close menu"
           className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 md:hidden"
           onClick={() => setMobileOpen(false)}><X size={18}/></button>
@@ -137,42 +143,23 @@ export function AppLayout() {
     </aside>
 
     <div className="flex min-w-0 flex-1 flex-col">
-      <header className="flex h-[66px] shrink-0 items-center justify-between gap-4 border-b border-[#e1e7ee] bg-white px-4 sm:px-7">
-        <div className="flex min-w-0 items-center gap-3">
-          <button type="button" aria-label="Open navigation"
-            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 md:hidden"
-            onClick={() => setMobileOpen(true)}>
-            <Menu size={20}/>
-          </button>
-          <button type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="hidden rounded-lg p-2 text-slate-500 hover:bg-slate-100 md:inline-flex"
-            onClick={() => setCollapsed(value => !value)}>
-            {collapsed ? <PanelLeftOpen size={19}/> : <PanelLeftClose size={19}/>}
-          </button>
-          <div className="hidden h-5 w-px bg-slate-200 sm:block"/>
-          <div className="min-w-0">
-            <div className="text-[11px] font-medium text-slate-400">VisionGuard / Workspace</div>
-            <h1 className="truncate text-[15px] font-semibold tracking-[-.02em] text-[#1d2d44]">{title}</h1>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {tabSharing && <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5">
-            <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"/>
-            <span className="hidden text-xs font-medium text-amber-900 sm:inline">Tab sharing active</span>
-            {!activeAnalyze && <Link to="/app/analyze" className="text-xs font-semibold text-[#2356a8] hover:underline">
-              View
-            </Link>}
-            <button type="button" className="text-xs font-semibold text-amber-900 hover:underline"
-              onClick={() => window.dispatchEvent(new Event('visionguard:stop-tab-capture'))}>
-              Stop
-            </button>
-          </div>}
-          {!tabSharing && <Link to="/app/videos"
-            className="hidden rounded-lg border border-[#e0e6ed] bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 sm:block">
-            View activity
-          </Link>}
-        </div>
-      </header>
+      {/* Minimal mobile navigation only. Desktop pages already carry their
+          own titles; repeating a global toolbar wastes vertical space. */}
+      <div className="flex h-12 shrink-0 items-center gap-3 border-b border-[#e1e7ee] bg-white px-3 md:hidden">
+        <button type="button" aria-label="Open navigation"
+          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+          onClick={() => setMobileOpen(true)}><Menu size={20}/></button>
+        <span className="truncate text-sm font-semibold text-[#263950]">{title}</span>
+      </div>
+      {tabSharing && <div className="fixed right-3 top-3 z-50 flex items-center gap-2 rounded-xl border border-amber-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur-sm md:right-5 md:top-4"
+        role="status" aria-label="Browser tab sharing is active">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true"/>
+        <span className="hidden text-xs font-semibold text-slate-700 sm:inline">Tab sharing</span>
+        {!activeAnalyze && <Link to="/app/analyze"
+          className="rounded-md px-2 py-1 text-xs font-semibold text-[#2356a8] hover:bg-slate-100">View</Link>}
+        <button type="button" className="rounded-md px-2 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-50"
+          onClick={() => window.dispatchEvent(new Event('visionguard:stop-tab-capture'))}>Stop</button>
+      </div>}
       <main className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto" id="main-content">
         <ErrorBoundary>
           {/* Retain the playback element/worker between app pages. */}
