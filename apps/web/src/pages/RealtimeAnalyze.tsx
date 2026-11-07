@@ -336,7 +336,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       localAnalysisStorage.loadPosition(ownerId ?? undefined)
     ]).then(([saved, savedPosition]) => {
       if (!alive || generation !== uploadGenerationRef.current || !saved) return;
-      attachVideo(saved.file, saved.name, savedPosition);
+      const file = saved.file instanceof File
+        ? saved.file
+        : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
+      currentFileRef.current = file;
+      attachVideo(file, saved.name, savedPosition);
       setStorage('saved');
     }).catch(e => {
       if (alive && generation === uploadGenerationRef.current) {
