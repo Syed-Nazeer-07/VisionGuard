@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { bindingForPlatform, installedRolldownVersion } from './ensure-native-build-binding.mjs';
+import { bindingForPlatform, installedRolldownVersion, installedOxlintVersion } from './ensure-native-build-binding.mjs';
 
 test('selects the Cloudflare Linux x64 glibc native package', () => {
   assert.equal(bindingForPlatform('linux', 'x64', '2.36'),
@@ -36,4 +36,12 @@ test('fails closed on invalid package metadata and uninstalled Rolldown', () => 
   const root = mkdtempSync(path.join(os.tmpdir(), 'vg-binding-missing-'));
   roots.push(root);
   assert.throws(() => installedRolldownVersion(root), /npm ci/);
+});
+
+test('pins Oxlint native version to installed package metadata', () => {
+  const root = fixture('1.2.12');
+  const pkgDir = path.join(root, 'apps/web/node_modules/oxlint');
+  mkdirSync(pkgDir, { recursive: true });
+  writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({ version: '1.86.0' }));
+  assert.equal(installedOxlintVersion(root), '1.86.0');
 });

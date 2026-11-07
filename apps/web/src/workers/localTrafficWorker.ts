@@ -4,8 +4,9 @@ import { ByteTracker } from '../pipeline/tracker/bytetrack';
 import { calculateMotion, type LiveTrack } from '../pipeline/tracker/liveProjection';
 import { getIOU } from '../pipeline/tracker/matching';
 import { TwoWheelerAssociator } from '../pipeline/tracker/twoWheelerAssociator';
+import { ortWasmAssetsPath } from '../services/ortWasmPaths';
 
-if (import.meta.env.DEV) env.wasm.wasmPaths = '/';
+env.wasm.wasmPaths = ortWasmAssetsPath(import.meta.env.DEV);
 
 type Incoming =
   | { type: 'init'; modelPath: string }

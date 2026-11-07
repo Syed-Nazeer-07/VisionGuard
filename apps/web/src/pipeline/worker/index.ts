@@ -15,12 +15,11 @@ import { evaluateEvidence } from '../evidence/scoring';
 import { addEvidenceCandidate, getBestEvidence, removeEvidence, clearEvidenceCollector } from '../evidence/collector';
 import type { WorkerMessage, Point, TrackedObject } from '../types';
 import type { PlateDetection } from '../plate/types';
+import { ortWasmAssetsPath } from '../../services/ortWasmPaths';
 // Dev: the visionguard-onnxruntime-wasm Vite plugin serves the runtime artifacts at the site root,
 // straight from the installed onnxruntime-web package. Production: Vite emits the matching
 // ort-wasm-simd-threaded.jsep.wasm as a hashed asset and ORT resolves it via import.meta.url.
-if (import.meta.env.DEV) {
-  env.wasm.wasmPaths = '/';
-}
+env.wasm.wasmPaths = ortWasmAssetsPath(import.meta.env.DEV);
 
 
 function errorMessage(error: unknown): string {

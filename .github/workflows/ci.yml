@@ -25,12 +25,8 @@ jobs:
       # omit Linux native optional packages even though Rolldown needs them.
       - name: Repair Cloudflare Rolldown binding
         run: node scripts/ensure-native-build-binding.mjs
-      # Some npm lockfiles also omit the platform-specific Oxlint binding.
-      # Match the installed version without changing tracked lockfiles.
-      - name: Ensure Linux oxlint binding is installed
-        run: |
-          OXLINT_VERSION=$(node -p "require('./apps/web/node_modules/oxlint/package.json').version")
-          npm install --no-save --no-package-lock --no-audit "@oxlint/binding-linux-x64-gnu@${OXLINT_VERSION}"
+      # Both Rolldown and Oxlint are repaired in one npm operation above,
+      # avoiding transient package pruning by a second --no-save install.
       - run: npm run lint
       - name: Build production-style Worker assets (synthetic public CI variables)
         env:
