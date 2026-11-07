@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { Link } from 'react-router-dom';
 import { Activity, Download, Film } from 'lucide-react';
@@ -73,7 +73,7 @@ export function ActivityDashboard() {
       <Stat label="Unique tracked vehicles" number={stats.vehicles} note="Across recorded sessions"/>
       <Stat label="Analysis sessions" number={stats.runs} note="Videos and live sources"/>
       <Stat label="Inference frames" number={stats.analyzedFrames} note="Completed detector observations"/>
-      <Stat label="Recorded incidents" number={stats.violations} note="Evidence-based records"/>
+      <Stat label="Review flags" number={stats.violations} note="Awaiting evidence verification"/>
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
       <RecentRuns records={records}/>
@@ -196,7 +196,7 @@ function exportPDF(records: AnalysisRecord[]) {
   pdf.setFont('helvetica','normal');pdf.setFontSize(10);
   pdf.text('Exported '+new Date().toLocaleString(),14,29);
   pdf.text('Local device activity. Speeds are approximate and not enforcement evidence.',14,36);
-  pdf.text('Sessions: '+data.runs+'  |  Unique vehicles: '+data.vehicles+'  |  Verified violations: '+data.violations,14,45);
+  pdf.text('Sessions: '+data.runs+'  |  Tracked vehicles: '+data.vehicles+'  |  Review flags: '+data.violations,14,45);
   const rows = records.flatMap(run=>Object.values(run.vehicles).map(v=>[
     run.sourceName.slice(0,32),String(v.id),v.type,
     String(Math.round(v.confidence*100))+'%',
@@ -206,7 +206,38 @@ function exportPDF(records: AnalysisRecord[]) {
     startY:54,head:[['Video/stream','Track','Class','Confidence','Est. km/h']],
     body:rows,theme:'striped',styles:{fontSize:8},headStyles:{fillColor:[67,56,202]},
   });
+  const flags = records.flatMap(run => run.violations.map(flag => [
+    run.sourceName.slice(0,25),
+    flag.trackId == null ? '—' : String(flag.trackId),
+    title(flag.type),
+    flag.status.replace('_',' '),
+    flag.evidenceNote.slice(0,160)
+  ]));
+  if (flags.length) {
+    const previousTableEnd = (pdf as jsPDF & {lastAutoTable?: {finalY: number}})
+      .lastAutoTable?.finalY ?? 54;
+    autoTable(pdf,{
+      startY: previousTableEnd + 12,
+      head:[['Session','Track','Review reason','Status','Reviewer note']],
+      body:flags, theme:'striped', styles:{fontSize:7},
+      headStyles:{fillColor:[36,67,112]},
+      columnStyles:{4:{cellWidth:60}}
+    });
+  }
   pdf.save('VisionGuard-activity-report.pdf');
+}
+
+function exportIncidentsCSV(records: AnalysisRecord[]) {
+  const columns = ['Session','Source','Flag ID','Track ID','Review reason','Status','Observed at','Reviewer note'];
+  const rows = records.flatMap(run => run.violations.map(event => [
+    run.id, run.sourceName, event.id, event.trackId ?? '', event.type,
+    event.status, new Date(event.observedAt).toISOString(), event.evidenceNote
+  ]));
+  const csv = '\uFEFF'+[columns,...rows].map(row=>row.map(csvCell).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
+  const link = document.createElement('a');
+  link.href=url;link.download='VisionGuard-incident-review-flags.csv';link.click();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
 
 export function ActivityReports() {
@@ -230,15 +261,18 @@ export function ActivityReports() {
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
           <Stat label="Sessions" number={totals.runs} note="Included in report"/>
           <Stat label="Unique vehicles" number={totals.vehicles} note="Tracked objects"/>
-          <Stat label="Recorded incidents" number={totals.violations} note="Evidence-backed events"/>
+          <Stat label="Review flags" number={totals.violations} note="Require human verification"/>
         </div>
         <div className="mt-6 flex flex-wrap gap-2">
           <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportPDF(filtered)}
             className="vg-primary"><Download size={15}/> Download PDF</button>
           <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportCSV(filtered)}
-            className="vg-secondary"><Download size={15}/> Download CSV</button>
+            className="vg-secondary"><Download size={15}/> Vehicle CSV</button>
+          <button type="button" disabled={!loaded || !filtered.some(r=>r.violations.length)}
+            onClick={()=>exportIncidentsCSV(filtered)}
+            className="vg-secondary"><Download size={15}/> Incident review CSV</button>
         </div>
-        <p className="vg-footnote">Reports use saved analysis records. Image-derived speeds are approximate and not valid enforcement measurements.</p>
+        <p className="vg-footnote">PDF includes tracked vehicles and any saved review flags. Vehicle CSV contains tracks; incident CSV contains review flags. Image-derived speeds are approximate, not enforcement measurements.</p>
       </div>
     </section>
   </main>;
@@ -345,7 +379,7 @@ export function ActivityIncidents() {
   const chosenTrack = tracks.find(t => String(t.id) === trackId);
   const incidents = records.flatMap(item => item.violations.map(event => ({ run: item, event })))
     .sort((a,b)=>b.event.observedAt-a.event.observedAt);
-  const submitFlag = (event: React.FormEvent<HTMLFormElement>) => {
+  const submitFlag = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFeedback('');
     if (!userId || !run) return;
