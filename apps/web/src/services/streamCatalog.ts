@@ -38,12 +38,18 @@ function cleanUrl(raw: string): string {
     throw new Error('Browser analysis requires an HTTP(S) video or HLS URL. RTSP needs a secure HLS conversion server.');
   }
   if (url.username || url.password) throw new Error('Do not embed credentials in a stream URL.');
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' &&
+      url.protocol !== 'https:') {
+    throw new Error('HTTPS VisionGuard pages require HTTPS stream sources; HTTP sources are blocked as mixed content.');
+  }
   if (value.length > 2048) throw new Error('Stream URL is too long.');
   return url.toString();
 }
 export function validateStream(raw: string): { url: string; format: StreamSource['format'] } {
   const url = cleanUrl(raw);
-  return { url, format: /\.m3u8(?:\?|$)/i.test(url) ? 'hls' : 'video' };
+  // Test URL.pathname rather than the complete URL so query parameters and
+  // fragments do not cause valid HLS playlists to be treated as MP4 files.
+  return { url, format: new URL(url).pathname.toLowerCase().endsWith('.m3u8') ? 'hls' : 'video' };
 }
 
 export const streamCatalog = {
