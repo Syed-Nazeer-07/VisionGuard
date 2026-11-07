@@ -1,162 +1,207 @@
 <div align="center">
-  <img src="apps/web/public/favicon.svg" alt="VisionGuard" width="68" />
+  <img src="apps/web/public/favicon.svg" alt="VisionGuard logo" width="68" />
   <h1>VisionGuard</h1>
   <p><strong>Traffic footage → vehicle tracking → reviewable insight.</strong></p>
-  <p>A local-first traffic analysis workspace built with React, TypeScript, YOLO11s, ONNX Runtime Web and FastAPI.</p>
+  <p>Browser-based traffic video analysis with persistent tracking, session history, analytics and incident-review workflows.</p>
   <p>
-    <a href="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml"><img src="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml/badge.svg" alt="GitHub Actions CI" /></a>
+    <a href="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml"><img src="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
     <img src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" alt="React 19" />
     <img src="https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white" alt="TypeScript 6" />
     <img src="https://img.shields.io/badge/YOLO11s-ONNX-263e61" alt="YOLO11s ONNX" />
   </p>
   <p>
-    <a href="#what-the-application-does">Features</a> ·
-    <a href="#run-locally">Quick start</a> ·
-    <a href="#data-and-privacy">Data & privacy</a> ·
+    <a href="#features">Features</a> ·
+    <a href="#quick-start">Quick start</a> ·
+    <a href="#data-and-privacy">Privacy</a> ·
     <a href="#architecture">Architecture</a> ·
-    <a href="#current-release-limitations">Limitations</a>
+    <a href="#release-status">Release status</a>
   </p>
 </div>
 
-VisionGuard processes supported traffic video in your browser, draws moving vehicle detections, records account-scoped analysis history and organizes analytics, review flags and downloadable reports. A separate Python processing service is optional; it is not required by the browser workflow.
+---
 
-> **Release state: v1 core workflow / verification candidate.** The frontend builds and unit tests run in CI. Physical camera behavior, external video capture, model accuracy, B2 credentials, Google OAuth, and deployment must still be checked end-to-end before calling an installation production-ready. Speeds are approximate and not usable as enforcement evidence.
+VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime Web, then combines detections with optical tracking to maintain vehicle boxes and IDs across video frames. The same saved analysis records feed the overview, history, analytics, review flags and reports. A separate **Python/FastAPI backend is optional**, not a requirement for browser live analysis.
 
-## What the application does
+> **v1 core workflow · release candidate.** The code passes automated checks, but real-world detector accuracy, browser-tab capture, OAuth, Backblaze B2, device performance and hosted deployment require end-to-end acceptance testing. **Estimated speed is not a calibrated or legally verified measurement.**
 
-| Area | Current behavior |
+## Features
+
+| Workspace area | What you can do |
 | --- | --- |
-| Live Analysis | Open an uploaded video, device camera, or a user-approved browser tab; draw YOLO11s vehicle tracks on the video, including composite fullscreen |
-| Overview | Session totals, tracked vehicle counts, completed inference frames, and review-flag counts |
-| Analytics | Class distribution and saved sessions filtered by time window |
-| History | Saved analysis sessions and a list of original videos explicitly uploaded to Backblaze B2 |
-| Incidents | Create **pending-review flags** for observed events or a suspected speed estimate; these are not verified offences |
-| Reports | Download PDF vehicle/session reports, vehicle CSV, and incident-review CSV |
-| Settings | Account profile, user-specific workspace start page, and password updates |
-| Authentication | Supabase email/password and optional Google OAuth, with Admin roles controlled by server-owned profiles |
+| **Live analysis** | Analyze a local video, authorized browser tab or device camera using the browser-side YOLO11s worker |
+| **Detection & tracking** | View vehicle classes, stable session-level IDs and tracked boxes that expire when vehicles leave the frame |
+| **Speed estimates** | See approximate speed labels on tracked vehicles, plus the highest valid visible estimate; unavailable readings display **—** |
+| **Fullscreen** | Expand the composite video **with the detection canvas**, not the video alone |
+| **Overview & analytics** | Inspect saved sessions, unique vehicle tracks, frame counts and vehicle-class distribution |
+| **History** | Revisit account-scoped analysis summaries and see locally retained or explicitly cloud-saved video assets |
+| **Incidents** | Create **pending-review flags** tied to sessions and tracks; these are not confirmed traffic offences |
+| **Reports** | Export session/vehicle data as PDF or CSV, and incident-review records as CSV |
+| **Accounts & settings** | Email/password access, configurable Google sign-in, user-specific start pages and account settings |
 
-**One analysis source is active at a time.** There is no autonomous YouTube URL downloader or simultaneous multi-camera grid.
+**A single video source is analyzed at a time.** There is no automatic YouTube downloader, unattended stream scraping or multi-camera inference grid.
 
-### Source playback and capture
+### How it works
 
-- **File upload:** Choose a local video and analyze it without uploading it to any server.
-- **Device camera:** Camera permission is requested on demand; the camera is released when the page is hidden.
-- **YouTube Live:** Open the video in another browser tab. In Live Analysis, choose **Analyze browser tab**, select that tab in Edge/Chrome, and explicitly approve sharing. Pasting a YouTube URL does **not** give VisionGuard permission to extract the stream. Optionally keep an already-approved tab connected while navigating within the workspace, with a visible Stop button. Sharing permission cannot silently survive a browser restart.
-- **Fullscreen:** The composite player enters browser fullscreen with tracking boxes over the video. Press Escape to exit.
+1. **Choose footage:** select a local recording, open a permitted device camera or approve browser-tab sharing.
+2. **Track vehicles:** YOLO11s identifies candidates; optical tracking smooths boxes and associates IDs over time.
+3. **Review observations:** examine counts and **approximate** speeds. Create a review flag if an observation needs attention.
+4. **Revisit the session:** use **Overview**, **History**, **Analytics**, **Incidents** and **Reports**. Session metadata is stored locally and synchronized when cloud metadata is configured and available.
+5. **Keep video only if you choose:** optionally retain the local original or explicitly upload it to Backblaze B2. Analyzing a file does not automatically upload the video.
 
-See [Live analysis instructions](docs/LIVE_ANALYSIS.md).
+### Browser tabs and YouTube Live
+
+Open an authorized YouTube video/live page in Edge or Chrome, start playback, then return to VisionGuard and choose **Analyze browser tab**. Select the **browser tab** in the sharing picker—not your entire screen or a window—and approve sharing. VisionGuard cannot bypass browser permissions or extract a YouTube stream simply from its URL.
+
+Recent YouTube **links** are saved per account on that browser, but **not video bytes or sharing permissions**. You can optionally keep an already-approved tab capture connected while visiting other VisionGuard pages; a visible **Stop** control remains available. Browser-tab capture may pause or be throttled by the browser and must be reauthorized after a new browser session. Device cameras are released when hidden.
+
+See the [live analysis guide](docs/LIVE_ANALYSIS.md) for the complete workflow and troubleshooting.
+
+## Quick start
+
+### 1. Install and run
+
+Prerequisites: Git, a current supported **Node.js LTS** release with npm, and a modern Chromium-based browser (Edge or Chrome recommended).
+
+~~~powershell
+git clone https://github.com/Syed-Nazeer-07/VisionGuard.git
+cd VisionGuard
+npm ci
+npm run dev
+~~~
+
+Open **http://localhost:3000**.
+
+### 2. Provide the browser AI model
+
+The ONNX model binary is **not included in Git**. The browser detector expects:
+
+~~~text
+apps/web/public/models/yolo11s.onnx
+~~~
+
+Place a compatible, appropriately licensed **YOLO11s** ONNX export there. The frontend expects the relevant COCO classes and a compatible input/output tensor contract; an arbitrary ONNX model—or a different YOLO variant—is not guaranteed to work. See [model setup and validation](docs/MODEL_SETUP.md).
+
+> Without the model, the UI may load and the video may play, but **AI detection will not start**. The separate export workflow for **YOLO11n** is not a substitute for a compatible **YOLO11s** browser model.
+
+### 3. Connect an account (optional for local demo)
+
+To enable Supabase authentication and account metadata synchronization, copy:
+
+~~~powershell
+Copy-Item apps/web/.env.example apps/web/.env.local
+~~~
+
+Update **apps/web/.env.local** with your own project values:
+
+~~~env
+VITE_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+VITE_SUPABASE_ANON_KEY=YOUR_PUBLIC_PUBLISHABLE_KEY
+VITE_VIDEO_STORAGE_PROVIDER=b2
+~~~
+
+Restart Vite after changing environment variables. These are **browser-public** configuration values, not secret credentials. Never put Supabase service-role or secret keys, Google client secrets or Backblaze application keys in any `VITE_*` variable.
+
+**Without valid Supabase configuration**, VisionGuard uses a **local demo adapter**. Some legacy screens may show **sample records**, which are not real camera feeds, genuine detections or verified incidents. A configured account and correct database policies are necessary for authenticated cloud metadata synchronization.
+
+**Backblaze B2** is the optional destination for original cloud-saved video files. B2 requires a separately configured, authenticated server-side signing function and credentials. **Supabase Storage is not used for the original video files** in this workflow. For Google OAuth, follow the [Google sign-in guide](docs/GOOGLE_SIGN_IN.md).
+
+### Returning to an existing clone
+
+~~~powershell
+git status --short
+git pull --ff-only origin main
+npm ci
+npm run dev
+~~~
+
+Review or commit any local modifications before pulling if Git reports a conflict. The Python processing backend, when needed, is documented separately in [backend/README.md](backend/README.md).
 
 ## Data and privacy
 
-| Data | Location | Retention |
+| Data | Stored where | Important behavior |
 | --- | --- | --- |
-| Vehicle tracks, session counts, review flags | Browser IndexedDB; authenticated Supabase Postgres sync when available | Account scoped; session summaries retained until removed through supported workflows |
-| Original uploaded video | Not retained by default | Optional **Keep on this device** stores a local copy (subject to browser quotas) |
-| Explicitly cloud-saved original video | Backblaze B2 via authenticated server-side signing | Stored only after user selects **Save video to B2**; storage costs and configured lifecycle policies apply |
-| Auth accounts and workspace settings | Supabase Auth and PostgreSQL | Access is restricted by server-side policies |
-| Recently opened YouTube links | Browser localStorage, separately per account | Up to six recent URLs; not video bytes and not a persistent screen-sharing grant |
+| Vehicle tracks, session totals, review flags | Per-account browser IndexedDB; optional Supabase PostgreSQL sync | Local-first. Cloud history depends on working authentication, network access and database permissions |
+| Original selected file | In memory during analysis | Not kept across reloads by default |
+| Opted-in local video | Browser-local storage | **Keep this video on this device** depends on browser storage quotas and permissions |
+| Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2**; requires server-side configuration and may incur storage costs |
+| Account credentials and preferences | Supabase Auth / PostgreSQL when configured | Protected by server-side access policies |
+| Recent YouTube URLs | Browser localStorage, scoped by account | Up to six links; never a background capture permission or a download of the video |
 
-**Supabase Storage is not the destination for original uploaded video files.** Supabase supplies authentication, metadata and upload authorization; Backblaze B2 holds cloud video objects. Secret keys must remain server-side.
+The active video/capture component resets when the signed-in account changes, keeping in-memory capture and tracker state from crossing between users.
 
-**Speed caveat:** An arbitrary camera does not provide sufficient geometry to establish true road speed from pixels alone. VisionGuard's browser speed labels are estimates. A saved speed-review flag is a request for human verification, not a legal speeding violation.
+### Understanding the speed numbers
 
-## Run locally
+Image movement alone cannot reliably determine a vehicle's real road speed without appropriate camera geometry and calibration. The live card displays the **highest valid speed estimate for a currently visible tracked vehicle**, not the speed limit, a measured maximum for the entire video or a verified speeding event. Prediction-only boxes do not generate new speed measurements.
 
-Works with Windows, including Surface Laptop, and other systems supporting current Node.js and Chromium browsers.
-
-Prerequisites: a current supported Node.js LTS release with npm. Browser AI works in modern Chromium browsers; accelerated execution depends on the device, and WebAssembly fallback may be slower.
-
-```powershell
-git clone https://github.com/Syed-Nazeer-07/VisionGuard.git
-cd VisionGuard
-npm install
-npm run dev
-```
-
-Open `http://localhost:3000`. On existing clones:
-
-```powershell
-git status --short
-git pull --ff-only origin main
-npm run dev
-```
-
-**Model setup:** The YOLO ONNX model binary is not tracked in Git. Place a compatible YOLO11s model at `apps/web/public/models/yolo11s.onnx` before using the in-browser detector. Verify the model's input/output contract and licensing; see [model setup](docs/MODEL_SETUP.md).
-
-The optional local Python backend is documented in [backend/README.md](backend/README.md). The current browser-side live-analysis flow does **not** require it.
-
-### Authentication and B2 configuration
-
-Copy `apps/web/.env.example` to `apps/web/.env.local`:
-
-```env
-VITE_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_YOUR_PUBLIC_KEY
-VITE_VIDEO_STORAGE_PROVIDER=b2
-```
-
-Restart `npm run dev` after changing Vite variables. These are **public browser** settings; never put `service_role`, `sb_secret_*`, Google client secrets, or Backblaze application keys in `VITE_*` variables.
-
-Backblaze credentials and the signing function live on the server side and must be configured separately. Until they are configured, local analysis can work but B2 upload cannot.
-
-**Local preview vs. a connected account:** Without Supabase environment variables, the app uses a local demo adapter. Some legacy administration screens may contain seeded example records; these are **not real traffic incidents** or live camera data. Production history requires valid authentication and database policies.
-
-Google sign-in requires enabling the provider and redirect allowlist in Supabase and configuring Google Cloud credentials. See [Google sign-in setup](docs/GOOGLE_SIGN_IN.md).
+**Never use VisionGuard's current speed estimates or review flags as legal enforcement evidence.** Misclassification, occlusion, camera movement, lighting and dropped frames can also affect counts and tracking.
 
 ## Architecture
 
-```text
-Browser (React / Vite)
-  ├─ Video, webcam, or user-shared tab
-  ├─ YOLO11s ONNX Runtime Web Worker (WebGPU / WASM)
-  ├─ Optical tracking, bounded prediction, fullscreen canvas
-  └─ Analysis session ledger
-       ├─ IndexedDB per signed-in owner
-       ├─ Supabase Auth + Postgres sync (RLS)
-       └─ Overview / History / Analytics / Incidents / Reports
+~~~text
+React / TypeScript / Vite (browser)
+  ├── Local video · permission-granted camera · approved browser tab
+  ├── YOLO11s ONNX Runtime Web Worker (WebGPU when available; WASM fallback)
+  ├── Optical tracking + bounded prediction + synchronized video overlay
+  └── Local-first analysis activity ledger (per account)
+       ├── IndexedDB
+       ├── Supabase Auth + PostgreSQL metadata sync (RLS)
+       └── Overview · History · Analytics · Incidents · Reports
 
-Original video: optional local copy OR explicit upload to Backblaze B2.
-Python FastAPI analysis service: optional, separate from browser live workflow.
-```
+Original video: optional local retention or explicit Backblaze B2 upload
+Optional Python service: FastAPI analysis backend (separate workflow)
+~~~
 
-The live tracker assigns vehicle IDs **within an analysis session**. Those identifiers are not licence plates and are not globally unique across different videos. Counts, classifications, and speeds may be affected by occlusion, motion blur, missing frames, or model error.
+Track IDs refer to individual **analysis sessions**, not licence plates. They are not persistent identifiers across unrelated videos.
 
 ## Testing
 
-```powershell
+From the repository root:
+
+~~~powershell
 npm run lint
 npm run build
 npm run test -w web
-```
+~~~
 
-Optional backend checks:
+Optional Python backend tests (with backend dependencies installed):
 
-```powershell
+~~~powershell
 cd backend
 python -m pytest
-```
+~~~
 
-GitHub Actions runs frontend lint, TypeScript/build, unit tests, and deterministic backend checks. Successful CI verifies code behavior covered by tests, **not** browser/camera compatibility or traffic recognition quality on real footage.
+[GitHub Actions CI](.github/workflows/ci.yml) runs frontend lint, TypeScript/build checks, unit tests and deterministic backend checks. **A successful build does not verify that model weights exist or that detections are accurate on real footage.** WebGPU/WASM performance is hardware-dependent, particularly on Windows on ARM.
 
-## Current release limitations
+## Release status
 
-- Motorcycle detection and truck/bus classification remain model-dependent; human validation is necessary.
-- No real-world calibration or reliable automatic speeding offence detection is currently established.
-- YouTube/Edge tab sharing requires user consent each time; the browser can throttle background video capture.
-- Original video persistence depends on user choices, local storage quotas, B2 configuration and connectivity.
-- Google sign-in is implemented in the UI but cannot work until OAuth provider credentials/redirects are configured.
-- Legacy admin/archive screens and some lint warnings remain; full deployment and cross-device verification are still outstanding.
+**Current scope:** v1 core workflow / verification candidate, not a certified traffic-enforcement platform.
 
-## Repository
+Before a production deployment is presented as verified, the following still need real-world acceptance testing:
 
-- `apps/web/` — live web application and browser-side analysis pipeline
-- `backend/` — optional Python processing service and its tests
-- `supabase/migrations/` — database schemas and access policies (retain migration history)
-- `supabase/functions/` — authenticated server-side functions
-- `docs/LIVE_ANALYSIS.md` — user-approved browser-tab workflow
-- `docs/GOOGLE_SIGN_IN.md` — Google OAuth provider setup
-- `scripts/` and `Start-VisionGuard.bat` — development helpers
+- Detection, speed-overlay behavior, fullscreen and frame-edge tracking on representative videos and target hardware.
+- Authorized YouTube-tab capture, focus changes, browser permissions and camera lifecycle.
+- Account sign-up, confirmation and recovery, Google OAuth, and account isolation.
+- Backblaze B2 upload, authorized playback, re-analysis, retention and permissions.
+- HTTPS deployment, backups, rate limits and outstanding staging security/performance review findings.
 
-**Next planned capabilities (not part of the current release):** calibrated speed measurements, plate OCR, automated rule verification, multi-camera analysis, and independently validated enforcement evidence.
+See the [release acceptance checklist](docs/RELEASE_CHECKLIST.md), including the latest connected staging-database review.
 
-See [release acceptance checklist](docs/RELEASE_CHECKLIST.md) for the real-device, OAuth, B2 playback and deployment checks required before marking a production installation verified.
+**Future capabilities, not current claims:** calibrated road-speed measurements, licence-plate OCR, validated automatic violation classification and simultaneous multi-camera inference.
+
+## Repository guide
+
+| Location | Purpose |
+| --- | --- |
+| [`apps/web/`](apps/web/) | React UI, tracking pipeline, browser worker and application tests |
+| [`backend/`](backend/) | Optional FastAPI analysis service and evaluation utilities |
+| [`supabase/migrations/`](supabase/migrations/) | Versioned database schema and access-control policies |
+| [`supabase/functions/`](supabase/functions/) | Authenticated server-side operations and video signing |
+| [`docs/`](docs/) | Model setup, live analysis, authentication and release validation |
+| [`scripts/`](scripts/) | Development, model-validation and optional backend helpers |
+
+---
+
+<div align="center">
+  <strong>VisionGuard</strong><br />
+  <sub>Observe traffic. Track responsibly. Review before enforcement.</sub>
+</div>
