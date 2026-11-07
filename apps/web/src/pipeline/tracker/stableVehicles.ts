@@ -43,6 +43,30 @@ function compatibility(a: LiveTrack, b: LiveTrack) {
   return iou * 3 - distance / Math.max(10, (a.w + a.h) / 2) - (sizeRatio - 1) * .3;
 }
 
+
+/**
+ * Derive a heavy-vehicle label from actual YOLO bus/truck scores, averaged
+ * over successive sightings. Never infer TRUCK from cargo colour, and never
+ * claim a decisive BUS/TRUCK classification when scores are too close.
+ */
+export function chooseHeavyVehicleLabel(
+  scores: { bus: number; truck: number },
+  previous?: { className: string; classVotes?: Record<string, number>; confidence: number }
+): { label: string; votes: Record<string, number> } {
+  const previousBus = previous?.classVotes?.bus ??
+    (previous?.className === 'bus' ? previous.confidence : 0);
+  const previousTruck = previous?.classVotes?.truck ??
+    (previous?.className === 'truck' ? previous.confidence : 0);
+  const bus = Math.max(0, previousBus * .65 + (Number.isFinite(scores.bus) ? scores.bus : 0));
+  const truck = Math.max(0, previousTruck * .65 + (Number.isFinite(scores.truck) ? scores.truck : 0));
+  const confidentBus = bus >= .35 && bus >= truck * 1.55 && bus - truck >= .24;
+  const confidentTruck = truck >= .35 && truck >= bus * 1.55 && truck - bus >= .24;
+  const label = confidentBus ? 'bus' : confidentTruck ? 'truck' :
+    (previous?.className === 'bus' || previous?.className === 'truck')
+      ? previous.className : 'bus/truck';
+  return { label, votes: { bus, truck } };
+}
+
 /**
  * Match YOLO's newly detected vehicles to the optically tracked objects
  * already visible on the SAME display frame, never to 1-second-old boxes.
@@ -85,17 +109,15 @@ export function reconcileVehicles(
       const bounded = Math.max(oldValue * .78, Math.min(oldValue * 1.22, observed));
       return oldValue * .72 + bounded * .28;
     };
-    // Keep labels stable, but allow a repeatedly confirmed BUS/TRUCK class
-    // to correct an early CAR misclassification.
+    // For buses/trucks, smooth the actual class probabilities instead of
+    // inventing a label from the colour of a vehicle's roof or trailer.
+    const isHeavy = after.classScores && ['bus', 'truck', 'bus/truck'].includes(before.className);
+    const heavy = isHeavy ? chooseHeavyVehicleLabel(after.classScores!, before) : null;
     const oldVotes = before.classVotes ?? { [before.className]: before.confidence * 2 };
-    const votes = Object.fromEntries(Object.entries(oldVotes).map(([key, value]) => [key, value * .84]));
-    votes[after.className] = (votes[after.className] ?? 0) + after.confidence;
-    if (after.freightEvidence) {
-      // Optical and model voting must not undo a strong visible truck-cab
-      // correction and leave an obviously freight-bearing vehicle as BUS.
-      votes.truck = Math.max(votes.truck ?? 0, (votes.bus ?? 0) + after.confidence * 1.7);
-    }
-    const label = after.freightEvidence ? 'truck' :
+    const simpleVotes = Object.fromEntries(Object.entries(oldVotes).map(([key, value]) => [key, value * .84]));
+    simpleVotes[after.className] = (simpleVotes[after.className] ?? 0) + after.confidence;
+    const votes = heavy?.votes ?? simpleVotes;
+    const label = heavy?.label ??
       Object.entries(votes).sort((a, b) => b[1] - a[1])[0][0];
     assigned.push({
       ...after,
@@ -132,7 +154,11 @@ export function reconcileVehicles(
       id: persistentId,
       speedKmh: null,
       speedIsEstimate: true,
-      classVotes: { [candidate.className]: candidate.confidence * 2 },
+      className: candidate.classScores
+        ? chooseHeavyVehicleLabel(candidate.classScores).label : candidate.className,
+      classVotes: candidate.classScores
+        ? chooseHeavyVehicleLabel(candidate.classScores).votes
+        : { [candidate.className]: candidate.confidence * 2 },
       lastOpticalAt: mediaTime,
       isPredicted: false,
       lastDetectedAt: mediaTime
