@@ -33,6 +33,7 @@ export interface LocalAnalysis {
 const DB_NAME = 'visionguard-local-first-v1';
 const DB_VERSION = 1;
 const KEY = 'active';
+const scopedKey = (ownerId?: string) => ownerId ? 'user:' + ownerId : KEY;
 
 export function openLocalDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -48,23 +49,23 @@ export function openLocalDB(): Promise<IDBDatabase> {
   });
 }
 
-async function read<T>(store: string): Promise<T | undefined> {
+async function read<T>(store: string, ownerId?: string): Promise<T | undefined> {
   const database = await openLocalDB();
   try {
     return await new Promise<T | undefined>((resolve, reject) => {
-      const request = database.transaction(store, 'readonly').objectStore(store).get(KEY);
+      const request = database.transaction(store, 'readonly').objectStore(store).get(scopedKey(ownerId));
       request.onsuccess = () => resolve(request.result as T | undefined);
       request.onerror = () => reject(request.error);
     });
   } finally { database.close(); }
 }
 
-async function write(store: string, value: unknown): Promise<void> {
+async function write(store: string, value: unknown, ownerId?: string): Promise<void> {
   const database = await openLocalDB();
   try {
     await new Promise<void>((resolve, reject) => {
       const tx = database.transaction(store, 'readwrite');
-      tx.objectStore(store).put(value, KEY);
+      tx.objectStore(store).put(value, scopedKey(ownerId));
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
@@ -72,12 +73,12 @@ async function write(store: string, value: unknown): Promise<void> {
   } finally { database.close(); }
 }
 
-async function remove(store: string): Promise<void> {
+async function remove(store: string, ownerId?: string): Promise<void> {
   const database = await openLocalDB();
   try {
     await new Promise<void>((resolve, reject) => {
       const tx = database.transaction(store, 'readwrite');
-      tx.objectStore(store).delete(KEY);
+      tx.objectStore(store).delete(scopedKey(ownerId));
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error);
@@ -98,8 +99,8 @@ interface SavedVideoHandle {
  * to re-grant access after restarting, which is surfaced to the caller.
  * Older blob records remain readable for backwards compatibility.
  */
-export async function readSavedVideo(): Promise<SavedLocalVideo | undefined> {
-  const stored = await read<SavedLocalVideo | SavedVideoHandle>('video');
+export async function readSavedVideo(ownerId?: string): Promise<SavedLocalVideo | undefined> {
+  const stored = await read<SavedLocalVideo | SavedVideoHandle>('video', ownerId);
   if (!stored) return undefined;
   if ('file' in stored) return stored;
   const file = await stored.handle.getFile();
@@ -108,14 +109,14 @@ export async function readSavedVideo(): Promise<SavedLocalVideo | undefined> {
 
 export const localAnalysisStorage = {
   loadVideo: readSavedVideo,
-  saveVideo: (file: Blob, name: string) => write('video', { file, name }),
-  saveVideoHandle: (handle: FileSystemFileHandle, name: string) =>
-    write('video', { kind: 'file-handle', handle, name } satisfies SavedVideoHandle),
-  loadAnalysis: () => read<LocalAnalysis>('analysis'),
-  saveAnalysis: (analysis: LocalAnalysis) => write('analysis', analysis),
-  clearAnalysis: () => remove('analysis'),
-  loadPosition: async (): Promise<number> => (await read<number>('position')) ?? 0,
-  savePosition: (seconds: number) => write('position', seconds),
-  clearPosition: () => remove('position'),
-  clearVideo: () => remove('video'),
+  saveVideo: (file: Blob, name: string, ownerId?: string) => write('video', { file, name }, ownerId),
+  saveVideoHandle: (handle: FileSystemFileHandle, name: string, ownerId?: string) =>
+    write('video', { kind: 'file-handle', handle, name } satisfies SavedVideoHandle, ownerId),
+  loadAnalysis: (ownerId?: string) => read<LocalAnalysis>('analysis', ownerId),
+  saveAnalysis: (analysis: LocalAnalysis, ownerId?: string) => write('analysis', analysis, ownerId),
+  clearAnalysis: (ownerId?: string) => remove('analysis', ownerId),
+  loadPosition: async (ownerId?: string): Promise<number> => (await read<number>('position', ownerId)) ?? 0,
+  savePosition: (seconds: number, ownerId?: string) => write('position', seconds, ownerId),
+  clearPosition: (ownerId?: string) => remove('position', ownerId),
+  clearVideo: (ownerId?: string) => remove('video', ownerId),
 };
