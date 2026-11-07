@@ -23,12 +23,14 @@ const PHYSICAL_WIDTH_METERS: Record<string, number> = {
   bus: 2.55,
   truck: 2.50,
   train: 2.85,
+  'bus/truck': 2.55,
 };
 function classFamily(value: string): string {
-  return ['car', 'bus', 'truck'].includes(value) ? 'motor-vehicle' : value;
+  return ['car', 'bus', 'truck', 'bus/truck'].includes(value) ? 'motor-vehicle' : value;
 }
 function finiteTrack(t: LiveTrack) {
-  return [t.x, t.y, t.w, t.h].every(Number.isFinite) && t.w > 7 && t.h > 7;
+  const minimum = t.className === 'motorcycle' || t.className === 'bicycle' ? 4 : 7;
+  return [t.x, t.y, t.w, t.h].every(Number.isFinite) && t.w > minimum && t.h > minimum;
 }
 function compatibility(a: LiveTrack, b: LiveTrack) {
   if (classFamily(a.className) !== classFamily(b.className)) return -1;
