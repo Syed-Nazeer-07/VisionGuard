@@ -34,11 +34,33 @@ let floatBuffer: Float32Array | null = null;
 
 function errorText(e: unknown) { return e instanceof Error ? e.message : String(e); }
 
+async function verifyModelUrl(path: string) {
+  // Cloudflare Pages' SPA fallback can return index.html for a missing
+  // /models/yolo11s.onnx and otherwise produce an opaque ONNX parse failure.
+  // For external model hosts, HEAD must be CORS-authorized as well as GET.
+  let response: Response;
+  try {
+    response = await fetch(path, { method: 'HEAD', mode: 'cors' });
+  } catch (error) {
+    throw new Error('Cannot access YOLO11s model. Check the public model URL, HTTPS, ' +
+      'and model-host CORS permissions for GET and HEAD. ' + errorText(error));
+  }
+  if (!response.ok) {
+    throw new Error('YOLO11s model unavailable (HTTP ' + response.status +
+      '). Check VITE_YOLO_MODEL_URL or provide /models/yolo11s.onnx.');
+  }
+  if ((response.headers.get('content-type') ?? '').includes('text/html')) {
+    throw new Error('Expected YOLO11s ONNX model but received an HTML page. ' +
+      'The model file is missing or a SPA fallback intercepted the model URL.');
+  }
+}
+
 async function initialize(path: string) {
   if (session) {
     self.postMessage({ type: 'ready', provider: executionProvider });
     return;
   }
+  await verifyModelUrl(path);
   let gpuError = '';
   if ('gpu' in navigator) {
     try {

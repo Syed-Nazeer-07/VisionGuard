@@ -18,7 +18,9 @@ import {
   projectLiveTracks, type LiveTrack
 } from '../pipeline/tracker/liveProjection';
 
-const MODEL_PATH = '/models/yolo11s.onnx';
+// A separate, public HTTPS model host (for example R2) avoids Pages' 25 MiB
+// per-asset limit. A local model remains convenient during development.
+const MODEL_PATH = import.meta.env.VITE_YOLO_MODEL_URL?.trim() || '/models/yolo11s.onnx';
 const MIN_CAPTURE_INTERVAL = 0.12;
 const OPTICAL_INTERVAL = 0.085;
 const HISTORY_WINDOW = 3.5;
