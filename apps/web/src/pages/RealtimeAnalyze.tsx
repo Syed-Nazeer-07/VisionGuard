@@ -715,7 +715,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         const account = useAuthStore.getState().user?.id;
         if (account) void activityLedger.flush(account).catch(console.warn);
         video.pause();
-        void localAnalysisStorage.savePosition(video.currentTime, ownerId ?? undefined).catch(() => {});
+        if (webcamRef.current) {
+          stopWebcam();
+          setUrl('');
+          setStreamHealth('idle');
+          resetTracks();
+        } else if (!streamSourceRef.current) {
+          void localAnalysisStorage.savePosition(video.currentTime, ownerId ?? undefined).catch(() => {});
+        }
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
@@ -987,18 +994,37 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
       {(showStreamForm || streams.length > 0) && <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><h2 className="text-sm font-semibold text-slate-900">Live stream sources</h2>
-            <p className="mt-1 text-xs text-slate-500">Select a saved live HLS (.m3u8) or direct video URL. Selection persists for this account.</p>
+          <div><h2 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Radio size={16} className="text-indigo-500"/> Live stream sources
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Select one of your saved HLS (.m3u8) or direct video sources. Source names and URLs sync with your account.
+            </p>
           </div>
-          <select aria-label="Choose live stream" value={streamSource?.id ?? ''}
-            onChange={event => {
-              const source = streams.find(s=>s.id===event.target.value);
-              if (source) chooseStream(source);
-            }} className="min-w-44 rounded-lg border border-slate-200 px-3 py-2 text-sm">
-            <option value="">Select a live source</option>
-            {streams.map(source=><option key={source.id} value={source.id}>{source.name}</option>)}
-          </select>
+          <span className="rounded-full border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-600">
+            {streams.length} saved {streams.length === 1 ? 'source' : 'sources'}
+          </span>
         </div>
+        {streams.length > 0 && <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {streams.map(source => {
+            const selected = streamSource?.id === source.id;
+            return <button key={source.id} type="button" onClick={() => chooseStream(source)}
+              aria-pressed={selected}
+              className={'flex min-w-0 items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ' +
+                (selected ? 'border-indigo-400 bg-indigo-50 text-indigo-950' :
+                  'border-slate-200 bg-slate-50 text-slate-700 hover:border-indigo-300 hover:bg-white')}>
+              <Radio size={17} className={selected ? 'shrink-0 text-indigo-600' : 'shrink-0 text-slate-400'}/>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{source.name}</span>
+                <span className="block truncate text-[11px] text-slate-500">
+                  {source.format === 'hls' ? 'HLS stream' : 'Video URL'}
+                  {selected ? ' · Selected' : ''}
+                </span>
+              </span>
+              {selected && <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-500"/>}
+            </button>;
+          })}
+        </div>}
         {showStreamForm && <div className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
           <input aria-label="Source name" placeholder="Camera A · Main road" value={streamLabel}
             onChange={e=>setStreamLabel(e.target.value)} maxLength={80}
@@ -1006,7 +1032,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <input aria-label="Stream URL" placeholder="https://example.com/live/playlist.m3u8"
             value={streamUrlInput} onChange={e=>setStreamUrlInput(e.target.value)}
             className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-sm"/>
-          <button type="button" onClick={addStream} className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
+          <button type="button" onClick={addStream} disabled={!ownerId}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
             Save and select
           </button>
         </div>}
@@ -1020,7 +1047,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             setError('Stream removed here, but cloud removal is pending: ' + String(error));
           });
         }} className="text-xs font-medium text-red-600">Remove selected source</button>}
-        <p className="text-xs text-slate-500">Browser-based analysis requires media with CORS permission. RTSP and private camera credentials require an authenticated server-side relay; they cannot be used directly.</p>
+        <p className="text-xs leading-5 text-slate-500">
+          Only one source is analyzed at a time, using the existing YOLO11s detector.
+          Remote feeds must allow browser playback and cross-origin frame access (CORS).
+          RTSP feeds need an authenticated HLS conversion service. Do not paste private camera passwords or secret-bearing URLs.
+        </p>
       </section>}
 
       {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
@@ -1092,6 +1123,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   firstFrameResolveRef.current = null;
                   setError(streamSource
                     ? 'This stream cannot be played. Check its URL, media codec, availability and CORS headers.'
+                    : webcamRef.current ? 'The camera stream was interrupted.'
                     : 'The browser cannot decode this video. Try converting it to H.264 MP4.');
                 }}
               />
