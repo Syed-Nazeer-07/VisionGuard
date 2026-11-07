@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcileVehicles, updateScreenSpeed, type PersistentTrack } from './stableVehicles';
+import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack } from './stableVehicles';
 import type { LiveTrack } from './liveProjection';
 
 function car(x: number, y = 120, id = 0): LiveTrack {
@@ -66,4 +66,40 @@ describe('persistent crowded vehicle tracking', () => {
     const missed = reconcileVehicles(first.tracks, [], 3, first.nextId);
     expect(missed.tracks).toHaveLength(0);
   });
+  it('briefly holds a lost car before expiring it, without inventing motion or km/h', () => {
+    const before: PersistentTrack = {
+      ...car(100, 120, 5), id: 5, lastDetectedAt: 1,
+      lastOpticalAt: 1, speedKmh: 0, speedIsEstimate: true, vx: 0, vy: 0
+    };
+    const brief = recoverBriefOpticalMisses([before], [], 1, 1.12, 300, 300);
+    expect(brief).toHaveLength(1);
+    expect(brief[0].id).toBe(5);
+    expect(brief[0].speedKmh).toBe(0);
+    expect(brief[0].isPredicted).toBe(true);
+    const gone = recoverBriefOpticalMisses(brief, [], 1.30, 1.45, 300, 300);
+    expect(gone).toHaveLength(0);
+  });
+
+  it('does not freeze a box at the edge after the vehicle exits', () => {
+    const before: PersistentTrack = {
+      ...car(300, 120, 9), id: 9, lastDetectedAt: 2,
+      lastOpticalAt: 2, speedKmh: null, speedIsEstimate: true,
+      vx: 180, vy: 0
+    };
+    expect(recoverBriefOpticalMisses([before], [], 2, 2.20, 300, 300)).toEqual([]);
+  });
+
+  it('limits abrupt bus/truck box size changes during the same persistent track', () => {
+    const before: PersistentTrack = {
+      ...car(100, 120, 4), id: 4, w: 60, h: 80, lastDetectedAt: 1,
+      speedKmh: null, speedIsEstimate: true, className: 'truck'
+    };
+    const after = { ...before, id: 101, w: 110, h: 145, className: 'bus' };
+    const merged = reconcileVehicles([before], [after], 2, 102);
+    expect(merged.tracks).toHaveLength(1);
+    expect(merged.tracks[0].id).toBe(4);
+    expect(merged.tracks[0].w).toBeLessThan(65);
+    expect(merged.tracks[0].h).toBeLessThan(88);
+  });
+
 });
