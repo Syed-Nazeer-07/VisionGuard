@@ -23,17 +23,19 @@ and on the target Windows/Edge computer before promoting the release.
 | Incident decisions | Mark automatic/manual flags **Reviewed**, **Dismissed**, and **Reopen**. Refresh and verify preserved evidence, IDs, status filter totals and monotonic history revisions |
 | Review export consistency | PDF and incident CSV display human-readable statuses, including dismissed items; reviewed never means confirmed traffic enforcement |
 | Cross-device metadata | Sign in to two browsers and test concurrent incident decisions; verify stale upserts return old DB revisions, conflicting flags are reconciled and retried, missing acknowledgments surface warnings, and local evidence remains intact |
-| Cloud recovery | Simulate offline work and return online; verify unacknowledged data stays in IndexedDB, automatic retry is bounded, and Supabase RLS still restricts each account to its own records |
+| Cloud recovery | Simulate offline work and return online; verify unacknowledged data stays in IndexedDB, genuine conflict retries are bounded, and Supabase RLS still restricts accounts |
+| Continuous cloud sync | Run inference while a cloud upsert is pending; new frames must NOT cause false conflict exhaustion. Stop playback during the 15-second cloud throttle and verify the last local revision eventually uploads |
 | Fast repeated updates | Create incident decisions and optical observations within the same millisecond; revisions stay monotonically increasing so the anti-stale trigger cannot silently discard changes |
 | Reload persistence | Saved session data survives reload without duplicating IDs |
 | Local video opt-in | Unchecked means original bytes are not retained across reloads |
 | Optional local retention | Checked retains video only within available browser quota |
 | B2 storage | Explicit upload completes, appears in History, opens via signed GET URL |
-| B2 re-analysis | Archive **Analyze Again** loads video into browser detector; bucket CORS permits reading its frames |
+| B2 re-analysis | **Analyze Again** is shown only for a completed stored original; metadata-only rows and failed/in-progress uploads instead offer **Choose file**. Signed URLs and bucket CORS must still permit playback |
 | Offline and reconnect | Metadata and reviewer decisions stay local offline, sync after reconnect, and refresh from cloud on foreground return (throttled) |
 | Account switching | Account settings, video/capture state and tracked history do not leak between users |
 | Device performance | Sustainable inference speed verified on Surface Laptop 7 / Windows ARM |
-| Report clarity | Estimated speeds never described as verified offences |
+| Report clarity | Speed labels explicitly say **uncalibrated**, with no claim of measured road speed or verified offence |
+| Count consistency | Dashboard, History, Analytics and Reports count repeated track IDs consistently, excluding one-frame noise while preserving raw candidate evidence; inspect ID-switch inflation separately |
 | Cloudflare Workers/Pages | Production build guard, Hugging Face model/CORS, version-matched external ONNX Runtime WASM, security headers and 25 MiB limit validated on deployed HTTPS site |
 | Deployment | HTTPS, secure server-side B2 credentials, RLS, rate limits and backup/recovery policy verified |
 

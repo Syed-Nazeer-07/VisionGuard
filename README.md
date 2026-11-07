@@ -36,10 +36,10 @@ VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime
 | --- | --- |
 | **Live analysis** | Analyze a local video, authorized browser tab or device camera using the browser-side YOLO11s worker |
 | **Detection & tracking** | View vehicle classes, stable session-level IDs and tracked boxes that expire when vehicles leave the frame |
-| **Speed estimates** | See approximate speed labels on tracked vehicles, plus the highest valid visible estimate; unavailable readings display **—** |
+| **Speed estimates** | See clearly marked **uncalibrated optical speed proxies** (km/h*), not measured road speeds; unavailable readings display **—** |
 | **Fullscreen** | Expand the composite video **with the detection canvas**, not the video alone |
-| **Overview & analytics** | Inspect saved sessions, unique vehicle tracks, frame counts and vehicle-class distribution |
-| **History** | Revisit account-scoped analysis summaries and see locally retained or explicitly cloud-saved video assets |
+| **Overview & analytics** | Inspect saved sessions, **repeatedly observed track IDs** (excluding brief/noisy candidates), frame counts and class distribution |
+| **History** | Revisit analysis summaries; replay only uploaded/retained original footage. Missing cloud files get a **Choose file** action instead of broken reanalysis |
 | **Incidents** | Automatic high-speed-estimate and stationary-vehicle candidates, compact manual entry, and **Mark reviewed / Dismiss / Reopen** actions with status filters; none are confirmed offences |
 | **Reports** | Export session/vehicle data as PDF or CSV, and incident-review records as CSV; **pending, reviewed and dismissed** flags retain their status |
 | **Accounts & settings** | Email/password access, configurable Google sign-in, user-specific start pages and account settings |
@@ -150,15 +150,15 @@ Review or commit any local modifications before pulling if Git reports a conflic
 | --- | --- | --- |
 | Vehicle tracks, session totals, review flags | Per-account browser IndexedDB; optional Supabase PostgreSQL sync | Local-first. Cloud writes verify server acknowledgments, retry bounded conflicting revisions and preserve merged local history if sync remains unavailable |
 | Original selected file | In memory during analysis | Not kept across reloads by default |
-| Opted-in local video | Browser-local storage | **Keep this video on this device** depends on browser storage quotas and permissions |
-| Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2**; requires server-side configuration and may incur storage costs |
+| Opted-in local video | Browser-local storage | **Keep this video on this device** retains the most recently saved local file, subject to browser quotas/permissions; it does not upload it |
+| Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2**; incomplete uploads and metadata-only session records cannot be replayed |
 | Account credentials and preferences | Supabase Auth / PostgreSQL when configured | Protected by server-side access policies |
 
 The active video/capture component resets when the signed-in account changes, keeping in-memory capture and tracker state from crossing between users.
 
 ### Understanding the speed numbers
 
-Image movement alone cannot reliably determine a vehicle's real road speed without appropriate camera geometry and calibration. The live card displays the **highest valid speed estimate for a currently visible tracked vehicle**, not the speed limit, a measured maximum for the entire video or a verified speeding event. Prediction-only boxes do not generate new speed measurements.
+Image movement alone cannot reliably determine a vehicle's real road speed without appropriate camera geometry and calibration. VisionGuard's `km/h*` label is a **relative optical speed proxy** based on assumed vehicle widths and image movement, **not a calibrated road-speed measurement**; it can materially under- or over-estimate actual driving speed. The live card shows the highest available proxy among currently visible tracks, not a road speed limit or verified speeding event. Prediction-only boxes do not create new measurements.
 
 **Never use VisionGuard's current speed estimates or review flags as legal enforcement evidence.** A flag marked **Reviewed** only records a user workflow decision; it does not establish a violation. Misclassification, occlusion, camera movement, lighting and dropped frames can also affect counts and tracking.
 
@@ -178,7 +178,7 @@ Original video: optional local retention or explicit Backblaze B2 upload
 Optional Python service: FastAPI analysis backend (separate workflow)
 ~~~
 
-Track IDs refer to individual **analysis sessions**, not licence plates. They are not persistent identifiers across unrelated videos.
+Track IDs refer to individual **analysis sessions**, not licence plates. Dashboard and analytics totals now count only IDs observed repeatedly (at least two observations spanning 0.18 seconds at adequate detection confidence). Short-lived candidates remain available in raw exports. **ID switches after occlusion can still count one physical vehicle more than once**; no cross-session re-identification is claimed.
 
 ## Browser tracking evaluation
 
@@ -203,6 +203,11 @@ browser has newer history, the app merges distinct incident flags and vehicle
 observations, keeps the newer explicitly timestamped review decision, and
 retries synchronization up to three times. Failed sync remains **local and
 visible as a warning** rather than being marked as a successful backup.
+
+Continuous inference updates arriving while a previous cloud write is in
+flight are now queued for the next upload rather than misreported as a
+three-attempt conflict. A scheduled upload also covers the final revision
+when a video stops during the cloud throttle interval.
 
 This is *best-effort owner-scoped metadata synchronization*, **not**
 transactional multi-user collaboration. Simultaneous decisions from
