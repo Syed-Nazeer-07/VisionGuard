@@ -266,6 +266,35 @@ export function mergeEstimatedSpeeds(
   return updated ?? vehicles;
 }
 
+/** Change a review decision without mutating a session or silently dropping
+ * detector evidence. A monotonic revision ensures two rapid updates remain
+ * distinguishable for IndexedDB/cloud revision checks.
+ * "approved" means a human reviewed a flag, NOT a legally proven offence.
+ */
+export function changeIncidentReviewStatus(
+  records: AnalysisRecord[],
+  runId: string,
+  eventId: string,
+  status: ViolationRecord['status'],
+  now = Date.now(),
+): AnalysisRecord[] {
+  if (!runId || !eventId || !['pending_review', 'approved', 'rejected'].includes(status))
+    return records;
+  let changed = false;
+  const next = records.map(run => {
+    if (run.id !== runId || !run.violations.some(event => event.id === eventId &&
+        event.status !== status)) return run;
+    changed = true;
+    return {
+      ...run,
+      updatedAt: Math.max(Number.isFinite(now) ? now : Date.now(), run.updatedAt + 1),
+      violations: run.violations.map(event =>
+        event.id === eventId ? { ...event, status } : event),
+    };
+  });
+  return changed ? next : records;
+}
+
 /** Scoped to a real authenticated account. Never shares records across sign-ins. */
 export const activityLedger = {
   load(ownerId: string) { return ensureLoaded(keyFor(ownerId)); },
@@ -353,6 +382,18 @@ export const activityLedger = {
     }
   },
   cloudState(ownerId: string) { return cloudStatus.get(keyFor(ownerId)) ?? 'idle'; },
+  setIncidentReviewStatus(
+    ownerId: string, runId: string, eventId: string, status: ViolationRecord['status']
+  ): boolean {
+    if (!ownerId) return false;
+    let updated = false;
+    change(keyFor(ownerId), records => {
+      const next = changeIncidentReviewStatus(records, runId, eventId, status);
+      updated = next !== records;
+      return next;
+    });
+    return updated;
+  },
   addReviewedViolation(ownerId: string, runId: string, event: ViolationRecord) {
     if (!ownerId || !event.evidenceNote.trim()) return;
     change(keyFor(ownerId), records => {
@@ -400,6 +441,12 @@ export function summarizeActivity(records: readonly AnalysisRecord[]) {
     analyzedFrames: records.reduce((sum,r) => sum + r.analyzedFrames, 0),
     maximumVisible: records.reduce((max,r) => Math.max(max, r.maximumVisibleVehicles), 0),
     violations: records.reduce((sum,r) => sum + r.violations.length, 0),
+    pendingReviews: records.reduce((sum,r) =>
+      sum + r.violations.filter(event => event.status === 'pending_review').length, 0),
+    reviewedFlags: records.reduce((sum,r) =>
+      sum + r.violations.filter(event => event.status === 'approved').length, 0),
+    dismissedFlags: records.reduce((sum,r) =>
+      sum + r.violations.filter(event => event.status === 'rejected').length, 0),
     distribution
   };
 }
