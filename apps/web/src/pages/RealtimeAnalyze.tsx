@@ -726,6 +726,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   }, [webcamActive, tabCaptureActive, url]);
 
   useEffect(() => {
+    if (!tabCaptureActive || readyVideo || !active) return;
+    const timeout = window.setTimeout(() => {
+      const video = videoRef.current;
+      if (captureKindRef.current !== 'tab' || !webcamRef.current ||
+          (video && video.readyState >= 2)) return;
+      setStreamHealth('buffering');
+      setError('Sharing is approved, but no video frames have arrived. Confirm the YouTube video is playing in the selected tab; if necessary, stop and share the tab again.');
+    }, 12_000);
+    return () => window.clearTimeout(timeout);
+  }, [tabCaptureActive, readyVideo, active]);
+
+  useEffect(() => {
     if (!(tabCaptureActive || webcamActive) || !active) return;
     const timer = window.setInterval(() => {
       const video = videoRef.current;
@@ -1064,7 +1076,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       <header className="vg-page-header">
         <div>
           <h1>Live analysis</h1>
-          <p>Video, stream, and camera detection</p>
+          <p>Analyze files, YouTube tabs, or a browser camera</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
