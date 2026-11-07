@@ -188,11 +188,21 @@ export function planCloudAcknowledgements(
     const server = byId.get(sentRun.id);
     if (!server) throw Error('Cloud omitted an analysis revision.');
     const current = currentById.get(sentRun.id) ?? sentRun;
+    // An accepted write can finish AFTER more video frames arrived locally.
+    // Those newer frames are queued for the next scheduled sync, not a
+    // conflict requiring immediate retries while inference is still running.
+    // Only a returned row which differs from the SENT snapshot indicates
+    // a genuine server conflict (e.g. a stale-update trigger returned OLD).
+    const acceptedSent = equivalentContent(sentRun, server.record);
     return {
       runId: sentRun.id,
       acceptedRevisionAt: server.revisionAt,
       current,
-      resolved: reconcileAnalysisRun(current, server.record, server.revisionAt),
+      resolved: acceptedSent ?
+        { record: current, needsUpload: false } :
+        reconcileAnalysisRun(current, server.record, server.revisionAt),
+      acceptedSent,
+      pendingLocalUpdates: acceptedSent && !sameAnalysisRecord(current, server.record),
     };
   });
 }

@@ -127,8 +127,21 @@ describe('stale Supabase upsert responses', () => {
     const sent = record(800);
     const latest = record(900,{violations:[incident('approved',900)]});
     const [ack] = planCloudAcknowledgements([sent],[row(sent)], [latest]);
-    expect(ack.resolved.needsUpload).toBe(true);
+    expect(ack.acceptedSent).toBe(true);
+    expect(ack.pendingLocalUpdates).toBe(true);
+    expect(ack.resolved.needsUpload).toBe(false);
     expect(ack.resolved.record.violations[0].status).toBe('approved');
+  });
+  it('does not exhaust retries while live frames keep arriving during successful writes', () => {
+    const sent = record(1000, { analyzedFrames: 50 });
+    const latest = record(1010, { analyzedFrames: 60 });
+    const [ack] = planCloudAcknowledgements([sent], [
+      { run_id: sent.id, payload: sent, updated_at: new Date(1000).toISOString() },
+    ], [latest]);
+    expect(ack.acceptedSent).toBe(true);
+    expect(ack.resolved.needsUpload).toBe(false);
+    expect(ack.pendingLocalUpdates).toBe(true);
+    expect(ack.resolved.record.analyzedFrames).toBe(60);
   });
   it('rejects missing rows and duplicates rather than inventing success', () => {
     const sent = record(800);
