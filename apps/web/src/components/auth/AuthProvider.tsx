@@ -3,8 +3,6 @@ import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '../../lib/supabase'
 import { useAuthStore, type Role } from '../../store/auth'
 import { AuthContext, type AuthContextType, useAuth } from '../../context/AuthContext'
-import { Shield } from 'lucide-react'
-import { motion } from 'framer-motion'
 
 export { useAuth, AuthContext }
 
