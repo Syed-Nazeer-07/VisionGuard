@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, AlertTriangle, Film, Play, RefreshCw, Upload, X } from 'lucide-react';
+import { Activity, AlertTriangle, Camera, Film, Play, RefreshCw, Radio, Upload, X } from 'lucide-react';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { uploadStorageProvider } from '../services/videoStorage';
@@ -27,6 +27,10 @@ type WorkerEvent =
   | { type: 'error'; requestId: number; generation: number; message: string };
 
 type DetectorState = 'idle' | 'loading' | 'ready' | 'error';
+type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecting' | 'error';
+const MAX_STREAM_RETRIES = 3;
+const STREAM_STALL_MS = 15_000;
+const STREAM_RETRY_DELAY_MS = 1_500;
 
 function readableTime(value: number) {
   const seconds = Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
@@ -49,6 +53,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudError, setCloudError] = useState('');
   const [streams, setStreams] = useState<StreamSource[]>([]);
   const [streamSource, setStreamSource] = useState<StreamSource | null>(null);
+  const streamSourceRef = useRef<StreamSource | null>(null);
+  const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
+  const [streamReloadKey, setStreamReloadKey] = useState(0);
+  const lastPresentedAtRef = useRef(0);
+  const streamRetryCountRef = useRef(0);
+  const [streamRetries, setStreamRetries] = useState(0);
   const [showStreamForm, setShowStreamForm] = useState(false);
   const [streamLabel, setStreamLabel] = useState('');
   const [streamUrlInput, setStreamUrlInput] = useState('');
@@ -286,7 +296,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setPosition(0);
     setFilename(source.name);
     setUrl(source.url);
+    streamSourceRef.current = source;
     setStreamSource(source);
+    setStreamHealth('connecting');
+    lastPresentedAtRef.current = performance.now();
+    streamRetryCountRef.current = 0;
+    setStreamRetries(0);
     setStorage('not-saved');
     setError('');
     loadStartRef.current = performance.now();
@@ -319,7 +334,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setStreams(remote);
       const selected = remote.find(source=>source.id===streamCatalog.active(ownerId));
       if (selected && !currentFileRef.current &&
-          startedGeneration === uploadGenerationRef.current) chooseStream(selected);
+          startedGeneration === uploadGenerationRef.current &&
+          streamSourceRef.current?.id !== selected.id) chooseStream(selected);
     }).catch(error => {
       if (mounted) setError('Live sources available on this device; cloud sync unavailable: ' + String(error));
     });
@@ -364,7 +380,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       return;
     }
     uploadGenerationRef.current += 1;
+    streamSourceRef.current = null;
     setStreamSource(null);
+    setStreamHealth('idle');
     if (ownerId) streamCatalog.select(ownerId, null);
     currentFileRef.current = file;
     currentHandleRef.current = handle ?? null;
@@ -473,7 +491,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setFilename('');
     setReadyVideo(false);
     setPlaying(false);
+    streamSourceRef.current = null;
     setStreamSource(null);
+    setStreamHealth('idle');
     if (ownerId) streamCatalog.select(ownerId, null);
     currentFileRef.current = null;
     currentHandleRef.current = null;
@@ -496,26 +516,88 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     void persistenceQueueRef.current.catch(e => setError('Could not clear local video: ' + String(e)));
   };
 
+  const reconnectStream = () => {
+    if (!streamSourceRef.current) return;
+    resetTracks();
+    setError('');
+    setStreamHealth('connecting');
+    lastPresentedAtRef.current = performance.now();
+    streamRetryCountRef.current = 0;
+    setStreamRetries(0);
+    setStreamReloadKey(value => value + 1);
+  };
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !streamSource || streamSource.format !== 'hls') return;
     if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
+        backBufferLength: 20,
+        maxBufferLength: 15,
+      });
+      let retryTimer: number | null = null;
+      let closed = false;
       hls.attachMedia(video);
-      hls.loadSource(streamSource.url);
+      hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+        if (!closed) hls.loadSource(streamSource.url);
+      });
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        void video.play().catch(() => {});
+        if (closed) return;
+        setStreamHealth('connecting');
+        void video.play().catch(() => {
+          // Some browsers require the user to press Play, even while muted.
+          setStreamHealth('buffering');
+        });
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) setError('Live stream playback error: ' + data.details +
-          '. Check the stream URL and its CORS policy.');
+        if (closed || !data.fatal) return;
+        const attempt = ++streamRetryCountRef.current;
+        setStreamRetries(attempt);
+        if (attempt > MAX_STREAM_RETRIES) {
+          setStreamHealth('error');
+          setError('Live stream stopped (' + data.details +
+            '). Check its availability, codec and CORS settings, then press Reconnect.');
+          hls.stopLoad();
+          return;
+        }
+        setStreamHealth('reconnecting');
+        if (retryTimer !== null) window.clearTimeout(retryTimer);
+        retryTimer = window.setTimeout(() => {
+          if (closed) return;
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
+          else hls.startLoad();
+        }, STREAM_RETRY_DELAY_MS * attempt);
       });
-      return () => { hls.destroy(); };
+      return () => {
+        closed = true;
+        if (retryTimer !== null) window.clearTimeout(retryTimer);
+        hls.destroy();
+      };
     }
-    // Safari may play HLS natively.
-    if (video.canPlayType('application/vnd.apple.mpegurl')) video.src = streamSource.url;
-    else setError('HLS is not available in this browser.');
-  }, [streamSource]);
+    // Safari supports HLS natively and handles reconnection independently.
+    if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      video.src = streamSource.url;
+      return;
+    }
+    setStreamHealth('error');
+    setError('HLS is not supported by this browser. Use a compatible Edge/Chrome/Safari version.');
+  }, [streamSource, streamReloadKey]);
+
+  // Media can stall without emitting an HLS fatal error. Make the stalled
+  // state visible instead of showing a misleading permanent LIVE badge.
+  useEffect(() => {
+    if (!streamSource || !active) return;
+    const timer = window.setInterval(() => {
+      const video = videoRef.current;
+      if (!video || video.paused || video.ended || video.seeking) return;
+      if (performance.now() - lastPresentedAtRef.current > STREAM_STALL_MS) {
+        setStreamHealth('buffering');
+      }
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [streamSource, active]);
 
   useEffect(() => {
     if (active) return;
@@ -570,6 +652,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     let fallbackId: number | null = null;
 
     const maybeInfer = (mediaTime: number) => {
+      if (activeRef.current && streamSourceRef.current) {
+        lastPresentedAtRef.current = performance.now();
+      }
       if (stopped || !activeRef.current ||
           !video.videoWidth || !video.videoHeight || video.paused || video.seeking ||
           video.ended || video.readyState < 2 || !Number.isFinite(mediaTime)) return;
@@ -841,7 +926,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="relative aspect-video w-full overflow-hidden bg-[#080e20]">
           {url ? (
             <>
-              <video ref={videoRef} src={streamSource?.format === 'hls' ? undefined : url}
+              <video key={streamSource ? streamSource.id + ':' + streamReloadKey : 'uploaded-file'}
+                ref={videoRef} src={streamSource?.format === 'hls' ? undefined : url}
                 crossOrigin={streamSource ? 'anonymous' : undefined}
                 controls autoPlay muted playsInline preload="auto"
                 className="h-full w-full object-contain"
@@ -866,6 +952,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   setPlaying(true);
                   startDetector();
                 }}
+                onPlaying={() => {
+                  setPlaying(true);
+                  if (streamSourceRef.current) {
+                    setStreamHealth('playing');
+                    setStreamRetries(0);
+                    streamRetryCountRef.current = 0;
+                    lastPresentedAtRef.current = performance.now();
+                  }
+                }}
+                onWaiting={() => {
+                  if (streamSourceRef.current) setStreamHealth('buffering');
+                }}
+                onStalled={() => {
+                  if (streamSourceRef.current) setStreamHealth('buffering');
+                }}
                 onPause={event => {
                   setPlaying(false);
                   if (!streamSource) void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId ?? undefined).catch(() => {});
@@ -879,6 +980,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
                 onError={() => {
+                  if (streamSourceRef.current) setStreamHealth('error');
                   firstFrameResolveRef.current?.();
                   firstFrameResolveRef.current = null;
                   setError(streamSource
@@ -889,7 +991,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
               <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-semibold text-white">
-                  {readyVideo ? (playing ? 'LIVE PLAYBACK' : 'PAUSED') : 'OPENING VIDEO'}
+                  {streamSource ? (
+                    streamHealth === 'playing' ? 'STREAM LIVE' :
+                    streamHealth === 'reconnecting' ? 'RECONNECTING ' + streamRetries + '/' + MAX_STREAM_RETRIES :
+                    streamHealth === 'buffering' ? 'BUFFERING' :
+                    streamHealth === 'error' ? 'STREAM OFFLINE' : 'CONNECTING'
+                  ) : readyVideo ? (playing ? 'PLAYING VIDEO' : 'PAUSED') : 'OPENING VIDEO'}
                 </span>
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-medium text-white">
                   {detector === 'ready' ? (visibleCount ? 'Tracking ' + visibleCount + ' vehicles'
@@ -920,6 +1027,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {streamSource && <button type="button" onClick={reconnectStream}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
+                <RefreshCw size={14} /> Reconnect stream
+              </button>}
               {detector === 'error' && <button type="button" onClick={startDetector}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
                 <RefreshCw size={14} /> Retry detector
