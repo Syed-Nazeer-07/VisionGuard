@@ -316,7 +316,7 @@ export function VideoLibrary() {
                                 title={`Run fresh inference on ${name}`}
                               >
                                 <RotateCcw className="w-3 h-3 text-slate-500" /> Analyze Again
-                              </button> : <button type="button" onClick={() => navigate('/app/analyze')}
+                              </button> : <button type="button" onClick={() => navigate('/app/analyze?video=' + encodeURIComponent(video.id))}
                                 className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-600 border border-slate-200 rounded-md text-xs font-medium hover:bg-slate-50"
                                 title="No cloud video file. Choose the original video again.">
                                 <Upload className="w-3 h-3"/> Choose file
@@ -331,7 +331,7 @@ export function VideoLibrary() {
                               <Play className="w-3 h-3 fill-current" /> Analyze Video
                             </button>
                           ) : (
-                            <button type="button" onClick={() => navigate('/app/analyze')}
+                            <button type="button" onClick={() => navigate('/app/analyze?video=' + encodeURIComponent(video.id))}
                               className="inline-flex items-center gap-1 px-2.5 py-1 border border-slate-200 rounded-md text-xs text-slate-700 font-medium hover:bg-slate-50"
                               title="Original footage is not uploaded. Choose it again in Live Analysis.">
                               <Upload className="w-3 h-3"/> Choose file
