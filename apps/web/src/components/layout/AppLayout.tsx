@@ -38,6 +38,7 @@ export function AppLayout() {
   const { user, role } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [tabSharing, setTabSharing] = useState(false);
   const currentRole = role || 'Viewer';
   const activeAnalyze = location.pathname === '/app/analyze';
   const page = NAV.find(item => item.to === location.pathname);
@@ -46,6 +47,14 @@ export function AppLayout() {
   const initial = displayName.trim().slice(0, 1).toUpperCase() || 'U';
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    const onStatus = (event: Event) => {
+      const detail = (event as CustomEvent<{active: boolean}>).detail;
+      setTabSharing(!!detail?.active);
+    };
+    window.addEventListener('visionguard:tab-capture-status', onStatus);
+    return () => window.removeEventListener('visionguard:tab-capture-status', onStatus);
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -146,9 +155,23 @@ export function AppLayout() {
             <h1 className="truncate text-[15px] font-semibold tracking-[-.02em] text-[#1d2d44]">{title}</h1>
           </div>
         </div>
-        <Link to="/app/videos" className="hidden rounded-lg border border-[#e0e6ed] bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 sm:block">
-          View activity
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          {tabSharing && <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5">
+            <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true"/>
+            <span className="hidden text-xs font-medium text-amber-900 sm:inline">Tab sharing active</span>
+            {!activeAnalyze && <Link to="/app/analyze" className="text-xs font-semibold text-[#2356a8] hover:underline">
+              View
+            </Link>}
+            <button type="button" className="text-xs font-semibold text-amber-900 hover:underline"
+              onClick={() => window.dispatchEvent(new Event('visionguard:stop-tab-capture'))}>
+              Stop
+            </button>
+          </div>}
+          {!tabSharing && <Link to="/app/videos"
+            className="hidden rounded-lg border border-[#e0e6ed] bg-white px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 sm:block">
+            View activity
+          </Link>}
+        </div>
       </header>
       <main className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto" id="main-content">
         <ErrorBoundary>
