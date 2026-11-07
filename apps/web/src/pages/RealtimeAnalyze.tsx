@@ -5,6 +5,7 @@ import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { uploadStorageProvider } from '../services/videoStorage';
 import { activityLedger } from '../services/activityLedger';
 import { streamCatalog, type StreamSource } from '../services/streamCatalog';
+import { isStreamStalled, liveRetryDelay } from '../services/streamRecovery';
 import Hls from 'hls.js';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
@@ -30,7 +31,6 @@ type DetectorState = 'idle' | 'loading' | 'ready' | 'error';
 type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecting' | 'error';
 const MAX_STREAM_RETRIES = 3;
 const STREAM_STALL_MS = 15_000;
-const STREAM_RETRY_DELAY_MS = 1_500;
 const BROWSER_CAMERA_SOURCE = 'visionguard:browser-camera';
 
 function readableTime(value: number) {
@@ -58,6 +58,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
   const [streamReloadKey, setStreamReloadKey] = useState(0);
   const lastPresentedAtRef = useRef(0);
+  const captureErrorRef = useRef(false);
   const streamRetryCountRef = useRef(0);
   const [streamRetries, setStreamRetries] = useState(0);
   const webcamRef = useRef<MediaStream | null>(null);
@@ -123,6 +124,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const resetTracks = useCallback(() => {
     generationRef.current += 1;
     latestRef.current = null;
+    captureErrorRef.current = false;
     flowTracksRef.current = [];
     speedHistoryRef.current.clear();
     detectorToStableIdRef.current.clear();
@@ -378,6 +380,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     lastPresentedAtRef.current = performance.now();
     streamRetryCountRef.current = 0;
     setStreamRetries(0);
+    captureErrorRef.current = false;
     setStorage('not-saved');
     setError('');
     loadStartRef.current = performance.now();
@@ -602,6 +605,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     lastPresentedAtRef.current = performance.now();
     streamRetryCountRef.current = 0;
     setStreamRetries(0);
+    captureErrorRef.current = false;
     setStreamReloadKey(value => value + 1);
   };
 
@@ -660,7 +664,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           if (closed) return;
           if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
           else hls.startLoad();
-        }, STREAM_RETRY_DELAY_MS * attempt);
+        }, liveRetryDelay(attempt));
       });
       return () => {
         closed = true;
@@ -683,13 +687,29 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (!streamSource || !active) return;
     const timer = window.setInterval(() => {
       const video = videoRef.current;
-      if (!video || video.paused || video.ended || video.seeking) return;
-      if (performance.now() - lastPresentedAtRef.current > STREAM_STALL_MS) {
+      if (!video || !isStreamStalled(
+        performance.now(), lastPresentedAtRef.current,
+        { paused: video.paused, ended: video.ended, seeking: video.seeking },
+        STREAM_STALL_MS
+      )) return;
+      if (streamSource.format !== 'hls') {
         setStreamHealth('buffering');
+        return;
       }
+      const attempts = ++streamRetryCountRef.current;
+      setStreamRetries(attempts);
+      if (attempts > MAX_STREAM_RETRIES) {
+        setStreamHealth('error');
+        setError('Live stream stopped producing video frames. Press Reconnect to try again.');
+        return;
+      }
+      lastPresentedAtRef.current = performance.now();
+      setStreamHealth('reconnecting');
+      resetTracks();
+      setStreamReloadKey(value => value + 1);
     }, 2_000);
     return () => window.clearInterval(timer);
-  }, [streamSource, active]);
+  }, [streamSource, active, resetTracks]);
 
   useEffect(() => {
     if (active) return;
@@ -759,9 +779,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     let fallbackId: number | null = null;
 
     const maybeInfer = (mediaTime: number) => {
-      if (activeRef.current && streamSourceRef.current) {
+      if (stopped || !activeRef.current) return;
+      if (streamSourceRef.current || webcamRef.current) {
         lastPresentedAtRef.current = performance.now();
       }
+      if (captureErrorRef.current) return;
       if (stopped || !activeRef.current ||
           !video.videoWidth || !video.videoHeight || video.paused || video.seeking ||
           video.ended || video.readyState < 2 || !Number.isFinite(mediaTime)) return;
@@ -803,7 +825,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             while (history.length && mediaTime - history[0].time > HISTORY_WINDOW) history.shift();
           }
         } catch (e) {
-          setError('Visual tracker could not read the video frame: ' + String(e));
+          // Cross-origin cameras without CORS can play visibly, but cannot
+          // expose image pixels for AI. Report once; avoid a render storm.
+          captureErrorRef.current = true;
+          setError('Video playback works, but the browser cannot read frames for detection. ' +
+            'The stream must allow cross-origin image access (CORS). Details: ' + String(e));
+          if (streamSourceRef.current) setStreamHealth('error');
         }
       }
 
@@ -844,7 +871,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }, [bitmap]);
       }).catch(error => {
         if (inFlightIdRef.current === requestId) clearInFlight();
-        setError('Could not capture a decoded video frame: ' + String(error));
+        captureErrorRef.current = true;
+        setError('Could not capture a decoded video frame for AI: ' + String(error));
+        if (streamSourceRef.current) setStreamHealth('error');
       });
     };
 
