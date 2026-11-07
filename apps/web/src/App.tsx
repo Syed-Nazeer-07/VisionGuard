@@ -17,6 +17,7 @@ import { Config } from './pages/Config'
 import { AuditLogs } from './pages/AuditLogs'
 import Settings from './pages/Settings'
 import { evidenceQueue } from './pipeline/evidence/queue'
+import { useAuthStore } from './store/auth'
 import { useEffect } from 'react'
 
 function VideoReviewRedirect() {
@@ -41,10 +42,16 @@ function ReviewQueueRedirect() {
   return <Navigate to={`/app/cases?${params.toString()}`} replace />
 }
 
+const START_PAGES = new Set([
+  '/app/analyze', '/app/videos', '/app/cases', '/app/analytics', '/app/reports'
+]);
 function AppHome() {
-  const customLanding = localStorage.getItem('visionguard_default_landing_page')
-  if (customLanding && customLanding !== '/app' && customLanding.startsWith('/app/')) {
-    return <Navigate to={customLanding} replace />
+  // The previously global localStorage preference leaked across accounts and
+  // could send a Viewer to an Admin-only page. Use the signed-in owner's saved
+  // settings and a strictly allowed route list.
+  const startPage = useAuthStore(state => state.settings?.default_landing_page);
+  if (startPage && START_PAGES.has(startPage)) {
+    return <Navigate to={startPage} replace />
   }
   return <Dashboard />
 }
