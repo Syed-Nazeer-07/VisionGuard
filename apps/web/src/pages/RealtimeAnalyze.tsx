@@ -563,7 +563,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       // The existing UploadManager writes a metadata row and uses the
       // authenticated B2 signing function. File bytes go directly to B2.
       // No upload occurs unless the user clicks this button.
-      const { videoId } = await uploadManager.startUpload(file);
+      const { videoId } = await uploadManager.startUpload(file, undefined, { keepPreview: false });
       cloudUploadIdRef.current = videoId;
       cloudUnsubscribeRef.current?.();
       cloudUnsubscribeRef.current = uploadManager.subscribe(videoId, upload => {
