@@ -18,3 +18,15 @@ export function liveRetryDelay(attempt: number): number {
   if (!Number.isFinite(attempt) || attempt < 1) return 0;
   return Math.min(7_500, 1_500 * Math.floor(attempt));
 }
+
+/**
+ * requestVideoFrameCallback reports real decoded frames. For the RAF fallback,
+ * do not treat repeated reads of a frozen video.currentTime as fresh frames.
+ * A first valid frame is accepted, and seeks/reconnections reset the caller's
+ * previous timestamp to null.
+ */
+export function hasAdvancedVideoFrame(previous: number | null, mediaTime: number): boolean {
+  if (!Number.isFinite(mediaTime) || mediaTime < 0) return false;
+  if (previous === null) return true;
+  return mediaTime > previous + 0.001;
+}
