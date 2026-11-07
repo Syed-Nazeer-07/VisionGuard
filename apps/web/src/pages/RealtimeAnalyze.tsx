@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, Camera, Film, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
-import { TrafficCameraDirectory } from '../components/analysis/TrafficCameraDirectory';
+import { YouTubeLivePanel } from '../components/analysis/YouTubeLivePanel';
 import { hiddenPagePolicy, shouldResumeSharedTab } from '../services/captureVisibility';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
@@ -53,7 +53,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudStarting, setCloudStarting] = useState(false);
   const [cloudError, setCloudError] = useState('');
   const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
-  const [showCameraDirectory, setShowCameraDirectory] = useState(false);
+  const [showYouTubePanel, setShowYouTubePanel] = useState(false);
+  const [keepTabConnected, setKeepTabConnected] = useState(false);
   const lastPresentedAtRef = useRef(0);
   const lastDecodedMediaTimeRef = useRef<number | null>(null);
   const captureErrorRef = useRef(false);
@@ -325,16 +326,28 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         CaptureController?: new () => { setFocusBehavior?: (value: 'no-focus-change') => void }
       }).CaptureController;
       const controller = Controller ? new Controller() : undefined;
-      const capture = await navigator.mediaDevices.getDisplayMedia({
+      const options = {
         video: { frameRate: { ideal: 24, max: 30 } },
         audio: false,
+        // Chromium hints favour a YouTube tab and allow swapping tabs without
+        // stopping the active capture; they are not a security guarantee.
+        monitorTypeSurfaces: 'exclude',
+        selfBrowserSurface: 'exclude',
+        surfaceSwitching: 'include',
         ...(controller ? { controller } : {}),
-      });
-      try { controller?.setFocusBehavior?.('no-focus-change'); } catch { /* browser may reject focus control for screen capture */ }
+      } as DisplayMediaStreamOptions;
+      const capture = await navigator.mediaDevices.getDisplayMedia(options);
+      try { controller?.setFocusBehavior?.('no-focus-change'); } catch { /* not supported on all platforms */ }
       if (request !== uploadGenerationRef.current || !activeRef.current) {
         // Switching to the selected YouTube tab is NORMAL for getDisplayMedia.
         // A hidden VisionGuard tab is not a reason to discard permission.
         capture.getTracks().forEach(track => track.stop());
+        return;
+      }
+      const surface = capture.getVideoTracks()[0]?.getSettings().displaySurface;
+      if (surface && surface !== 'browser') {
+        capture.getTracks().forEach(track => track.stop());
+        setError('Choose Microsoft Edge Tab / Chrome Tab, NOT Entire Screen or Window. Screen sharing would show VisionGuard instead of YouTube after you switch back.');
         return;
       }
       videoRef.current?.pause();
@@ -363,10 +376,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         activeRunRef.current = 'tab:' + crypto.randomUUID();
         activityLedger.begin(ownerId, activeRunRef.current, 'Shared browser tab', 'live-stream');
       } else activeRunRef.current = '';
-      const surface = capture.getVideoTracks()[0]?.getSettings().displaySurface;
-      if (surface === 'monitor') {
-        setError('Entire screen is being shared. To detect vehicles in YouTube while viewing VisionGuard, share the YouTube browser TAB instead; the entire screen will show VisionGuard when you switch back.');
-      }
       for (const track of capture.getVideoTracks()) {
         track.onended = () => {
           if (webcamRef.current !== capture) return;
@@ -374,7 +383,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           resetTracks();
           setUrl('');
           setStreamHealth('idle');
-          setError('Tab sharing ended. To resume analysis, choose the YouTube tab again.');
+          setError('Browser tab sharing ended. The YouTube link is still in Recent links; select Analyze browser tab to reconnect.');
           if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
         };
       }
@@ -456,6 +465,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   useEffect(() => {
     setSaveVideo(ownerId ? localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes' : false);
+    setKeepTabConnected(ownerId
+      ? localStorage.getItem('visionguard:keep-tab-on-navigation:' + ownerId) === 'yes' : false);
   }, [ownerId]);
 
   useEffect(() => {
@@ -691,9 +702,19 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   }, [tabCaptureActive, webcamActive, active]);
 
   useEffect(() => {
-    if (active) return;
+    if (active) {
+      if (captureKindRef.current === 'tab' && webcamRef.current && videoRef.current?.paused) {
+        void videoRef.current.play().catch(() => {});
+      }
+      return;
+    }
     const video = videoRef.current;
     const wasCapturing = !!webcamRef.current;
+    if (wasCapturing && captureKindRef.current === 'tab' && keepTabConnected) {
+      // Capture stays connected, but AI inference is suspended off this route.
+      if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
+      return;
+    }
     video?.pause();
     if (wasCapturing) {
       // Camera and user-approved tab capture are released on navigation.
@@ -708,7 +729,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         Number.isFinite(video.currentTime)) {
       void localAnalysisStorage.savePosition(video.currentTime, ownerId).catch(() => {});
     }
-  }, [active]);
+  }, [active, keepTabConnected, ownerId]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -1030,21 +1051,31 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             className="vg-secondary">
             <Film size={16}/> Saved video
           </button>}
-          <button type="button" onClick={() => setShowCameraDirectory(value => !value)}
-            aria-expanded={showCameraDirectory} className="vg-secondary">
-            {showCameraDirectory ? 'Hide camera sites' : 'Traffic camera sites'}
+          <button type="button" onClick={() => setShowYouTubePanel(value => !value)}
+            aria-expanded={showYouTubePanel} className="vg-secondary">
+            {showYouTubePanel ? 'Hide YouTube links' : 'YouTube Live'}
           </button>
           {url && !webcamActive && !tabCaptureActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"><X size={18} /></button>}
         </div>
       </header>
 
-      {showCameraDirectory && <TrafficCameraDirectory />}
+      {showYouTubePanel && <YouTubeLivePanel ownerId={ownerId} onOpen={() => setError('')} />}
 
-      {tabCaptureActive && <p className="text-xs text-slate-500">
-        Analyzing the shared tab's live pixels. Stop sharing at any time using the button above
-        or your browser's sharing control. No video is uploaded automatically.
-      </p>}
+      {tabCaptureActive && <div className="vg-panel flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold text-slate-800">Browser tab connected</p>
+          <p className="mt-1 text-xs text-slate-500">Capture is user-approved. No video is recorded or uploaded.</p>
+        </div>
+        <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
+          <input type="checkbox" checked={keepTabConnected} onChange={event => {
+            const enabled = event.target.checked;
+            setKeepTabConnected(enabled);
+            if (ownerId) localStorage.setItem('visionguard:keep-tab-on-navigation:' + ownerId, enabled ? 'yes' : 'no');
+          }} className="h-4 w-4 accent-[#2356a8]"/>
+          Keep sharing on other VisionGuard pages
+        </label>
+      </div>
 
       {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
