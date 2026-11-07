@@ -105,18 +105,28 @@ export function ActivityAnalytics() {
   const { records, loaded, error } = useRuns();
   const [range, setRange] = useState<'all'|'today'|'week'|'month'>('all');
   // Keep filter calculations pure during render.
-  const [asOf] = useState(Date.now);
+  const [asOf, setAsOf] = useState(Date.now);
+  useEffect(() => {
+    // An always-open dashboard must not freeze "last 24 hours" at mount time.
+    const timer = window.setInterval(() => setAsOf(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const filtered = useMemo(() => {
     const now = asOf;
     const ms = range === 'today' ? 86400000 : range === 'week' ? 7*86400000 : range === 'month' ? 30*86400000 : Infinity;
-    return records.filter(r => now-r.createdAt <= ms);
+    // Activity is grouped by when the session was last analyzed, not when a
+    // long-running live stream was first opened yesterday.
+    return records.filter(r => now - r.updatedAt <= ms);
   }, [range, records, asOf]);
   const counts = useMemo(() => summarizeActivity(filtered), [filtered]);
   const byClass = distribution(filtered);
   return <main className="vg-page">
     <header className="vg-page-header">
       <div><h1>Analytics</h1><p>Vehicle classifications and detection volume</p></div>
-      <select aria-label="Time range" value={range} onChange={e=>setRange(e.target.value as typeof range)}
+      <select aria-label="Time range" value={range} onChange={e=>{
+        setAsOf(Date.now());
+        setRange(e.target.value as typeof range);
+      }}
         className="vg-field">
         <option value="all">All time</option>
         <option value="today">Last 24 hours</option>
