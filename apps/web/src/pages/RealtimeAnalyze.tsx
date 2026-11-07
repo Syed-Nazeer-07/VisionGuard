@@ -131,7 +131,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     flowTracksRef.current = [];
     speedHistoryRef.current.clear();
     detectorToStableIdRef.current.clear();
-    nextStableIdRef.current = 1;
+    // Preserve increasing stable IDs within this run. A seek/reconnect must
+    // not reuse #1 for an entirely different vehicle in the saved ledger.
     grayHistoryRef.current = [];
     lastOpticalSampleRef.current = -Infinity;
     lastCapturedTimeRef.current = -Infinity;
@@ -263,6 +264,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     file: Blob, name: string, savedPosition = 0, restoredRunId?: string
   ) => {
     resetTracks();
+    const accountForRestore = useAuthStore.getState().user?.id;
+    if (restoredRunId && accountForRestore) {
+      const restored = activityLedger.snapshot(accountForRestore).records
+        .find(run => run.id === restoredRunId);
+      nextStableIdRef.current = restored
+        ? Math.max(0, ...Object.keys(restored.vehicles).map(Number).filter(Number.isFinite)) + 1
+        : 1;
+    } else nextStableIdRef.current = 1;
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     const nextUrl = URL.createObjectURL(file);
     urlRef.current = nextUrl;
@@ -322,6 +331,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       videoRef.current?.pause();
       stopWebcam();
       resetTracks();
+      nextStableIdRef.current = 1;
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = null;
       currentFileRef.current = null;
@@ -371,6 +381,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     videoRef.current?.pause();
     uploadGenerationRef.current += 1;
     resetTracks();
+    nextStableIdRef.current = 1;
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     urlRef.current = null;
     currentFileRef.current = null;
@@ -447,8 +458,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     void Promise.all([
       localAnalysisStorage.loadVideo(ownerId ?? undefined),
       localAnalysisStorage.loadPosition(ownerId ?? undefined)
-    ]).then(([saved, savedPosition]) => {
+    ]).then(async ([saved, savedPosition]) => {
       if (!alive || generation !== uploadGenerationRef.current || !saved) return;
+      await activityLedger.load(ownerId);
+      if (!alive || generation !== uploadGenerationRef.current) return;
       const file = saved.file instanceof File
         ? saved.file
         : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
@@ -602,6 +615,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         setError('No retained video was found. Choose a file and enable “Keep this video on this device” first.');
         return;
       }
+      await activityLedger.load(ownerId);
       videoRef.current?.pause();
       uploadGenerationRef.current += 1;
       stopWebcam();
