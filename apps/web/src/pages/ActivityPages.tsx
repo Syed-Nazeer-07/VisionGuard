@@ -35,19 +35,6 @@ function LocalScope() {
   </div>;
 }
 
-function EmptyState() {
-  return <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center">
-    <Activity className="mx-auto mb-3 text-indigo-400" size={30}/>
-    <h3 className="font-semibold text-slate-900">No analysis activity recorded yet</h3>
-    <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
-      Play a traffic video in Live Analysis. Each new vehicle ID and its class will be saved automatically.
-    </p>
-    <Link to="/app/analyze" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white">
-      Open Live Analysis <ArrowRight size={14}/>
-    </Link>
-  </div>;
-}
-
 function distribution(records: AnalysisRecord[]) {
   return Object.entries(summarizeActivity(records).distribution)
     .map(([name, count]) => ({ name: title(name), count }))
@@ -84,7 +71,7 @@ export function ActivityDashboard() {
       <Stat label="Analyzed frames" number={stats.analyzedFrames} note="YOLO inference observations"/>
       <Stat label="Recorded violations" number={stats.violations} note="Evidence-backed events only"/>
     </div>
-    {!loaded ? <p className="text-sm text-slate-500">Restoring saved activity…</p> : !records.length ? <EmptyState/> :
+    {!loaded ? <p className="text-sm text-slate-500">Restoring saved activity…</p> : !records.length ? <p className="vg-empty-row">No session records available.</p> :
       <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
         <RecentRuns records={records}/>
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -148,7 +135,7 @@ export function ActivityAnalytics() {
           <strong className="shrink-0 tabular-nums">{Object.keys(run.vehicles).length} vehicles</strong>
         </div>)}
       </div>
-    </div> : loaded ? <EmptyState/> : <p className="text-sm text-slate-500">Loading analytics…</p>}
+    </div> : loaded ? <p className="vg-empty-row">No session records available.</p> : <p className="text-sm text-slate-500">Loading analytics…</p>}
     <p className="text-xs text-slate-500">Counts represent detected tracked objects, not confirmed traffic violations. Approximate speed readings are excluded from violation totals.</p>
   </main>;
 }
@@ -226,7 +213,6 @@ export function ActivityReports() {
         </button>
       </div>
     </div>
-    {!records.length && loaded && <EmptyState/>}
     {records.length>0 && <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
       <strong className="text-slate-900">Report integrity</strong>
       <p className="mt-1">Only detected track records are exported. The speed column is explicitly approximate;
@@ -304,7 +290,7 @@ export function ActivityVideoLibrary() {
     </section>
     {error && <p role="alert" className="text-sm text-amber-700">{error}</p>}
     {!loaded ? <p className="text-sm text-slate-500">Restoring activity history…</p> :
-      !records.length ? <EmptyState/> :
+      !records.length ? <p className="vg-empty-row">No session records available.</p> :
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {records.map(run=><div key={run.id} className="flex flex-wrap items-center gap-4 border-b border-slate-100 p-4 last:border-0">
           <Film size={20} className="text-indigo-500"/>
