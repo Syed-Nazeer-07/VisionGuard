@@ -48,6 +48,8 @@ const cloudTasks = new Map<string, Promise<void>>();
 const lastCloudPush = new Map<string, number>();
 const cloudLoads = new Set<string>();
 const cloudStatus = new Map<string, 'idle' | 'synced' | 'offline'>();
+// Avoid re-uploading hundreds of unchanged session snapshots on every pause.
+const uploadedRevisions = new Map<string, Map<string, number>>();
 
 
 const keyFor = (owner: string | null | undefined) => owner || 'signed-out';
@@ -104,15 +106,22 @@ async function syncToCloud(owner: string, records: AnalysisRecord[]): Promise<vo
   }
   // The caller only supplies an authenticated user ID. Supabase RLS separately
   // verifies the true auth.uid() on every row read/write.
-  const rows = records.map(run => ({
-    owner_id: owner, run_id: run.id, payload: run,
-    updated_at: new Date(run.updatedAt).toISOString()
-  }));
-  // Small batches avoid API payload limits. No video bytes leave this device.
-  for (let i = 0; i < rows.length; i += 15) {
+  const revisions = uploadedRevisions.get(owner) ?? new Map<string, number>();
+  const changed = records.filter(run =>
+    run.updatedAt > (revisions.get(run.id) ?? 0));
+  // No video bytes leave the device, and unchanged historical sessions do
+  // not need to be serialized/reuploaded every 15 seconds.
+  for (let i = 0; i < changed.length; i += 15) {
+    const batch = changed.slice(i, i + 15);
+    const rows = batch.map(run => ({
+      owner_id: owner, run_id: run.id, payload: run,
+      updated_at: new Date(run.updatedAt).toISOString()
+    }));
     const { error } = await (supabase as any).from('user_analysis_records')
-      .upsert(rows.slice(i, i + 15), { onConflict: 'owner_id,run_id' });
+      .upsert(rows, { onConflict: 'owner_id,run_id' });
     if (error) throw error;
+    for (const run of batch) revisions.set(run.id, run.updatedAt);
+    uploadedRevisions.set(owner, revisions);
   }
   cloudStatus.set(owner, 'synced');
 }
@@ -135,6 +144,9 @@ async function mergeFromCloud(owner: string): Promise<void> {
       const run = row.payload as AnalysisRecord;
       if (!run || typeof run.id !== 'string' || !run.vehicles ||
           !Array.isArray(run.violations) || !Number.isFinite(run.updatedAt)) continue;
+      const revisions = uploadedRevisions.get(owner) ?? new Map<string, number>();
+      revisions.set(run.id, run.updatedAt);
+      uploadedRevisions.set(owner, revisions);
       const local = byId.get(run.id);
       if (!local || run.updatedAt > local.updatedAt) {
         byId.set(run.id, run);
