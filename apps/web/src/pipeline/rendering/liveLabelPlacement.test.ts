@@ -1,48 +1,59 @@
 import { describe, expect, it } from 'vitest';
 import { placeLiveLabel, type OverlayRect } from './liveLabelPlacement';
 
-const viewport = { x: 20, y: 30, w: 420, h: 280 };
-const box = (x: number, y: number, w = 80, h = 55): OverlayRect =>
-  ({x, y, w, h});
-const collision = (a: OverlayRect, b: OverlayRect) =>
-  a.x < b.x + b.w + 2 && a.x + a.w + 2 > b.x &&
-  a.y < b.y + b.h + 2 && a.y + a.h + 2 > b.y;
+const bounds = { x: 20, y: 30, w: 420, h: 280 };
+const box = (x: number, y: number, w = 90, h = 55): OverlayRect =>
+  ({ x, y, w, h });
+const collide = (a: OverlayRect, b: OverlayRect) =>
+  a.x < b.x+b.w+2 && a.x+a.w+2 > b.x &&
+  a.y < b.y+b.h+2 && a.y+a.h+2 > b.y;
 
-describe('Live Analysis overlay label crowding', () => {
-  it('puts the main label near the box with no overlap when there is space', () => {
-    const p = placeLiveLabel(box(100, 140), viewport, [90, 55, 25], []);
+describe('stable, speed-preserving vehicle labels', () => {
+  it('attaches a full label just above its vehicle by default', () => {
+    const p = placeLiveLabel(box(100, 140), bounds, [90, 60], [])!;
+    expect(p).toMatchObject({ variant:0, slot:0 });
+    expect(p.rect.x).toBe(102);
+    expect(p.rect.y).toBe(120);
+  });
+  it('keeps exactly the same anchor as the box moves with the vehicle', () => {
+    const first = placeLiveLabel(box(100, 140), bounds, [105, 70], [])!;
+    const next = placeLiveLabel(box(123, 149), bounds, [105, 70],
+      [box(115, 128, 105, 18)], first)!;
+    expect(next.slot).toBe(first.slot);
+    expect(next.variant).toBe(first.variant);
+    expect(next.rect.x - first.rect.x).toBe(23);
+    expect(next.rect.y - first.rect.y).toBe(9);
+  });
+  it('never switches an established label between full and compact because of crowding', () => {
+    const first = placeLiveLabel(box(100, 140), bounds, [130, 84], [])!;
+    const next = placeLiveLabel(box(102, 140), bounds, [130, 84],
+      [box(99, 117, 130, 18)], first)!;
+    expect(next.variant).toBe(first.variant);
+    expect(next.slot).toBe(first.slot);
+  });
+  it('new distant vehicles keep the compact version, which still contains speed text', () => {
+    const labels = ['#7 CAR ≈45 km/h*', '#7 ≈45 km/h*'];
+    const placement = placeLiveLabel(box(200, 130, 18, 17), bounds,
+      [119, 80], [])!;
+    expect(placement.variant).toBe(1);
+    expect(labels[placement.variant]).toContain('km/h*');
+    expect(labels[placement.variant]).toContain('#7');
+  });
+  it('new overlapping labels try another slot, without hiding detection boxes', () => {
+    const a = placeLiveLabel(box(100,140), bounds, [90,60],[])!;
+    const b = placeLiveLabel(box(105,140), bounds,[90,60],[a.rect])!;
+    expect(collide(a.rect,b.rect)).toBe(false);
+  });
+  it('keeps the tag on its vehicle when right-edge clamp is necessary', () => {
+    const p = placeLiveLabel(box(410, 142, 28, 18),bounds,[130,75],[])!;
+    expect(p.rect.x+p.rect.w).toBeLessThanOrEqual(439);
+  });
+  it('does not suppress the ID and speed if every candidate overlaps other tags', () => {
+    const p = placeLiveLabel(box(100,140),bounds,[120,80],[bounds]);
     expect(p).not.toBeNull();
-    expect(p!.variant).toBe(0);
-    expect(p!.rect.x).toBeCloseTo(102);
-    expect(p!.rect.y).toBeCloseTo(120);
   });
-  it('places the next label elsewhere rather than printing text on top', () => {
-    const first = placeLiveLabel(box(100, 140), viewport, [110, 70, 25], [])!;
-    const second = placeLiveLabel(box(108, 139), viewport, [110, 70, 25], [first.rect]);
-    expect(second).not.toBeNull();
-    expect(collision(first.rect, second!.rect)).toBe(false);
-  });
-  it('prefers a shorter label for a distant tiny vehicle', () => {
-    const result = placeLiveLabel(box(200, 130, 18, 17), viewport, [110, 46, 22], []);
-    expect(result?.variant).toBe(1);
-  });
-  it('keeps labels fully inside the video viewport at edges', () => {
-    for(const b of [box(21, 31, 50, 20),box(405, 288, 30, 18)]) {
-      const p = placeLiveLabel(b, viewport, [100, 55, 23], []);
-      if (!p) continue;
-      expect(p.rect.x).toBeGreaterThanOrEqual(viewport.x);
-      expect(p.rect.y).toBeGreaterThanOrEqual(viewport.y);
-      expect(p.rect.x+p.rect.w).toBeLessThanOrEqual(viewport.x+viewport.w);
-      expect(p.rect.y+p.rect.h).toBeLessThanOrEqual(viewport.y+viewport.h);
-    }
-  });
-  it('suppresses labels when all nearby positions collide, without removing the box', () => {
-    const p = placeLiveLabel(box(100, 140), viewport, [110, 70, 25],
-      [box(20, 30, 420, 280)]);
-    expect(p).toBeNull();
-  });
-  it('rejects invalid geometry and impossible label sizes', () => {
-    expect(placeLiveLabel(box(NaN, 20),viewport,[90],[])).toBeNull();
-    expect(placeLiveLabel(box(100,140),viewport,[500],[])).toBeNull();
+  it('rejects unusable geometry safely', () => {
+    expect(placeLiveLabel(box(NaN,140),bounds,[90,60],[])).toBeNull();
+    expect(placeLiveLabel(box(100,140),bounds,[600,550],[])).toBeNull();
   });
 });

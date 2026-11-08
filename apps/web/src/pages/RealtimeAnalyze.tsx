@@ -115,6 +115,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const firstFrameResolveRef = useRef<(() => void) | null>(null);
   const paintCountRef = useRef(0);
+  // One anchor/label format per persistent vehicle ID. No per-frame
+  // candidate reshuffling, disappearing speed text or floating labels.
+  const labelAnchorsRef = useRef(new Map<number, {
+    slot: number; variant: number; lastSeenMs: number;
+  }>());
 
   const [url, setUrl] = useState('');
   const [filename, setFilename] = useState('');
@@ -188,6 +193,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     latestRef.current = null;
     captureErrorRef.current = false;
     flowTracksRef.current = [];
+    labelAnchorsRef.current.clear();
     speedHistoryRef.current.clear();
     autoIncidentDetectorRef.current.reset();
     qualityFramesRef.current = []; // A seek/source change invalidates timestamp alignment.
@@ -1289,33 +1295,49 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               renderedBoxes.push({ track: stable, x, y, w, h });
             }
 
-            // All boxes remain visible, even when labels have insufficient
-            // space. Prioritize nearer/larger boxes and prevent overlapping
-            // text pills in crowded/distant traffic. Pure layout is tested.
+            // Existing vehicle labels keep their chosen anchor. Returning
+            // detections or nearby newcomers must not rearrange or erase them.
+            // No detection or tracking state is changed by label rendering.
             const occupiedLabels: Array<{ x: number; y: number; w: number; h: number }> = [];
-            renderedBoxes.sort((a, b) => (b.w * b.h - a.w * a.h) ||
-              (a.track.id - b.track.id));
+            const anchorMap = labelAnchorsRef.current;
+            renderedBoxes.sort((a, b) => {
+              const hasA = anchorMap.has(a.track.id);
+              const hasB = anchorMap.has(b.track.id);
+              if (hasA !== hasB) return hasA ? -1 : 1;
+              return (b.w * b.h - a.w * a.h) || (a.track.id - b.track.id);
+            });
             context.font = '600 11px system-ui,sans-serif';
             for (const box of renderedBoxes) {
               const stable = box.track;
-              const mainLabel = '#' + stable.id + ' ' + stable.className.toUpperCase();
-              // A pixel-based proxy, not a calibrated speedometer.
-              const speed = stable.speedKmh === null ? '' :
-                stable.speedKmh === 0 ? '≈0 km/h*' :
-                  '≈' + Math.round(stable.speedKmh) + ' km/h*';
-              const labels = speed ? [mainLabel + '  ' + speed, mainLabel, '#' + stable.id] :
-                [mainLabel, '#' + stable.id];
+              const classLabel = stable.className.toUpperCase();
+              // ALWAYS preserve the speed slot, including "—" when the
+              // worker has not established a valid estimate yet. This is an
+              // uncalibrated pixel-motion proxy, not a road speedometer.
+              const speed = stable.speedKmh === null || !Number.isFinite(stable.speedKmh)
+                ? '—'
+                : '≈' + Math.round(Math.max(0, stable.speedKmh));
+              const full = '#' + stable.id + ' ' + classLabel + '  ' + speed + ' km/h*';
+              const compact = '#' + stable.id + ' ' + speed + ' km/h*';
+              const labels = [full, compact];
               const widths = labels.map(label => context.measureText(label).width + 12);
+              const previous = anchorMap.get(stable.id);
               const placement = placeLiveLabel(
                 box, { x: offsetX, y: offsetY, w: frameWidth * fit, h: frameHeight * fit },
-                widths, occupiedLabels
+                widths, occupiedLabels, previous
               );
               if (!placement) continue;
+              anchorMap.set(stable.id, {
+                slot: placement.slot, variant: placement.variant, lastSeenMs: time,
+              });
               occupiedLabels.push(placement.rect);
               context.fillStyle = 'rgba(7,16,34,.90)';
               context.fillRect(placement.rect.x, placement.rect.y, placement.rect.w, placement.rect.h);
               context.fillStyle = '#ccffeb';
               context.fillText(labels[placement.variant], placement.rect.x + 6, placement.rect.y + 13);
+            }
+            // A departed vehicle must not reserve an anchor indefinitely.
+            for (const [id, last] of anchorMap) {
+              if (time - last.lastSeenMs > 1500) anchorMap.delete(id);
             }
             context.restore();
           }
