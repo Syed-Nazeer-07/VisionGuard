@@ -292,7 +292,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     return workerInitializationRef.current;
   };
 
-  const onUpload = async (file?: File, handle?: FileSystemFileHandle) => {
+  const onUpload = async (file?: File) => {
     if (!file || status === 'processing') return;
     if (!VIDEO_TYPES.includes(file.type) && !/\.(mp4|webm|mov|mkv)$/i.test(file.name)) {
       setError('Choose an MP4, WebM, MOV, or MKV video supported by your browser.');
@@ -322,21 +322,16 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     setStorageStatus('saving');
     const generation = selectedFileVersionRef.current;
     storageQueueRef.current = storageQueueRef.current.catch(() => {}).then(async () => {
-      if (handle) {
-        // A native Edge/Chrome picker gives us a durable handle with zero
-        // large-file duplication. Saving this handle is a tiny IDB transaction.
-        await localAnalysisStorage.saveVideoHandle(handle, file.name);
-      } else {
-        // Legacy file-input fallback: only duplicate the large blob AFTER the
-        // browser has decoded the first frame. Avoids I/O competing with decode.
-        await firstFrame;
-        if (generation !== selectedFileVersionRef.current) return;
-        if (!previewDecodedRef.current) {
-          setStorageStatus('error');
-          return;
-        }
-        await localAnalysisStorage.saveVideo(file, file.name);
+      // FileSystemFileHandle.getFile() may lose permission across browser
+      // restarts. Save the real chosen Blob in IndexedDB instead.
+      // Decode starts first so local storage doesn't delay initial playback.
+      await firstFrame;
+      if (generation !== selectedFileVersionRef.current) return;
+      if (!previewDecodedRef.current) {
+        setStorageStatus('error');
+        return;
       }
+      await localAnalysisStorage.saveVideo(file, file.name);
       if (generation !== selectedFileVersionRef.current) return;
       await localAnalysisStorage.clearAnalysis();
       await localAnalysisStorage.savePosition(0);
@@ -361,7 +356,7 @@ export default function LocalAnalyze({ active = true }: { active?: boolean }) {
     }
     try {
       const [handle] = await picker.call(window, { multiple: false });
-      if (handle) await onUpload(await handle.getFile(), handle);
+      if (handle) await onUpload(await handle.getFile());
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       // Fallback for browsers that advertise the API but disallow the call.
