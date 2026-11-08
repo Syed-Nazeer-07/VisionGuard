@@ -134,6 +134,10 @@ export function advanceOpticalTracks<T extends LiveTrack>(
   ];
 
   for (const track of tracks) {
+    // A predicted-only bridge has no new visual evidence. Matching its box
+    // against the following frame can lock onto road texture and create a
+    // self-sustaining ghost vehicle. Only fresh YOLO can reacquire it.
+    if (track.isPredicted) continue;
     const minConf = track.className === 'motorcycle' ? .28 :
       track.className === 'bicycle' ? .33 : .42;
     if (track.w < 4 || track.h < 4 || track.confidence < minConf) continue;
@@ -170,8 +174,23 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     // background slip, occlusion or a car leaving the picture.
     if (consistent.length < 2 && !(isSmallTwoWheeler && consistent.length === 1 && consistent[0].error < 8)) continue;
     if (consistent.length < Math.ceil(features.length * .5)) continue;
-    const moveX = median(consistent.map(f => f.dx)) / sx;
-    const moveY = median(consistent.map(f => f.dy)) / sy;
+    const measuredDx = median(consistent.map(f => f.dx));
+    const measuredDy = median(consistent.map(f => f.dy));
+    // If a previously moving vehicle suddenly produces motionless patches,
+    // those patches commonly belong to the road underneath a drifting box.
+    // Accept zero motion for legitimately stationary/slow tracks; only reject
+    // the contradiction when the expected image movement is unambiguous.
+    const expectedPixels = Math.hypot(predictX, predictY);
+    const measuredPixels = Math.hypot(measuredDx, measuredDy);
+    if (expectedPixels >= 3.5 && measuredPixels <= 1 &&
+        measuredPixels < expectedPixels * .30) continue;
+    // A large backwards optical jump against a strong recent trajectory is
+    // more likely an accidental nearby texture match than a vehicle reversal.
+    if (expectedPixels >= 4 && measuredPixels >= 2 &&
+        (measuredDx * predictX + measuredDy * predictY) <
+          -.4 * expectedPixels * measuredPixels) continue;
+    const moveX = measuredDx / sx;
+    const moveY = measuredDy / sy;
     const newX = track.x + moveX;
     const newY = track.y + moveY;
 
