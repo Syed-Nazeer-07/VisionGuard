@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Activity, AlertTriangle, Camera, ExternalLink, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
-import { localAnalysisStorage } from '../services/localAnalysisStorage';
+import { isHandleAccessDenied, localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
 import { placeLiveLabel } from '../pipeline/rendering/liveLabelPlacement';
@@ -62,7 +62,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const ownerId = useAuthStore(state => state.user?.id ?? null);
   const activeRunRef = useRef('');
   const currentFileRef = useRef<File | null>(null);
-  const currentHandleRef = useRef<FileSystemFileHandle | null>(null);
   const [saveVideo, setSaveVideo] = useState(false);
   const cloudUploadIdRef = useRef<string | null>(null);
   const cloudUnsubscribeRef = useRef<(() => void) | null>(null);
@@ -433,7 +432,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = null;
       currentFileRef.current = null;
-      currentHandleRef.current = null;
       webcamRef.current = capture;
       captureKindRef.current = 'tab';
       setTabCaptureActive(true);
@@ -518,7 +516,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = null;
       currentFileRef.current = null;
-      currentHandleRef.current = null;
       webcamRef.current = camera;
       captureKindRef.current = 'camera';
       setWebcamActive(true);
@@ -585,7 +582,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setStorage('saved');
     }).catch(e => {
       if (alive && generation === uploadGenerationRef.current) {
-        setError('Could not reopen the previously selected file. Choose it again: ' + String(e));
+        setError('Could not restore the retained file. Select the original again: ' +
+          (isHandleAccessDenied(e) ? 'The old Edge file permission expired.' : String(e)));
       }
     });
     return () => { alive = false; };
@@ -633,7 +631,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           videoRef.current?.pause();
           stopWebcam();
           currentFileRef.current = file;
-          currentHandleRef.current = null;
           attachVideo(file, retained.name);
           setStorage('saved');
           setUnavailableOriginal(null);
@@ -656,7 +653,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (urlRef.current) URL.revokeObjectURL(urlRef.current);
         urlRef.current = null;
         currentFileRef.current = null;
-        currentHandleRef.current = null;
         setUrl('');
         setReadyVideo(false);
         setPlaying(false);
@@ -678,7 +674,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = null;
       currentFileRef.current = null;
-      currentHandleRef.current = null;
       setCloudPlaybackActive(true);
       setUnavailableOriginal(null);
       setStorage('not-saved');
@@ -728,7 +723,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
   }, [clearInFlight]);
 
-  const acceptFile = async (file: File, handle?: FileSystemFileHandle) => {
+  const acceptFile = async (file: File) => {
     if (!/\.(mp4|m4v|webm|mov|mkv)$/i.test(file.name) && !file.type.startsWith('video/')) {
       setError('Choose a valid video file. H.264 MP4 provides the broadest Edge compatibility.');
       return;
@@ -746,7 +741,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     stopWebcam();
     setStreamHealth('idle');
     currentFileRef.current = file;
-    currentHandleRef.current = handle ?? null;
     cloudUnsubscribeRef.current?.();
     cloudUnsubscribeRef.current = null;
     cloudUploadIdRef.current = null;
@@ -754,10 +748,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setCloudError('');
     setCloudStarting(false);
     const generation = uploadGenerationRef.current;
-    const decoded = new Promise<void>(resolve => {
-      firstFrameResolveRef.current?.();
-      firstFrameResolveRef.current = resolve;
-    });
     attachVideo(file, file.name);
     // Video is never retained unless the user explicitly opted in.
     const shouldSave = ownerId && localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes';
@@ -766,11 +756,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (generation !== uploadGenerationRef.current) return;
       if (!shouldSave) {
         await localAnalysisStorage.clearVideo(ownerId ?? undefined);
-      } else if (handle) {
-        await localAnalysisStorage.saveVideoHandle(handle, file.name, ownerId ?? undefined);
       } else {
-        await decoded;
-        if (generation !== uploadGenerationRef.current) return;
+        // Real opt-in file snapshot, not a revocable Edge file-system handle.
         await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined);
       }
       if (generation !== uploadGenerationRef.current) return;
@@ -781,7 +768,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     void persistenceQueueRef.current.catch(e => {
       if (generation !== uploadGenerationRef.current) return;
       setStorage('error');
-      setError('Local storage failed; this video can still play: ' + String(e));
+      setError('Local video retention failed (check available browser storage). The video can still play: ' + String(e));
     });
   };
 
@@ -825,7 +812,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (!picker) { inputRef.current?.click(); return; }
     try {
       const [handle] = await picker.call(window, { multiple: false });
-      if (handle) await acceptFile(await handle.getFile(), handle);
+      if (handle) await acceptFile(await handle.getFile());
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return;
       inputRef.current?.click();
@@ -840,7 +827,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         localAnalysisStorage.loadPosition(ownerId),
       ]);
       if (!saved) {
-        setError('No retained video was found. Choose a file and enable “Keep this video on this device” first.');
+        setError('The previous file cannot be reopened automatically. Choose the original again; with local retention enabled, VisionGuard now stores a real file copy instead of an expiring file permission.');
         return;
       }
       await activityLedger.load(ownerId);
@@ -851,7 +838,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       const file = saved.file instanceof File
         ? saved.file : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
       currentFileRef.current = file;
-      currentHandleRef.current = null;
       attachVideo(file, saved.name, savedPosition,
         localStorage.getItem('visionguard:video-run:' + ownerId) || undefined);
       setStorage('saved');
@@ -879,7 +865,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     stopWebcam();
     setStreamHealth('idle');
     currentFileRef.current = null;
-    currentHandleRef.current = null;
     cloudUnsubscribeRef.current?.();
     cloudUnsubscribeRef.current = null;
     cloudUploadIdRef.current = null;
@@ -1042,15 +1027,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setSaveVideo(checked);
     localStorage.setItem('visionguard:save-video:' + ownerId, checked ? 'yes' : 'no');
     const file = currentFileRef.current;
-    const handle = currentHandleRef.current;
     setStorage(checked && file ? 'saving' : 'not-saved');
     persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
       if (!checked || !file) {
         await localAnalysisStorage.clearVideo(ownerId ?? undefined);
         return;
       }
-      if (handle) await localAnalysisStorage.saveVideoHandle(handle, file.name, ownerId ?? undefined);
-      else await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined);
+      await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined);
     });
     void persistenceQueueRef.current.then(() => setStorage(checked && file ? 'saved' : 'not-saved'))
       .catch(e => { setStorage('error'); setError('Could not save video locally: ' + String(e)); });

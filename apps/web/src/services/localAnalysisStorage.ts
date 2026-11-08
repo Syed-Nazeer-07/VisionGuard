@@ -87,31 +87,41 @@ async function remove(store: string, ownerId?: string): Promise<void> {
 }
 
 export interface SavedLocalVideo { file: Blob; name: string }
-interface SavedVideoHandle {
+export interface SavedVideoHandle {
   kind: 'file-handle';
   name: string;
   handle: FileSystemFileHandle;
 }
 
-/**
- * On Chromium/Edge, save a small File System Access handle instead of copying
- * possibly gigabytes of video into IndexedDB. The browser may ask the user
- * to re-grant access after restarting, which is surfaced to the caller.
- * Older blob records remain readable for backwards compatibility.
+/** New videos are copied as Blobs in IndexedDB. Old file handles may lose
+ * read permission on Edge/Chromium restart and cannot be silently regranted.
  */
-export async function readSavedVideo(ownerId?: string): Promise<SavedLocalVideo | undefined> {
-  const stored = await read<SavedLocalVideo | SavedVideoHandle>('video', ownerId);
+export function isHandleAccessDenied(error: unknown): boolean {
+  const name = error && typeof error === 'object' && 'name' in error ? String(error.name) : '';
+  return name === 'NotAllowedError' || name === 'SecurityError';
+}
+export async function resolveSavedVideoRecord(
+  stored: SavedLocalVideo | SavedVideoHandle | undefined,
+): Promise<SavedLocalVideo | undefined> {
   if (!stored) return undefined;
   if ('file' in stored) return stored;
-  const file = await stored.handle.getFile();
-  return { file, name: stored.name };
+  try {
+    const file = await stored.handle.getFile();
+    return { file, name: stored.name };
+  } catch (error) {
+    if (isHandleAccessDenied(error)) return undefined;
+    throw error;
+  }
+}
+export async function readSavedVideo(ownerId?: string): Promise<SavedLocalVideo | undefined> {
+  return resolveSavedVideoRecord(
+    await read<SavedLocalVideo | SavedVideoHandle>('video', ownerId)
+  );
 }
 
 export const localAnalysisStorage = {
   loadVideo: readSavedVideo,
   saveVideo: (file: Blob, name: string, ownerId?: string) => write('video', { file, name }, ownerId),
-  saveVideoHandle: (handle: FileSystemFileHandle, name: string, ownerId?: string) =>
-    write('video', { kind: 'file-handle', handle, name } satisfies SavedVideoHandle, ownerId),
   loadAnalysis: (ownerId?: string) => read<LocalAnalysis>('analysis', ownerId),
   saveAnalysis: (analysis: LocalAnalysis, ownerId?: string) => write('analysis', analysis, ownerId),
   clearAnalysis: (ownerId?: string) => remove('analysis', ownerId),
