@@ -10,7 +10,7 @@ export type CloudVideoFailure = {
 export function describeCloudVideoFailure(raw: unknown): CloudVideoFailure {
   const message = raw instanceof Error ? raw.message :
     typeof raw === 'string' ? raw : String(raw ?? '');
-  if (/video storage is not configured on the server|missing:\\s*B2_(?:ENDPOINT|REGION|BUCKET|KEY_ID|APPLICATION_KEY)|missing B2_(?:ENDPOINT|REGION|BUCKET|KEY_ID|APPLICATION_KEY)/i.test(message)) {
+  if (/video storage is not configured on the server|missing:\s*B2_(?:ENDPOINT|REGION|BUCKET|KEY_ID|APPLICATION_KEY)|missing B2_(?:ENDPOINT|REGION|BUCKET|KEY_ID|APPLICATION_KEY)/i.test(message)) {
     return {
       kind: 'not_configured',
       message: 'Cloud video backup is not configured on this server. Your analysis is still saved, but the original video was not uploaded. Enable “Keep this video on this device” to retain it here. Backblaze B2 credentials must be set up by the app owner to enable cloud playback.',

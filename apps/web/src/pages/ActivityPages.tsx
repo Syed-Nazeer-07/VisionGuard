@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
+import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { Link } from 'react-router-dom';
 import { Download, Film, Plus, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -347,7 +348,11 @@ export function ActivityVideoLibrary() {
           <Link to="/app/analyze">Video analysis</Link>
         </div>
         {localError && <p role="alert" className="vg-empty-row text-amber-700">{localError}</p>}
-        {!localError && !localVideo && <p className="vg-empty-row">No local recording retained for this account.</p>}
+        {!localError && !localVideo && <p className="vg-empty-row">
+          No original video retained on this device. Analysis records are still available below.
+          To replay footage later, choose <strong>Keep this video on this device</strong> when analyzing.
+          <Link to="/app/analyze" className="ml-2 font-semibold text-[#2356a8] hover:underline">Open Live Analysis</Link>
+        </p>}
         {localVideo && <div className="flex flex-wrap items-center gap-3 px-5 py-4">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
             <Film size={17}/>
@@ -378,8 +383,14 @@ export function ActivityVideoLibrary() {
                   <p className="mt-1 text-xs text-slate-500">{new Date(video.uploaded_at).toLocaleString()}
                     {video.file_size ? ' · '+(video.file_size/1048576).toFixed(1)+' MB' : ''}</p>
                 </div>
-                <span className="text-xs text-slate-500">{video.storage_path ? 'Stored' :
-                  video.processing_status === 'failed' ? 'Failed' : 'Pending'}</span>
+                <span className="text-xs text-slate-500">
+                  {video.storage_path ? 'Stored' :
+                    typeof video.metadata?.upload_error === 'string' &&
+                    describeCloudVideoFailure(video.metadata.upload_error).kind === 'not_configured' ?
+                      'Cloud not configured' :
+                    video.metadata?.upload_status === 'failed' || video.processing_status === 'failed' ?
+                      'Upload failed' : 'Not stored'}
+                </span>
                 <Link to={'/app/archive-videos?video='+encodeURIComponent(video.id)}
                   className="text-xs font-semibold text-[#2356a8] hover:underline">Details</Link>
               </div>)}

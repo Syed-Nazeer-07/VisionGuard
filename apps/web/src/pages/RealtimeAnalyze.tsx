@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Activity, AlertTriangle, Camera, ExternalLink, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
+import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
 import { canReanalyzeStoredVideo } from '../lib/videoAssets';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
@@ -67,6 +68,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudUpload, setCloudUpload] = useState<ActiveUpload | null>(null);
   const [cloudStarting, setCloudStarting] = useState(false);
   const [cloudError, setCloudError] = useState('');
+  const [cloudUnavailable, setCloudUnavailable] = useState(false);
   const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
   const [keepTabConnected, setKeepTabConnected] = useState(false);
   const lastPresentedAtRef = useRef(0);
@@ -782,9 +784,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     });
   };
 
+  const reportCloudUploadFailure = (error: unknown) => {
+    const failure = describeCloudVideoFailure(error);
+    setCloudError(failure.message);
+    if (failure.kind === 'not_configured') setCloudUnavailable(true);
+  };
+
   const saveCurrentVideoToB2 = async () => {
     const file = currentFileRef.current;
-    if (!file || !ownerId || cloudStarting || cloudUploadIdRef.current) return;
+    if (!file || !ownerId || cloudStarting || cloudUnavailable ||
+        cloudUploadIdRef.current) return;
     setCloudStarting(true);
     setCloudError('');
     try {
@@ -799,10 +808,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       cloudUnsubscribeRef.current?.();
       cloudUnsubscribeRef.current = uploadManager.subscribe(videoId, upload => {
         setCloudUpload(upload);
-        if (upload.status === 'failed') setCloudError(upload.error || 'B2 upload failed.');
+        if (upload.status === 'failed') reportCloudUploadFailure(upload.error || 'B2 upload failed.');
       });
     } catch (error) {
-      setCloudError(error instanceof Error ? error.message : String(error));
+      reportCloudUploadFailure(error);
     } finally {
       setCloudStarting(false);
     }
@@ -1573,8 +1582,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           disabled={!ownerId} className="h-4 w-4 accent-indigo-600" />
         <span className="flex-1"><strong>Keep this video on this device</strong>
           <span className="block text-xs text-slate-500">
-            Optional. Off means no video file is retained; vehicle counts and analysis history still persist locally.
-            {storage === 'saving' ? ' Saving…' : storage === 'saved' ? ' Video saved.' : ''}
+            Optional. Off means no original video is retained; analysis history remains.
+            Retention currently saves the most recent file on this device only.
+            {storage === 'saving' ? ' Saving…' : storage === 'saved' ? ' Video saved on this device.' :
+              storage === 'error' ? ' Local save failed.' : ''}
           </span>
         </span>
       </label>}
@@ -1582,12 +1593,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="vg-panel p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-slate-900">Backblaze B2 · optional cloud storage</div>
-              <p className="mt-1 text-xs text-slate-500">This video stays local unless you explicitly save it.
-                Cloud saving uploads the original video to B2, never Supabase Storage.
-                Analysis statistics are stored separately.</p>
+              <div className="text-sm font-semibold text-slate-900">
+                {cloudUnavailable ? 'Cloud backup unavailable' : 'Backblaze B2 · optional cloud storage'}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                B2 cloud playback requires server-side credentials. Saving an analysis
+                does not upload its video. You can retain this file on your own device instead.
+              </p>
             </div>
-            {!cloudUpload && (
+            {!cloudUpload && !cloudUnavailable && (
               <button type="button" onClick={() => void saveCurrentVideoToB2()} disabled={cloudStarting}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {cloudStarting ? 'Preparing B2 upload…' : 'Save video to B2'}
@@ -1598,18 +1612,34 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             <div className="mt-3 space-y-2">
               <div className="flex items-center justify-between text-xs text-slate-600">
                 <span>{cloudUpload.status === 'uploaded' ? 'Saved in Backblaze B2' :
-                  cloudUpload.status === 'failed' ? 'B2 upload failed' : 'Uploading to Backblaze B2'}</span>
-                <span className="font-semibold tabular-nums">{cloudUpload.progress}%</span>
+                  cloudUpload.status === 'failed' ?
+                    (cloudUnavailable ? 'B2 storage is not configured' : 'B2 upload failed') :
+                    'Uploading to Backblaze B2'}</span>
+                {cloudUpload.status !== 'failed' &&
+                  <span className="font-semibold tabular-nums">{cloudUpload.progress}%</span>}
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              {cloudUpload.status !== 'failed' && <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                 <div className="h-full rounded-full bg-indigo-600 transition-[width]"
                   style={{ width: Math.max(0, Math.min(100, cloudUpload.progress)) + '%' }}/>
-              </div>
+              </div>}
               {cloudUpload.status === 'uploaded' && <a href="/app/archive-videos"
                 className="inline-block text-xs font-semibold text-indigo-600 hover:underline">View cloud video archive</a>}
             </div>
           )}
-          {cloudError && <p role="alert" className="mt-2 text-xs text-red-700">{cloudError}</p>}
+          {cloudError && <div role="alert" className="mt-3 space-y-2">
+            <p className="text-xs leading-5 text-amber-800">{cloudError}</p>
+            {!saveVideo || storage === 'error' ? (
+              <button type="button" disabled={storage === 'saving'}
+                onClick={() => changeSaveVideo(true)}
+                className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50">
+                <Film size={14}/> Keep this original on my device
+              </button>
+            ) : storage === 'saving' ?
+              <p className="text-xs text-slate-600">Saving the original on this device…</p> :
+              storage === 'saved' ?
+                <p className="text-xs font-medium text-emerald-700">Original retained on this device.</p> :
+                <p className="text-xs text-slate-600">Check the local retention status above.</p>}
+          </div>}
         </div>
       )}
       <div className="grid gap-3 sm:grid-cols-3">
