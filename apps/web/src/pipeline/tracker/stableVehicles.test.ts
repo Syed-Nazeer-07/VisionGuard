@@ -51,6 +51,22 @@ describe('persistent crowded vehicle tracking', () => {
     expect(next.kmh).toBeGreaterThan(0);
   });
 
+  it('keeps a coarse speed estimate available when a slow detector observes every 1.5s', () => {
+    const initial = updateScreenSpeed({ points: [], smoothedKmh: null }, car(100), 0);
+    const next = updateScreenSpeed(initial.history, car(150), 1.5);
+    expect(next.kmh).not.toBeNull();
+    expect(next.kmh).toBeGreaterThan(0);
+  });
+
+  it('never reuses a stale speed after a long loss of real observations', () => {
+    const start = updateScreenSpeed({ points: [], smoothedKmh: null }, car(100), 0);
+    const measured = updateScreenSpeed(start.history, car(140), 0.7);
+    expect(measured.kmh).toBeGreaterThan(0);
+    const stale = updateScreenSpeed(measured.history, car(190), 4.2);
+    expect(stale.kmh).toBeNull();
+    expect(stale.history.smoothedKmh).toBeNull();
+  });
+
   it('restores an existing ID after optical tracking temporarily loses a vehicle', () => {
     const original = reconcileVehicles([], [car(100, 100, 401)], 1, 1);
     const sourceIds = original.sourceAssignments;
