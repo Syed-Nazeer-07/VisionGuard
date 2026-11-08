@@ -6,6 +6,7 @@ import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../servi
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
 import { placeLiveLabel } from '../pipeline/rendering/liveLabelPlacement';
+import { displayedVideoMediaTime } from '../pipeline/worker/frameSync';
 import { canReanalyzeStoredVideo } from '../lib/videoAssets';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
@@ -285,7 +286,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           // One late inference result must not erase newer optically matched
           // vehicles. Expire genuinely stale overlays as before.
           if (!hasFreshOpticalObservation(
-            latestRef.current?.time, presentedMediaTimeRef.current ?? video.currentTime
+            latestRef.current?.time, displayedVideoMediaTime(
+              video.currentTime, presentedMediaTimeRef.current, video.paused, video.seeking
+            )
           )) {
             flowTracksRef.current = [];
             latestRef.current = null;
@@ -1288,8 +1291,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const fit = Math.min(width / frameWidth, height / frameHeight);
             const offsetX = (width - frameWidth * fit) / 2;
             const offsetY = (height - frameHeight * fit) / 2;
-            const displayedTime = (video.paused || video.seeking)
-              ? video.currentTime : (presentedMediaTimeRef.current ?? video.currentTime);
+            const displayedTime = displayedVideoMediaTime(
+              video.currentTime, presentedMediaTimeRef.current, video.paused, video.seeking
+            );
             const tracks = projectLiveTracks(
               observation.tracks, observation.time, displayedTime, frameWidth, frameHeight
             );
