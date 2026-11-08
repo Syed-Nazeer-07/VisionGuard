@@ -42,6 +42,24 @@ describe('optical tracking between slow YOLO observations', () => {
   it('drops broken temporal sequences rather than projecting stale objects', () => {
     expect(advanceOpticalTracks([vehicle], makeFrame(2, 0), makeFrame(3, 4))).toEqual([]);
   });
+  it('does not relock a predicted bridge onto stationary road texture', () => {
+    const previous = makeFrame(2, 0);
+    const unchangedRoad = makeFrame(2.1, 0);
+    const predicted = { ...vehicle, isPredicted: true, x: 42, vx: 40 };
+    expect(advanceOpticalTracks([predicted], previous, unchangedRoad)).toEqual([]);
+  });
+
+  it('rejects a moving car that mysteriously freezes on the same road pixels', () => {
+    const staticPrevious = makeFrame(2, 0);
+    const staticCurrent = makeFrame(2.1, 0);
+    const moving = { ...vehicle, vx: 80, vy: 0 };
+    expect(advanceOpticalTracks([moving], staticPrevious, staticCurrent)).toEqual([]);
+    // A truly stationary vehicle can still have a legitimate zero-motion match.
+    const stationary = advanceOpticalTracks([vehicle], staticPrevious, staticCurrent);
+    expect(stationary).toHaveLength(1);
+    expect(stationary[0].x).toBeCloseTo(vehicle.x);
+  });
+
   it('keeps a small textured motorcycle across nearby frames without relaxing car matching', () => {
     const small = (time: number, shift: number): GrayFrame => {
       const width = 100, height = 80;
