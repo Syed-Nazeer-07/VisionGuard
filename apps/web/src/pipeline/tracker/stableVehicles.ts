@@ -79,7 +79,10 @@ export function reconcileVehicles(
   nextId: number,
   knownSourceIds: ReadonlyMap<number, number> = new Map(),
 ): { tracks: PersistentTrack[]; nextId: number; sourceAssignments: Map<number, number> } {
-  const viable = candidates.filter(finiteTrack);
+  // Predicted boxes are display-only and must never be interpreted as a
+  // fresh YOLO/optical observation during identity reconciliation. Otherwise
+  // their extrapolated road positions can overwrite real vehicle locations.
+  const viable = candidates.filter(track => finiteTrack(track) && !track.isPredicted);
   const options: { previous: number; current: number; score: number }[] = [];
   existing.forEach((old, previous) => {
     viable.forEach((candidate, current) => {
@@ -132,11 +135,9 @@ export function reconcileVehicles(
       vy: before.vy,
       speedKmh: before.speedKmh,
       speedIsEstimate: true,
-      // A predicted catch-up is display-only: never upgrade its provenance.
-      lastOpticalAt: after.isPredicted
-        ? (before.lastOpticalAt ?? before.lastDetectedAt) : mediaTime,
-      isPredicted: !!after.isPredicted,
-      lastDetectedAt: after.isPredicted ? before.lastDetectedAt : mediaTime
+      lastOpticalAt: mediaTime,
+      isPredicted: false,
+      lastDetectedAt: mediaTime
     });
   }
   viable.forEach((candidate, index) => {
@@ -241,9 +242,11 @@ export function recoverBriefOpticalMisses(
   frameWidth: number,
   frameHeight: number,
 ): PersistentTrack[] {
-  const result: PersistentTrack[] = observed.map(track => ({
-    ...track, lastOpticalAt: mediaTime, isPredicted: false
-  }));
+  // Never let a caller accidentally turn predicted geometry into a new
+  // optical confirmation. Only actual image-matched tracks enter this list.
+  const result: PersistentTrack[] = observed
+    .filter(track => !track.isPredicted)
+    .map(track => ({ ...track, lastOpticalAt: mediaTime, isPredicted: false }));
   const present = new Set(result.map(t => t.id));
   const elapsed = mediaTime - previousTime;
   if (!(elapsed > 0 && elapsed <= .25)) return result;
