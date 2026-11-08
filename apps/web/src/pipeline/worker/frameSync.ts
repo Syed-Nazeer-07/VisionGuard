@@ -18,6 +18,21 @@ export function isOverlayAgeFresh(
   return Number.isFinite(ageSeconds) && ageSeconds <= maxAgeSeconds && ageSeconds >= -maxFutureSkewSeconds;
 }
 
+/**
+ * RAF rendering must use the timestamp of the last *presented decoded frame*,
+ * not video.currentTime (which can lead by several frames under load).
+ * Seeking/paused media deliberately uses the selected playback position.
+ */
+export function displayedVideoMediaTime(
+  currentTime: number,
+  presentedTime: number | null,
+  paused: boolean,
+  seeking: boolean,
+): number {
+  return !paused && !seeking && presentedTime !== null &&
+    Number.isFinite(presentedTime) ? presentedTime : currentTime;
+}
+
 /** Age (seconds, media time) of a result relative to the frame currently on screen. */
 export function computeResultAge(displayedMediaTime: number, resultMediaTime: number): number {
   if (!Number.isFinite(displayedMediaTime) || !Number.isFinite(resultMediaTime)) return Number.NaN;
