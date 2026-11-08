@@ -156,6 +156,15 @@ Deno.serve(async (req) => {
     const videoId = String(body.videoId ?? '')
 
     switch (action) {
+      // Lightweight authenticated preflight: no asset row, upload or B2
+      // network call. Never expose any credential values to the browser.
+      case 'capabilities': {
+        const configured = [
+          'B2_ENDPOINT', 'B2_REGION', 'B2_BUCKET',
+          'B2_KEY_ID', 'B2_APPLICATION_KEY',
+        ].every(name => Boolean((Deno.env.get(name) ?? '').trim()))
+        return json({ b2UploadConfigured: configured })
+      }
       case 'create-upload': {
         const asset = await loadAsset(db, videoId)
         requireUploader(asset, userId)
