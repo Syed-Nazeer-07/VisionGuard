@@ -1138,7 +1138,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               for (const [id, history] of speedHistoryRef.current) {
                 const lastPoint = history.points[history.points.length - 1];
                 if (!activeIds.has(id) &&
-                    (!lastPoint || current.time - lastPoint.time > 0.9)) {
+                    (!lastPoint || current.time - lastPoint.time > 2.5)) {
                   speedHistoryRef.current.delete(id);
                 }
               }
