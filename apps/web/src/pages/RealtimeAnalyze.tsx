@@ -9,7 +9,7 @@ import { placeLiveLabel } from '../pipeline/rendering/liveLabelPlacement';
 import { displayedVideoMediaTime } from '../pipeline/worker/frameSync';
 import { canReanalyzeStoredVideo } from '../lib/videoAssets';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
-import { storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
+import { isB2UploadConfigured, storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
 import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
@@ -70,6 +70,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudStarting, setCloudStarting] = useState(false);
   const [cloudError, setCloudError] = useState('');
   const [cloudUnavailable, setCloudUnavailable] = useState(false);
+  const [cloudAvailability, setCloudAvailability] = useState<'checking' | 'configured' | 'unconfigured' | 'error'>('checking');
   const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
   const [keepTabConnected, setKeepTabConnected] = useState(false);
   const lastPresentedAtRef = useRef(0);
@@ -800,21 +801,51 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     });
   };
 
+  useEffect(() => {
+    if (!ownerId) {
+      setCloudAvailability('unconfigured');
+      return;
+    }
+    let cancelled = false;
+    setCloudAvailability('checking');
+    void isB2UploadConfigured()
+      .then(configured => {
+        if (cancelled) return;
+        setCloudAvailability(configured ? 'configured' : 'unconfigured');
+        if (!configured) setCloudUnavailable(true);
+      })
+      .catch(error => {
+        if (cancelled) return;
+        console.warn('Cloud backup preflight failed:', error);
+        setCloudAvailability('error');
+      });
+    return () => { cancelled = true; };
+  }, [ownerId]);
+
   const reportCloudUploadFailure = (error: unknown) => {
     const failure = describeCloudVideoFailure(error);
     setCloudError(failure.message);
-    if (failure.kind === 'not_configured') setCloudUnavailable(true);
+    if (failure.kind === 'not_configured') {
+      setCloudUnavailable(true);
+      setCloudAvailability('unconfigured');
+    }
   };
 
   const saveCurrentVideoToB2 = async () => {
     const file = currentFileRef.current;
     if (!file || !ownerId || cloudStarting || cloudUnavailable ||
-        cloudUploadIdRef.current) return;
+        cloudAvailability !== 'configured' || cloudUploadIdRef.current) return;
     setCloudStarting(true);
     setCloudError('');
     try {
       if (uploadStorageProvider().id !== 'b2') {
         throw new Error('Cloud video saving is restricted to Backblaze B2.');
+      }
+      // Recheck before creating a video_assets row: server configuration
+      // might have changed since this page was opened.
+      if (!await isB2UploadConfigured()) {
+        setCloudAvailability('unconfigured');
+        throw new Error('Video storage is not configured on the server.');
       }
       // The existing UploadManager writes a metadata row and uses the
       // authenticated B2 signing function. File bytes go directly to B2.
@@ -1644,14 +1675,22 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-slate-900">
-                {cloudUnavailable ? 'Cloud backup unavailable' : 'Backblaze B2 · optional cloud storage'}
+                {cloudUnavailable || cloudAvailability === 'unconfigured' ? 'Cloud backup not configured' :
+                  cloudAvailability === 'checking' ? 'Checking cloud backup…' :
+                  cloudAvailability === 'error' ? 'Cloud backup status unavailable' :
+                  'Backblaze B2 · optional cloud storage'}
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                B2 cloud playback requires server-side credentials. Saving an analysis
-                does not upload its video. You can retain this file on your own device instead.
+                {cloudAvailability === 'unconfigured' || cloudUnavailable
+                  ? 'No B2 upload is possible until the app owner configures private server credentials. No original video was uploaded. You can keep a local copy on this device instead.'
+                  : cloudAvailability === 'error'
+                  ? 'Cannot verify cloud storage right now, so cloud uploads are disabled to prevent failed records. Your local analysis still works.'
+                  : cloudAvailability === 'checking'
+                  ? 'Checking whether secure cloud video backup is configured…'
+                  : 'Optional cloud backup. Saving an analysis does not upload the original video. You can also retain it on this device.'}
               </p>
             </div>
-            {!cloudUpload && !cloudUnavailable && (
+            {!cloudUpload && !cloudUnavailable && cloudAvailability === 'configured' && (
               <button type="button" onClick={() => void saveCurrentVideoToB2()} disabled={cloudStarting}
                 className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {cloudStarting ? 'Preparing B2 upload…' : 'Save video to B2'}
