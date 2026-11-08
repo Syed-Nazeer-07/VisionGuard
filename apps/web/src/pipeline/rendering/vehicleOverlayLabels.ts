@@ -17,6 +17,6 @@ export function vehicleOverlayLabels(track: VehicleLabelSource): readonly [strin
 
   return [
     '#' + track.id + ' ' + vehicleClass + ' ' + speed + ' km/h*',
-    vehicleClass + '#' + track.id + ' ' + speed + 'km/h*',
+    '#' + track.id + ' ' + vehicleClass + ' ' + speed + 'km/h*',
   ];
 }
