@@ -193,13 +193,19 @@ export function updateScreenSpeed(
   track: LiveTrack,
   mediaTime: number
 ): { history: SpeedHistory; kmh: number | null } {
-  const points = history.points.filter(p => mediaTime - p.time <= 1.2 && p.time <= mediaTime);
+  // Slow CPU/WASM inference can leave >1s between real observations.
+  // Keep a bounded two-second trajectory for a *coarse optical estimate*,
+  // but never reuse a reading once the last actual sample has become stale.
+  const points = history.points.filter(p =>
+    mediaTime - p.time <= 2.4 && p.time <= mediaTime
+  );
+  const previousEstimate = points.length ? history.smoothedKmh : null;
   if (!points.length || mediaTime - points[points.length - 1].time > 0.035) {
     points.push({ time: mediaTime, x: track.x, y: track.y + track.h / 2 });
   }
   const minAge = .50;
   const past = points.find(p => mediaTime - p.time >= minAge);
-  if (!past) return { history: { points, smoothedKmh: history.smoothedKmh }, kmh: history.smoothedKmh };
+  if (!past) return { history: { points, smoothedKmh: previousEstimate }, kmh: previousEstimate };
   const elapsed = mediaTime - past.time;
   const dx = track.x - past.x;
   const dy = track.y + track.h / 2 - past.y;
@@ -207,7 +213,7 @@ export function updateScreenSpeed(
   // A tenth of the car width in ~0.5 seconds is often matching jitter rather
   // than real motion. Set known stationary cars to exactly zero.
   if (relativeTravel < .07) {
-    const next = history.smoothedKmh === null ? 0 : Math.max(0, history.smoothedKmh * .4);
+    const next = previousEstimate === null ? 0 : Math.max(0, previousEstimate * .4);
     const kmh = next < 2 ? 0 : next;
     return { history: { points, smoothedKmh: kmh }, kmh };
   }
@@ -217,8 +223,7 @@ export function updateScreenSpeed(
   // This factor is a heuristic only. It MUST be labeled as estimated, not exact.
   const groundPixelPerSecond = Math.hypot(dx, dy * 2.0) / elapsed;
   const estimate = Math.min(160, Math.max(0, 3.6 * metersPerPixel * groundPixelPerSecond));
-  const previous = history.smoothedKmh;
-  const next = previous === null ? estimate : previous * .75 + estimate * .25;
+  const next = previousEstimate === null ? estimate : previousEstimate * .75 + estimate * .25;
   return { history: { points, smoothedKmh: next }, kmh: next };
 }
 
