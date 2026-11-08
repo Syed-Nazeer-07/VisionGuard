@@ -3,6 +3,7 @@ import {
   isOverlayTimestampFresh,
   isOverlayAgeFresh,
   computeResultAge,
+  displayedVideoMediaTime,
   matchesFrameRequest,
   canSubmitContinuousFrame,
   shouldStopAfterInferenceErrors,
@@ -40,6 +41,22 @@ describe('frame timestamp synchronization and age', () => {
     expect(isOverlayAgeFresh(0.6, MAX_OVERLAY_AGE_SECONDS)).toBe(false);
     expect(isOverlayAgeFresh(-0.01, MAX_OVERLAY_AGE_SECONDS)).toBe(true);
     expect(isOverlayAgeFresh(-0.05, MAX_OVERLAY_AGE_SECONDS)).toBe(false); // future skew
+  });
+});
+
+describe('presented-video-frame clock', () => {
+  it('uses the decoded frame instead of a media clock that runs ahead', () => {
+    expect(displayedVideoMediaTime(13.40, 13.14, false, false)).toBe(13.14);
+    expect(computeResultAge(displayedVideoMediaTime(13.40, 13.14, false, false), 13.08))
+      .toBeCloseTo(0.06);
+  });
+  it('follows the selected position while paused or seeking', () => {
+    expect(displayedVideoMediaTime(3.1, 13.14, true, false)).toBe(3.1);
+    expect(displayedVideoMediaTime(3.1, 13.14, false, true)).toBe(3.1);
+  });
+  it('falls back safely if no valid presented timestamp exists', () => {
+    expect(displayedVideoMediaTime(6, null, false, false)).toBe(6);
+    expect(displayedVideoMediaTime(6, Number.NaN, false, false)).toBe(6);
   });
 });
 
