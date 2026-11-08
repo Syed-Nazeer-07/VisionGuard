@@ -7,8 +7,7 @@ describe('vehicle type labels in live detection overlays', () => {
     className => {
       const labels = vehicleOverlayLabels({ id: 42, className, speedKmh: 37.4 });
       for (const text of labels) {
-        expect(text).toContain(className.toUpperCase());
-        expect(text).toContain('42');
+        expect(text.startsWith('#42 ' + className.toUpperCase() + ' ')).toBe(true);
         expect(text).toContain('≈37');
         expect(text).toContain('km/h*');
       }
@@ -17,7 +16,7 @@ describe('vehicle type labels in live detection overlays', () => {
 
   it('keeps the class visible even when speed has not been estimated', () => {
     const labels = vehicleOverlayLabels({ id: 6, className: 'car', speedKmh: null });
-    expect(labels).toEqual(['#6 CAR — km/h*', 'CAR#6 —km/h*']);
+    expect(labels).toEqual(['#6 CAR — km/h*', '#6 CAR —km/h*']);
   });
 
   it('never shows an invalid speed or a blank class label', () => {
