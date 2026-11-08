@@ -121,9 +121,31 @@ export async function resolveSavedVideoRecord(
   }
 }
 export async function readSavedVideo(ownerId?: string): Promise<SavedLocalVideo | undefined> {
-  return resolveSavedVideoRecord(
-    await read<SavedLocalVideo | SavedVideoHandle>('video', ownerId)
-  );
+  const stored = await read<SavedLocalVideo | SavedVideoHandle>('video', ownerId);
+  if (!stored || 'file' in stored) return stored;
+
+  // Older versions stored only a FileSystemFileHandle. When readable, replace
+  // that fragile shortcut with actual bytes; when permission has expired,
+  // discard the unusable shortcut so every new page visit does not fail again.
+  let restored: SavedLocalVideo | undefined;
+  try {
+    restored = await resolveSavedVideoRecord(stored);
+  } catch (error) {
+    if (error instanceof ExpiredLocalVideoPermissionError) {
+      await remove('video', ownerId).catch(() => {});
+    }
+    throw error;
+  }
+  if (restored) {
+    // If the browser has insufficient quota, the current file can still be
+    // opened. Only a successful write counts as durable offline retention.
+    try {
+      await write('video', restored, ownerId);
+    } catch (error) {
+      console.warn('Could not upgrade old saved file to an IndexedDB copy:', error);
+    }
+  }
+  return restored;
 }
 
 export const localAnalysisStorage = {
