@@ -134,10 +134,10 @@ export function advanceOpticalTracks<T extends LiveTrack>(
   ];
 
   for (const track of tracks) {
-    // A predicted-only bridge has no new visual evidence. Matching its box
-    // against the following frame can lock onto road texture and create a
-    // self-sustaining ghost vehicle. Only fresh YOLO can reacquire it.
-    if (track.isPredicted) continue;
+    // A predicted bridge may be rescued by genuinely matching new pixels.
+    // Never treat prediction itself as evidence; apply stronger requirements
+    // to reacquisition than to an already visually confirmed track.
+    const reacquiring = track.isPredicted === true;
     const minConf = track.className === 'motorcycle' ? .28 :
       track.className === 'bicycle' ? .33 : .42;
     if (track.w < 4 || track.h < 4 || track.confidence < minConf) continue;
@@ -164,7 +164,8 @@ export function advanceOpticalTracks<T extends LiveTrack>(
       );
       if (match) features.push(match);
     }
-    if (features.length < 2 && !(isSmallTwoWheeler && features.length === 1 && features[0].error < 8)) continue;
+    if (reacquiring ? features.length < 3 :
+        features.length < 2 && !(isSmallTwoWheeler && features.length === 1 && features[0].error < 8)) continue;
     const dx = median(features.map(f => f.dx));
     const dy = median(features.map(f => f.dy));
     const consistent = features.filter(f => Math.abs(f.dx - dx) <= 2 &&
@@ -172,8 +173,15 @@ export function advanceOpticalTracks<T extends LiveTrack>(
 
     // Reject boxes when neighboring features disagree: almost always
     // background slip, occlusion or a car leaving the picture.
-    if (consistent.length < 2 && !(isSmallTwoWheeler && consistent.length === 1 && consistent[0].error < 8)) continue;
-    if (consistent.length < Math.ceil(features.length * .5)) continue;
+    if (reacquiring) {
+      // Multiple independent image patches must agree on the new motion.
+      // This avoids renewing a ghost from one patch of unchanging road.
+      if (consistent.length < 3 || consistent.length < Math.ceil(features.length * .67) ||
+          median(consistent.map(f => f.error)) > 14) continue;
+    } else {
+      if (consistent.length < 2 && !(isSmallTwoWheeler && consistent.length === 1 && consistent[0].error < 8)) continue;
+      if (consistent.length < Math.ceil(features.length * .5)) continue;
+    }
     const measuredDx = median(consistent.map(f => f.dx));
     const measuredDy = median(consistent.map(f => f.dy));
     // If a previously moving vehicle suddenly produces motionless patches,
@@ -182,6 +190,9 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     // the contradiction when the expected image movement is unambiguous.
     const expectedPixels = Math.hypot(predictX, predictY);
     const measuredPixels = Math.hypot(measuredDx, measuredDy);
+    // A prediction cannot become a new stationary pixel observation; a
+    // moving textured object must provide actual measurable displacement.
+    if (reacquiring && measuredPixels < 1) continue;
     if (expectedPixels >= 3.5 && measuredPixels <= 1 &&
         measuredPixels < expectedPixels * .30) continue;
     // A large backwards optical jump against a strong recent trajectory is
@@ -210,7 +221,9 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     const vy = track.vy * .6 + instantaneousY * .4;
     const moved = {
       ...track, x: newX, y: newY,
-      vx, vy, motionPxPerSec: Math.hypot(vx, vy)
+      vx, vy, motionPxPerSec: Math.hypot(vx, vy),
+      // This frame supplied fresh consistent pixel matches, not a guess.
+      isPredicted: false, lastOpticalAt: current.time
     } as T;
     if (hasExitedVideoFrame(moved, current.sourceWidth, current.sourceHeight)) continue;
     output.push(moved);
