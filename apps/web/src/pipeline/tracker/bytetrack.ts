@@ -90,9 +90,10 @@ export class ByteTracker {
       if (t.state === 'Lost' || t.state === 'Removed') {
         continue;
       }
-      // Emit confirmed tracks, or tentative tracks with high confidence (>= 0.60) on first sighting.
-      // Low-confidence tentative tracks must achieve hitCount >= 2 before rendering.
-      const isValidEmission = (t.state === 'Confirmed') || (t.hitCount >= 2) || (t.prob >= 0.60 && t.timeSinceUpdate === 0);
+      // Single-frame 0.54+ YOLO vehicles can appear immediately instead of
+      // vanishing while waiting for a second expensive detector pass.
+      // Weaker tentative tracks still require two real observations.
+      const isValidEmission = (t.state === 'Confirmed') || (t.hitCount >= 2) || (t.prob >= 0.54 && t.timeSinceUpdate === 0);
       if (!isValidEmission) {
         continue;
       }
