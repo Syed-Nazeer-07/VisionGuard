@@ -96,6 +96,13 @@ export interface SavedVideoHandle {
 /** New videos are copied as Blobs in IndexedDB. Old file handles may lose
  * read permission on Edge/Chromium restart and cannot be silently regranted.
  */
+export class ExpiredLocalVideoPermissionError extends Error {
+  constructor() {
+    super('Edge no longer permits access to the previously selected video. Choose the original video again. New opted-in saves retain a local copy rather than an expiring file shortcut.');
+    this.name = 'ExpiredLocalVideoPermissionError';
+  }
+}
+
 export function isHandleAccessDenied(error: unknown): boolean {
   const name = error && typeof error === 'object' && 'name' in error ? String(error.name) : '';
   return name === 'NotAllowedError' || name === 'SecurityError';
@@ -109,7 +116,7 @@ export async function resolveSavedVideoRecord(
     const file = await stored.handle.getFile();
     return { file, name: stored.name };
   } catch (error) {
-    if (isHandleAccessDenied(error)) return undefined;
+    if (isHandleAccessDenied(error)) throw new ExpiredLocalVideoPermissionError();
     throw error;
   }
 }

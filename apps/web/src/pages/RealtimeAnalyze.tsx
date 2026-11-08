@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Activity, AlertTriangle, Camera, ExternalLink, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
-import { isHandleAccessDenied, localAnalysisStorage } from '../services/localAnalysisStorage';
+import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
 import { placeLiveLabel } from '../pipeline/rendering/liveLabelPlacement';
@@ -588,8 +588,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setStorage('saved');
     }).catch(e => {
       if (alive && generation === uploadGenerationRef.current) {
-        setError('Could not restore the retained file. Select the original again: ' +
-          (isHandleAccessDenied(e) ? 'The old Edge file permission expired.' : String(e)));
+        setError(e instanceof ExpiredLocalVideoPermissionError ? e.message :
+          'Could not restore your retained video. Choose the original again: ' + String(e));
       }
     });
     return () => { alive = false; };
@@ -848,7 +848,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         localStorage.getItem('visionguard:video-run:' + ownerId) || undefined);
       setStorage('saved');
     } catch (error) {
-      setError('Cannot reopen saved video: ' + (error instanceof Error ? error.message : String(error)));
+      setError(error instanceof ExpiredLocalVideoPermissionError ? error.message :
+        'Cannot reopen saved video. Choose the original file again: ' +
+          (error instanceof Error ? error.message : String(error)));
     }
   };
 

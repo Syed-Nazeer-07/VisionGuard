@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isHandleAccessDenied, resolveSavedVideoRecord } from './localAnalysisStorage';
+import { ExpiredLocalVideoPermissionError, isHandleAccessDenied, resolveSavedVideoRecord } from './localAnalysisStorage';
 
 describe('Edge saved-video restoration', () => {
   it('restores a saved Blob without requesting another file permission', async () => {
@@ -23,7 +23,16 @@ describe('Edge saved-video restoration', () => {
     await expect(resolveSavedVideoRecord({
       kind: 'file-handle', name: 'lost.mp4',
       handle: handle as unknown as FileSystemFileHandle,
-    })).resolves.toBeUndefined();
+    })).rejects.toBeInstanceOf(ExpiredLocalVideoPermissionError);
+    try {
+      await resolveSavedVideoRecord({
+        kind: 'file-handle', name: 'lost.mp4',
+        handle: handle as unknown as FileSystemFileHandle,
+      });
+    } catch (error) {
+      expect((error as Error).message).toContain('Choose the original video again');
+      expect((error as Error).message).not.toContain('NotAllowedError');
+    }
     expect(isHandleAccessDenied({ name: 'SecurityError' })).toBe(true);
   });
   it('does not hide unrelated corrupt-file errors', async () => {

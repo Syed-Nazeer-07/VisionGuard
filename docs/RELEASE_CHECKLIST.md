@@ -28,7 +28,7 @@ and on the target Windows/Edge computer before promoting the release.
 | Fast repeated updates | Create incident decisions and optical observations within the same millisecond; revisions stay monotonically increasing so the anti-stale trigger cannot silently discard changes |
 | Reload persistence | Saved session data survives reload without duplicating IDs |
 | Local video opt-in | Unchecked means original bytes are not retained across reloads |
-| Optional local retention | Checked retains the most recently selected file within browser quota and the currently signed-in account. With the option unchecked, History keeps analysis metadata but cannot reopen original footage |
+| Optional local retention | Checked writes an actual file Blob to IndexedDB (browser quota applies), scoped to the signed-in account. Legacy Edge file handles with revoked permissions show a reselect explanation; newly saved copies reopen without file-picker permission |
 | B2 storage | With credentials: upload completes, appears in History and opens via a signed URL. Without credentials: UI explains B2 is not configured, hides the failed 0% progress bar and offers one-click opt-in local retention |
 | B2 re-analysis | Completed originals can be replayed through a signed URL. Missing/failed/in-progress uploads route to the local recovery screen; a matching opted-in file (name + exact size) reopens, otherwise **Choose original video** is shown |
 | Archive recovery safety | Two videos with the same name but different sizes must not auto-match. Unknown archive size, no retained file, revoked file-handle permission, and account changes must not silently substitute unrelated footage |
@@ -37,6 +37,7 @@ and on the target Windows/Edge computer before promoting the release.
 | Account switching | Account settings, video/capture state and tracked history do not leak between users |
 | Device performance | Sustainable inference speed verified on Surface Laptop 7 / Windows ARM |
 | Report clarity | Speed labels explicitly say **uncalibrated**, with no claim of measured road speed or verified offence |
+| Overlay label stability | Same vehicle ID keeps a stable above/inside anchor through normal motion; adjacent detections must not cause labels to jump or flicker. Full and compact labels both keep ID and estimated speed (or a clear dash when unknown) |
 | Count consistency | Dashboard, History, Analytics and Reports count repeated track IDs consistently, excluding one-frame noise while preserving raw candidate evidence; inspect ID-switch inflation separately |
 | Cloudflare Workers/Pages | Production build guard, Hugging Face model/CORS, version-matched external ONNX Runtime WASM, security headers and 25 MiB limit validated on deployed HTTPS site |
 | Deployment | HTTPS, secure server-side B2 credentials, RLS, rate limits and backup/recovery policy verified |

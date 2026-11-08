@@ -150,7 +150,7 @@ Review or commit any local modifications before pulling if Git reports a conflic
 | --- | --- | --- |
 | Vehicle tracks, session totals, review flags | Per-account browser IndexedDB; optional Supabase PostgreSQL sync | Local-first. Cloud writes verify server acknowledgments, retry bounded conflicting revisions and preserve merged local history if sync remains unavailable |
 | Original selected file | In memory during analysis | Not kept across reloads by default |
-| Opted-in local video | Browser-local storage | **Keep this video on this device** retains the most recently saved local file, subject to browser quotas/permissions; it does not upload it |
+| Opted-in local video | Browser IndexedDB (actual Blob) | **Keep this video on this device** retains an actual copy of the most recent original for that signed-in account (subject to browser quota). Edge file-picker permission is not required to reopen newly saved videos |
 | Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2** after server-side credentials are configured. An upload error leaves no playable cloud video; the UI offers an opt-in local retention alternative |
 | Account credentials and preferences | Supabase Auth / PostgreSQL when configured | Protected by server-side access policies |
 
@@ -186,7 +186,10 @@ the original footage. VisionGuard now explains the problem, hides a
 misleading failed-upload progress bar and offers **Keep this original on
 my device**. Local retention is explicitly opt-in, can be limited by
 browser storage, and currently preserves **only the most recent original
-per signed-in account on that device**.
+per signed-in account on that device**. The saved video is now an actual
+IndexedDB file copy instead of a browser File System Access shortcut.
+Older versions that saved a file handle may require you to select the
+original once more, because Edge can revoke previously granted access.
 
 To enable cross-device video playback, the project owner must create
 a B2 bucket and restricted application key, then configure the five
