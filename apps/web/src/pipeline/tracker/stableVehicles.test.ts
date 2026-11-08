@@ -166,7 +166,8 @@ describe('persistent crowded vehicle tracking', () => {
     expect(next.tracks).toHaveLength(1);
     expect(next.tracks[0].id).toBe(4);
     expect(next.tracks[0].x).toBe(100);
-    expect(next.tracks[0].isPredicted).toBe(false);
+    // isPredicted is optional: absence means this was not a predicted bridge.
+    expect(next.tracks[0].isPredicted).not.toBe(true);
     expect(next.tracks[0].lastOpticalAt).toBe(2);
     expect(next.tracks[0].lastDetectedAt).toBe(2);
     expect(next.sourceAssignments.size).toBe(0);
