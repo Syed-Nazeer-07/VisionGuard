@@ -106,6 +106,22 @@ describe('ByteTracker', () => {
     expect(tracksWithTruck[0].className).toBe('car'); // Stabilized by voting
   });
 
+  it('shows a real 0.55-confidence car on its first YOLO frame without waiting for a second hit', () => {
+    const tracker = new ByteTracker();
+    const first = tracker.update([makeBox(1, 100, 100, 'car', 2, 0.55)]);
+    expect(first).toHaveLength(1);
+    expect(first[0].observationType).toBe('detection');
+    expect(first[0].x).toBe(100);
+  });
+
+  it('still holds weaker 0.51-confidence tentative cars until a second matched detection', () => {
+    const tracker = new ByteTracker();
+    expect(tracker.update([makeBox(1, 100, 100, 'car', 2, 0.51)])).toHaveLength(0);
+    const verified = tracker.update([makeBox(1, 102, 100, 'car', 2, 0.51)]);
+    expect(verified).toHaveLength(1);
+    expect(verified[0].x).toBe(102);
+  });
+
   it('matches track under larger frame displacement with 0.2 threshold', () => {
     const tracker = new ByteTracker();
     const tracks1 = tracker.update([makeBox(1, 100, 100, 'car', 2, 0.9)]);
