@@ -72,6 +72,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [streamHealth, setStreamHealth] = useState<StreamHealth>('idle');
   const [keepTabConnected, setKeepTabConnected] = useState(false);
   const lastPresentedAtRef = useRef(0);
+  // The playback clock may be ahead of the last decoded image on screen.
+  const presentedMediaTimeRef = useRef<number | null>(null);
   const lastDecodedMediaTimeRef = useRef<number | null>(null);
   const captureErrorRef = useRef(false);
   const captureStalledRef = useRef(false);
@@ -188,6 +190,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const resetTracks = useCallback(() => {
     generationRef.current += 1;
     lastDecodedMediaTimeRef.current = null;
+    presentedMediaTimeRef.current = null;
     lastPresentedAtRef.current = 0;
     captureStalledRef.current = false;
     latestRef.current = null;
@@ -281,7 +284,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (anchor < 0 || closestDistance > 0.14) {
           // One late inference result must not erase newer optically matched
           // vehicles. Expire genuinely stale overlays as before.
-          if (!hasFreshOpticalObservation(latestRef.current?.time, video.currentTime)) {
+          if (!hasFreshOpticalObservation(
+            latestRef.current?.time, presentedMediaTimeRef.current ?? video.currentTime
+          )) {
             flowTracksRef.current = [];
             latestRef.current = null;
           }
@@ -309,13 +314,24 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         for (const [sourceId, stableId] of merged.sourceAssignments) {
           detectorToStableIdRef.current.set(sourceId, stableId);
         }
-        flowTracksRef.current = merged.tracks;
-        latestRef.current = { time: latestTime, tracks: merged.tracks };
+        // Real detector-corrected positions also refresh optical speed.
+        // Do not derive speed from a prediction-only bridge.
+        const enriched = merged.tracks.map(track => {
+          if (track.isPredicted) return track;
+          const previousSpeed = speedHistoryRef.current.get(track.id) ?? {
+            points: [], smoothedKmh: null
+          };
+          const estimate = updateScreenSpeed(previousSpeed, track, latestTime);
+          speedHistoryRef.current.set(track.id, estimate.history);
+          return { ...track, speedKmh: estimate.kmh ?? track.speedKmh, speedIsEstimate: true };
+        });
+        flowTracksRef.current = enriched;
+        latestRef.current = { time: latestTime, tracks: enriched };
         const account = useAuthStore.getState().user?.id;
         if (account && activeRunRef.current) {
           // Predicted-only bridges are not confirmed vehicle observations.
           activityLedger.observe(account, activeRunRef.current, latestTime,
-            merged.tracks.filter(track => !track.isPredicted));
+            enriched.filter(track => !track.isPredicted));
         }
       } else if (message.type === 'error') {
         setError('Frame inference error: ' + message.message);
@@ -811,18 +827,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
   };
 
-  const chooseVideo = async () => {
-    const picker = (window as Window & {
-      showOpenFilePicker?: (options?: { multiple?: boolean }) => Promise<FileSystemFileHandle[]>;
-    }).showOpenFilePicker;
-    if (!picker) { inputRef.current?.click(); return; }
-    try {
-      const [handle] = await picker.call(window, { multiple: false });
-      if (handle) await acceptFile(await handle.getFile());
-    } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') return;
-      inputRef.current?.click();
-    }
+  const chooseVideo = () => {
+    // Do not depend on revocable FileSystemFileHandle permissions.
+    // A user-picked File can be copied to IndexedDB only when opted in.
+    inputRef.current?.click();
   };
 
   const reopenSavedVideo = async () => {
@@ -1122,8 +1130,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 return { ...track, speedKmh: speed.kmh, speedIsEstimate: true };
               });
               const activeIds = new Set(flowTracksRef.current.map(t => t.id));
-              for (const id of speedHistoryRef.current.keys()) {
-                if (!activeIds.has(id)) speedHistoryRef.current.delete(id);
+              // A one-frame feature miss must not erase a vehicle's velocity
+              // window. Retire history only after sustained absence.
+              for (const [id, history] of speedHistoryRef.current) {
+                const lastPoint = history.points[history.points.length - 1];
+                if (!activeIds.has(id) &&
+                    (!lastPoint || current.time - lastPoint.time > 0.9)) {
+                  speedHistoryRef.current.delete(id);
+                }
               }
               latestRef.current = { time: current.time, tracks: flowTracksRef.current };
               const account = useAuthStore.getState().user?.id;
@@ -1214,11 +1228,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (stopped) return;
       if (typeof video.requestVideoFrameCallback === 'function') {
         presentedId = video.requestVideoFrameCallback((_, metadata) => {
+          presentedMediaTimeRef.current = metadata.mediaTime;
           maybeInfer(metadata.mediaTime);
           schedule();
         });
       } else {
         fallbackId = requestAnimationFrame(() => {
+          presentedMediaTimeRef.current = video.currentTime;
           maybeInfer(video.currentTime);
           schedule();
         });
@@ -1272,7 +1288,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const fit = Math.min(width / frameWidth, height / frameHeight);
             const offsetX = (width - frameWidth * fit) / 2;
             const offsetY = (height - frameHeight * fit) / 2;
-            const tracks = projectLiveTracks(observation.tracks, observation.time, video.currentTime, frameWidth, frameHeight);
+            const displayedTime = (video.paused || video.seeking)
+              ? video.currentTime : (presentedMediaTimeRef.current ?? video.currentTime);
+            const tracks = projectLiveTracks(
+              observation.tracks, observation.time, displayedTime, frameWidth, frameHeight
+            );
             context.save();
             context.scale(dpr, dpr);
             context.beginPath();
@@ -1349,7 +1369,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (qualityEnabledRef.current && currentFileRef.current && readyRef.current &&
             video.videoWidth > 0 && video.videoHeight > 0 &&
             !video.paused && !video.ended && !video.seeking) {
-          appendQualityFrame(qualityFramesRef.current, video.currentTime,
+          appendQualityFrame(qualityFramesRef.current,
+            presentedMediaTimeRef.current ?? video.currentTime,
             video.videoWidth, video.videoHeight, visibleTracks);
         }
         if (time - lastUI > 250) {
