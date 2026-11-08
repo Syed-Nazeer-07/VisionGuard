@@ -151,7 +151,7 @@ Review or commit any local modifications before pulling if Git reports a conflic
 | Vehicle tracks, session totals, review flags | Per-account browser IndexedDB; optional Supabase PostgreSQL sync | Local-first. Cloud writes verify server acknowledgments, retry bounded conflicting revisions and preserve merged local history if sync remains unavailable |
 | Original selected file | In memory during analysis | Not kept across reloads by default |
 | Opted-in local video | Browser-local storage | **Keep this video on this device** retains the most recently saved local file, subject to browser quotas/permissions; it does not upload it |
-| Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2**. Metadata without the actual uploaded original cannot replay on another device |
+| Explicit cloud video | Backblaze B2 | Uploaded only via **Save video to B2** after server-side credentials are configured. An upload error leaves no playable cloud video; the UI offers an opt-in local retention alternative |
 | Account credentials and preferences | Supabase Auth / PostgreSQL when configured | Protected by server-side access policies |
 
 The active video/capture component resets when the signed-in account changes, keeping in-memory capture and tracker state from crossing between users.
@@ -175,6 +175,28 @@ assume an unrelated retained video belongs to an archived session.
 If its cloud copy was never uploaded and the local original is gone, it
 cannot be recovered from VisionGuard. For cross-device playback, explicitly
 use **Save video to B2** and confirm the upload finishes.
+
+### What if Backblaze B2 says storage is not configured?
+
+If uploading displays `Video storage is not configured on the server`,
+**the browser detector is still working**. The optional `video-storage`
+Supabase Edge Function lacks its Backblaze B2 configuration. Do not
+retry the same upload repeatedly or mistake a database video record for
+the original footage. VisionGuard now explains the problem, hides a
+misleading failed-upload progress bar and offers **Keep this original on
+my device**. Local retention is explicitly opt-in, can be limited by
+browser storage, and currently preserves **only the most recent original
+per signed-in account on that device**.
+
+To enable cross-device video playback, the project owner must create
+a B2 bucket and restricted application key, then configure the five
+**server-side** Supabase Edge Function secrets required by
+[`video-storage`](supabase/functions/video-storage/index.ts):
+`B2_ENDPOINT`, `B2_REGION`, `B2_BUCKET`, `B2_KEY_ID` and
+`B2_APPLICATION_KEY`. Set the correct bucket CORS permissions for
+permitted browser GET/PUT/range requests. **Never** put these values in
+`VITE_*`, browser localStorage, GitHub source or chat messages.
+Cloudflare build variables alone cannot configure the Supabase function.
 
 ### Understanding the speed numbers
 

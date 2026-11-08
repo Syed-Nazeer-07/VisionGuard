@@ -28,8 +28,8 @@ and on the target Windows/Edge computer before promoting the release.
 | Fast repeated updates | Create incident decisions and optical observations within the same millisecond; revisions stay monotonically increasing so the anti-stale trigger cannot silently discard changes |
 | Reload persistence | Saved session data survives reload without duplicating IDs |
 | Local video opt-in | Unchecked means original bytes are not retained across reloads |
-| Optional local retention | Checked retains video only within available browser quota |
-| B2 storage | Explicit upload completes, appears in History, opens via signed GET URL |
+| Optional local retention | Checked retains the most recently selected file within browser quota and the currently signed-in account. With the option unchecked, History keeps analysis metadata but cannot reopen original footage |
+| B2 storage | With credentials: upload completes, appears in History and opens via a signed URL. Without credentials: UI explains B2 is not configured, hides the failed 0% progress bar and offers one-click opt-in local retention |
 | B2 re-analysis | Completed originals can be replayed through a signed URL. Missing/failed/in-progress uploads route to the local recovery screen; a matching opted-in file (name + exact size) reopens, otherwise **Choose original video** is shown |
 | Archive recovery safety | Two videos with the same name but different sizes must not auto-match. Unknown archive size, no retained file, revoked file-handle permission, and account changes must not silently substitute unrelated footage |
 | Local recovery persistence | Opening a retained original or choosing a fresh file starts a local analysis without fabricating B2 storage success. Verify the old broken ?video= link clears after successful local selection and no longer replays the error |
