@@ -161,11 +161,22 @@ describe('persistent crowded vehicle tracking', () => {
     };
     const next = reconcileVehicles([before],
       [{ ...car(103, 120, 14), isPredicted: true }], 2.12, 5);
+    // Preserve the last genuine optical position instead of moving the box
+    // towards a YOLO replay prediction that may be empty road.
     expect(next.tracks).toHaveLength(1);
     expect(next.tracks[0].id).toBe(4);
-    expect(next.tracks[0].isPredicted).toBe(true);
+    expect(next.tracks[0].x).toBe(100);
+    expect(next.tracks[0].isPredicted).toBe(false);
     expect(next.tracks[0].lastOpticalAt).toBe(2);
     expect(next.tracks[0].lastDetectedAt).toBe(2);
+    expect(next.sourceAssignments.size).toBe(0);
+  });
+  it('does not turn an unverified predicted track into a confirmed observation', () => {
+    const predicted: PersistentTrack = {
+      ...car(120, 120, 6), lastDetectedAt: 2, lastOpticalAt: 2,
+      speedKmh: 18, speedIsEstimate: true, isPredicted: true
+    };
+    expect(recoverBriefOpticalMisses([], [predicted], 2, 2.1, 300, 300)).toEqual([]);
   });
   it('does not create a new identity for an unobserved predicted-only vehicle', () => {
     const next = reconcileVehicles([], [{ ...car(120, 100, 40), isPredicted: true }], 3, 1);
