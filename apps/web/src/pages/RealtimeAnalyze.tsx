@@ -5,6 +5,7 @@ import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from 
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
+import { placeLiveLabel } from '../pipeline/rendering/liveLabelPlacement';
 import { canReanalyzeStoredVideo } from '../lib/videoAssets';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
@@ -1286,6 +1287,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             context.beginPath();
             context.rect(offsetX, offsetY, frameWidth * fit, frameHeight * fit);
             context.clip();
+            const renderedBoxes: Array<{
+              track: PersistentTrack;
+              x: number; y: number; w: number; h: number;
+            }> = [];
             for (const track of tracks) {
               const x = offsetX + (track.x - track.w / 2) * fit;
               const y = offsetY + (track.y - track.h / 2) * fit;
@@ -1298,26 +1303,36 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               context.strokeRect(x, y, w, h);
               const stable = track as PersistentTrack;
               visibleTracks.push(stable);
-              const classLabel = stable.className.toUpperCase();
-              // Speed is deliberately marked approximate: vehicle width is an
-              // assumed reference, not a calibrated road-plane distance.
-              const speed = stable.speedKmh === null
-                ? '—'
-                : stable.speedKmh === 0 ? '≈0 km/h*' : '≈' + Math.round(stable.speedKmh) + ' km/h*';
-              const label = '#' + stable.id + ' ' + classLabel + '  ' + speed;
-              context.font = '600 11px system-ui,sans-serif';
-              const labelW = context.measureText(label).width + 12;
-              // Keep the ID, class and speed label at a FIXED offset inside the
-              // vehicle box. Never use varying above/below placements.
-              // Do not reposition the tag when it nears an edge. A shifting
-              // clamp made labels visibly jump away from their vehicle.
-              // The video clip rectangle already hides any off-screen portion.
-              const labelX = x + 3;
-              const labelY = y + 3;
+              renderedBoxes.push({ track: stable, x, y, w, h });
+            }
+
+            // All boxes remain visible, even when labels have insufficient
+            // space. Prioritize nearer/larger boxes and prevent overlapping
+            // text pills in crowded/distant traffic. Pure layout is tested.
+            const occupiedLabels: Array<{ x: number; y: number; w: number; h: number }> = [];
+            renderedBoxes.sort((a, b) => (b.w * b.h - a.w * a.h) ||
+              (a.track.id - b.track.id));
+            context.font = '600 11px system-ui,sans-serif';
+            for (const box of renderedBoxes) {
+              const stable = box.track;
+              const mainLabel = '#' + stable.id + ' ' + stable.className.toUpperCase();
+              // A pixel-based proxy, not a calibrated speedometer.
+              const speed = stable.speedKmh === null ? '' :
+                stable.speedKmh === 0 ? '≈0 km/h*' :
+                  '≈' + Math.round(stable.speedKmh) + ' km/h*';
+              const labels = speed ? [mainLabel + '  ' + speed, mainLabel, '#' + stable.id] :
+                [mainLabel, '#' + stable.id];
+              const widths = labels.map(label => context.measureText(label).width + 12);
+              const placement = placeLiveLabel(
+                box, { x: offsetX, y: offsetY, w: frameWidth * fit, h: frameHeight * fit },
+                widths, occupiedLabels
+              );
+              if (!placement) continue;
+              occupiedLabels.push(placement.rect);
               context.fillStyle = 'rgba(7,16,34,.90)';
-              context.fillRect(labelX, labelY, labelW, 18);
+              context.fillRect(placement.rect.x, placement.rect.y, placement.rect.w, placement.rect.h);
               context.fillStyle = '#ccffeb';
-              context.fillText(label, labelX + 6, labelY + 13);
+              context.fillText(labels[placement.variant], placement.rect.x + 6, placement.rect.y + 13);
             }
             context.restore();
           }
