@@ -173,6 +173,15 @@ async function callVideoStorage<T>(body: Record<string, unknown>): Promise<T> {
   return data as T
 }
 
+/** Preflight before creating an asset row or beginning any upload. This only
+ * returns whether the server has the required secrets, never the secrets. */
+export async function isB2UploadConfigured(): Promise<boolean> {
+  const result = await callVideoStorage<{ b2UploadConfigured: boolean }>({
+    action: 'capabilities',
+  })
+  return result?.b2UploadConfigured === true
+}
+
 interface PartResult { partNumber: number; etag: string }
 
 /** PUT one part to its presigned URL, reporting real bytes sent. Resolves with the part's ETag. */
