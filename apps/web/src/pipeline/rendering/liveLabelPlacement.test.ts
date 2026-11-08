@@ -9,11 +9,25 @@ const collide = (a: OverlayRect, b: OverlayRect) =>
   a.y < b.y+b.h+2 && a.y+a.h+2 > b.y;
 
 describe('stable, speed-preserving vehicle labels', () => {
-  it('attaches a full label just above its vehicle by default', () => {
+  it('pins a normal vehicle label inside its bounding box at top left', () => {
     const p = placeLiveLabel(box(100, 140), bounds, [90, 60], [])!;
-    expect(p).toMatchObject({ variant:0, slot:0 });
+    expect(p).toMatchObject({ variant: 0, slot: 1 });
     expect(p.rect.x).toBe(102);
+    expect(p.rect.y).toBe(142);
+  });
+  it('uses an above-box compact tag for a tiny distant vehicle', () => {
+    const p = placeLiveLabel(box(100, 140, 14, 12), bounds, [110, 72], [])!;
+    expect(p).toMatchObject({ variant: 1, slot: 0 });
     expect(p.rect.y).toBe(120);
+  });
+  it('never moves an established tag when another vehicle appears beside it', () => {
+    const first = placeLiveLabel(box(100, 140), bounds, [90, 60], [])!;
+    const next = placeLiveLabel(box(110, 140), bounds, [90, 60],
+      [box(110, 142, 90, 18)], first)!;
+    expect(next.slot).toBe(first.slot);
+    expect(next.variant).toBe(first.variant);
+    expect(next.rect.x - first.rect.x).toBe(10);
+    expect(next.rect.y).toBe(first.rect.y);
   });
   it('keeps exactly the same anchor as the box moves with the vehicle', () => {
     const first = placeLiveLabel(box(100, 140), bounds, [105, 70], [])!;
