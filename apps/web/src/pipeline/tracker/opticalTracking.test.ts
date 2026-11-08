@@ -42,6 +42,18 @@ describe('optical tracking between slow YOLO observations', () => {
   it('drops broken temporal sequences rather than projecting stale objects', () => {
     expect(advanceOpticalTracks([vehicle], makeFrame(2, 0), makeFrame(3, 4))).toEqual([]);
   });
+  it('recovers a real car after a single lost optical frame when textured pixels move', () => {
+    const before = makeFrame(2, 0);
+    const after = makeFrame(2.1, 4);
+    const predicted: LiveTrack = { ...vehicle, isPredicted: true, vx: 40, vy: 0 };
+    const recovered = advanceOpticalTracks([predicted], before, after);
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0].id).toBe(10);
+    expect(recovered[0].x).toBeCloseTo(44, 0);
+    expect(recovered[0].isPredicted).toBe(false);
+    expect(recovered[0].lastOpticalAt).toBe(2.1);
+  });
+
   it('does not relock a predicted bridge onto stationary road texture', () => {
     const previous = makeFrame(2, 0);
     const unchangedRoad = makeFrame(2.1, 0);
