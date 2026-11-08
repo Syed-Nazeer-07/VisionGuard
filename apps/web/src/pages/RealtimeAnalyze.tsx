@@ -6,6 +6,7 @@ import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../servi
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
 import { placeLiveLabel } from '../pipeline/rendering/liveLabelPlacement';
+import { vehicleOverlayLabels } from '../pipeline/rendering/vehicleOverlayLabels';
 import { displayedVideoMediaTime } from '../pipeline/worker/frameSync';
 import { canReanalyzeStoredVideo } from '../lib/videoAssets';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
@@ -1369,16 +1370,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             context.font = '600 11px system-ui,sans-serif';
             for (const box of renderedBoxes) {
               const stable = box.track;
-              const classLabel = stable.className.toUpperCase();
-              // ALWAYS preserve the speed slot, including "—" when the
-              // worker has not established a valid estimate yet. This is an
-              // uncalibrated pixel-motion proxy, not a road speedometer.
-              const speed = stable.speedKmh === null || !Number.isFinite(stable.speedKmh)
-                ? '—'
-                : '≈' + Math.round(Math.max(0, stable.speedKmh));
-              const full = '#' + stable.id + ' ' + classLabel + '  ' + speed + ' km/h*';
-              const compact = '#' + stable.id + ' ' + speed + ' km/h*';
-              const labels = [full, compact];
+              // Both full and compact labels must retain the recognized
+              // vehicle class (CAR/TRUCK/BUS/etc), ID and estimated speed.
+              const labels = vehicleOverlayLabels(stable);
               const widths = labels.map(label => context.measureText(label).width + 12);
               const previous = anchorMap.get(stable.id);
               const placement = placeLiveLabel(
