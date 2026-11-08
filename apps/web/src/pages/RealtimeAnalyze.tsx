@@ -319,8 +319,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }
         // Real detector-corrected positions also refresh optical speed.
         // Do not derive speed from a prediction-only bridge.
+        const updatedIds = new Set(merged.sourceAssignments.values());
         const enriched = merged.tracks.map(track => {
-          if (track.isPredicted) return track;
+          // An unmatched old track was merely retained; do not pretend YOLO
+          // just measured that vehicle's position at the new timestamp.
+          if (track.isPredicted || !updatedIds.has(track.id)) return track;
           const previousSpeed = speedHistoryRef.current.get(track.id) ?? {
             points: [], smoothedKmh: null
           };
