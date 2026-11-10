@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 314 64" role="img" aria-label="VisionGuard">
+  <rect width="64" height="64" rx="16" fill="#26221F"/>
+  <path d="M16 20 L27.5 46 C29.5 50.5 34.5 50.5 36.5 46 L48 20" fill="none" stroke="#FFF6EB" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 24 V28 M32 35 V40" fill="none" stroke="#F29269" stroke-width="3.3" stroke-linecap="round"/>
+  <circle cx="32" cy="16.5" r="3.9" fill="#F29269"/>
+  <text x="78" y="42" fill="#29241F" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="35" font-weight="760" letter-spacing="-1.8">Vision</text>
+  <text x="190" y="42" fill="#29241F" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="35" font-weight="470" letter-spacing="-1.8">Guard</text>
+  <circle cx="298" cy="39" r="4.2" fill="#C65A38"/>
+</svg>
