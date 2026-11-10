@@ -97,6 +97,9 @@
 .vx-video-toggle { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: grid; place-items: center; width: 76px; height: 76px; border: 1px solid rgba(255,255,255,.65); border-radius: 50%; color: #143e2c; background: rgba(230,255,224,.89); box-shadow: 0 12px 45px rgba(12,34,20,.25); backdrop-filter: blur(7px); cursor: pointer; transition: transform .22s ease, background .22s ease; }
 .vx-video-toggle:hover { transform: translate(-50%, -50%) scale(1.06); background: #e6ffbd; }
 .vx-video-toggle svg { margin-left: 2px; }
+.vx-video-toggle-playing { top: auto; left: auto; bottom: 17px; right: 17px; transform: none; height: 43px; width: 43px; background: rgba(235,255,221,.88); }
+.vx-video-toggle-playing:hover { transform: scale(1.05); }
+.vx-video-toggle-playing svg { height: 18px; width: 18px; margin: 0; }
 .vx-video-error { position: absolute; left: 16px; right: 16px; bottom: 20px; padding: 9px 13px; color: #512f25; background: #ffdfd0; font-size: 12px; border-radius: 7px; }
 .vx-video-footer { min-height: 39px; display: flex; align-items: center; justify-content: space-between; gap: 13px; color: #688070; font: 610 9px ui-monospace, monospace; letter-spacing: .04em; }
 .vx-video-footer > span:first-child { display: inline-flex; align-items: center; gap: 7px; }
@@ -279,7 +282,7 @@
   .vx-hero-editorial { padding-top: 40px; }
   .vx-hero-serial { font-size: 8px; }
   .vx-hero-grid { gap: 23px; padding-top: 43px; padding-bottom: 37px; }
-  .vx-hero-copy h1 { font-size: clamp(55px, 12vw, 84px); }
+  .vx-hero-copy h1 { font-size: clamp(47px, 11.5vw, 84px); }
   .vx-hero-copy > p { font-size: 17px; margin-top: 23px; }
   .vx-hero-aside { display: block; }
   .vx-aside-star { display: none; }
