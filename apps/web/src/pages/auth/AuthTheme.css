@@ -140,3 +140,46 @@
 @media (prefers-reduced-motion: reduce) {
   .vg-auth *, .vg-auth *::before, .vg-auth *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* The confirmation and password-recovery routes share the same quiet surface. */
+.vg-auth-recovery {
+  font-family: 'DM Sans', Inter, ui-sans-serif, system-ui, sans-serif;
+  background:
+    radial-gradient(ellipse at 85% 2%,rgba(222,229,228,.5),transparent 46%),
+    #f5f6f4;
+  -webkit-font-smoothing: antialiased;
+}
+.vg-auth-recovery .vg-auth-recovery-card {
+  box-shadow: 0 18px 55px rgba(24,39,43,.055), 0 2px 5px rgba(24,39,43,.02);
+}
+.vg-auth-recovery .vg-auth-recovery-kicker {
+  color: #78898e;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .15em;
+}
+.vg-auth-recovery .vg-field {
+  min-height: 46px;
+  border-radius: 9px;
+  border-color: #d4dedc;
+  background: #fff;
+  color: #26353b;
+}
+.vg-auth-recovery .vg-field:focus {
+  outline: 0;
+  border-color: #7f9298;
+  box-shadow: 0 0 0 3px rgba(119,143,149,.12);
+}
+.vg-auth-recovery .vg-primary {
+  min-height: 46px;
+  border-radius: 9px;
+  background: #242e33;
+  border-color: #242e33;
+  color: #fff;
+  font-weight: 680;
+}
+.vg-auth-recovery .vg-primary:hover {
+  background: #3a484f;
+  border-color: #3a484f;
+}
+.vg-auth-recovery :focus-visible { outline: 2px solid #6b8187; outline-offset: 3px; }
