@@ -193,10 +193,6 @@
 .vgn-cta-signin { display: inline-flex; align-items: center; gap: 9px; color: #39352a; font-size: 12px; font-weight: 700; }
 .vgn-cta-signin:hover { color: #1a1c17; }
 .vgn-cta-image { position: relative; display: grid; place-items: center; min-width: 0; min-height: 380px; }
-.vgn-cta-ring { position: absolute; width: min(100%, 470px); height: 280px; border: 1px solid rgba(89,72,20,.21); border-radius: 50%; transform: rotate(-30deg); }
-.vgn-cta-ring-b { width: min(92%,390px); height: 230px; transform: rotate(22deg); }
-.vgn-cta-mark { position: relative; z-index: 1; display: grid; place-items: center; height: 190px; width: 190px; border: 1px solid rgba(89,72,20,.21); border-radius: 50%; background: rgba(255,254,228,.3); color: #64501c; box-shadow: 0 16px 54px rgba(112,89,24,.13); }
-.vgn-cta-tag { position: absolute; z-index: 2; bottom: 10px; left: 50%; transform: translateX(-50%); white-space: nowrap; border: 1px solid rgba(99,79,20,.17); background: #e5e9e5; border-radius: 7px; padding: 11px 14px; color: #695522; font-size: 10px; font-weight: 750; letter-spacing: .09em; }
 
 /* Simple footer, no giant wordmark. */
 .vgn-footer { background: #16191b; color: #faf9f4; }
@@ -268,10 +264,6 @@
   .vgn-step p { max-width: 600px; }
   .vgn-cta-grid { grid-template-columns: 1fr; gap: 25px; padding-block: 85px 77px; }
   .vgn-cta-image { min-height: 290px; max-width: 500px; width: 100%; margin: auto; }
-  .vgn-cta-mark { width: 150px; height: 150px; }
-  .vgn-cta-mark svg { width: 70px; height: 70px; }
-  .vgn-cta-ring { height: 215px; }
-  .vgn-cta-ring-b { height: 185px; }
   .vgn-footer-top { padding-block: 43px; gap: 22px; }
 }
 @media (max-width: 490px) {
