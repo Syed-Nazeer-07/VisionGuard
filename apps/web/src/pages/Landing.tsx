@@ -1,336 +1,328 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Activity, ArrowRight, ArrowUpRight, BarChart3,
-  CheckCircle2, ChevronRight, CircleDot, FileText, Film,
-  Fingerprint, Layers3, LockKeyhole, Menu, ScanLine,
-  ShieldCheck, Sparkles, X,
+  Activity, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronDown,
+  ChevronRight, CircleDot, CloudOff, FileText, Film, Layers3, LockKeyhole,
+  Menu, MousePointer2, ScanLine, ShieldCheck, Sparkles, X,
 } from 'lucide-react';
 import './Landing.css';
 
-type GalleryView = 'scenes' | 'movement' | 'workspace';
+type Perspective = 'observe' | 'follow' | 'review';
 
-const gallery = [
+const perspectives: Array<{
+  id: Perspective;
+  label: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  image: string;
+  alt: string;
+}> = [
   {
-    id: 'scenes' as const,
-    number: '01',
-    label: 'Scenes',
-    headline: 'Start with the road.',
-    detail: 'Clear visual context is where useful analysis begins.',
-    src: '/traffic_operations_center.jpg',
+    id: 'observe',
+    label: 'Observe',
+    eyebrow: '01 / ORIGINAL CONTEXT',
+    title: 'Start with the actual scene.',
+    description: 'Choose your footage and make the road itself the starting point.',
+    image: '/traffic_monitoring_corridor.jpg',
+    alt: 'Illustrative road scene showing traffic in a corridor',
+  },
+  {
+    id: 'follow',
+    label: 'Follow',
+    eyebrow: '02 / VEHICLE MOVEMENT',
+    title: 'Follow what moves.',
+    description: 'In the analysis workspace, YOLO11s and tracking tools help connect observations over time.',
+    image: '/traffic_flow_analysis.jpg',
+    alt: 'Illustrative aerial view of traffic flow',
+  },
+  {
+    id: 'review',
+    label: 'Review',
+    eyebrow: '03 / THE BIGGER PICTURE',
+    title: 'See beyond a single frame.',
+    description: 'Return to session activity, analytics and review tools after playback.',
+    image: '/traffic_operations_center.jpg',
     alt: 'Illustrative traffic operations scene',
-  },
-  {
-    id: 'movement' as const,
-    number: '02',
-    label: 'Movement',
-    headline: 'Watch the patterns.',
-    detail: 'Review vehicle activity and movement in the original scene.',
-    src: '/traffic_flow_analysis.jpg',
-    alt: 'Illustrative aerial traffic-flow scene',
-  },
-  {
-    id: 'workspace' as const,
-    number: '03',
-    label: 'Workspace',
-    headline: 'Connect the insights.',
-    detail: 'A central home for analysis sessions and review workflows.',
-    src: '/traffic_monitoring_corridor.jpg',
-    alt: 'Illustrative road-monitoring corridor',
   },
 ];
 
 const capabilities = [
   {
-    n: '01',
-    label: 'DETECT',
+    number: '01',
     icon: ScanLine,
-    title: 'Identify what matters.',
-    description: 'YOLO11s recognizes supported vehicle types from footage. Detections depend on image quality and model performance.',
+    title: 'Vehicle detection',
+    text: 'Identify supported road-user classes using YOLO11s and ONNX Runtime Web.',
   },
   {
-    n: '02',
-    label: 'TRACK',
-    icon: Fingerprint,
-    title: 'Follow what moves.',
-    description: 'Visual tracking links detections across frames and keeps vehicle identifiers connected to observations.',
+    number: '02',
+    icon: Activity,
+    title: 'Visual tracking',
+    text: 'Follow detected vehicles with track identifiers and image-derived motion estimates.',
   },
   {
-    n: '03',
-    label: 'UNDERSTAND',
+    number: '03',
     icon: BarChart3,
-    title: 'Make movement meaningful.',
-    description: 'Bring vehicle classes, session summaries, and activity history into a connected analytical view.',
+    title: 'Useful analytics',
+    text: 'Explore recorded sessions, vehicle classes and activity in a connected workspace.',
   },
   {
-    n: '04',
-    label: 'REVIEW',
+    number: '04',
     icon: FileText,
-    title: 'Keep the bigger picture.',
-    description: 'Organize incidents and reports for inspection, with people responsible for verification.',
+    title: 'Human-led review',
+    text: 'Bring findings into incident review and reporting without treating estimates as proof.',
   },
 ];
 
 const process = [
-  { n: '01', icon: Film, title: 'Choose your footage', detail: 'Select a local video or approve a supported live capture source.' },
-  { n: '02', icon: ScanLine, title: 'Run the analysis', detail: 'Detect vehicles and observe movement with visible tracks.' },
-  { n: '03', icon: Layers3, title: 'Explore the insights', detail: 'Return to your history, analytics, incidents, and reports.' },
+  {
+    step: '01',
+    icon: Film,
+    title: 'Bring the footage.',
+    detail: 'Select a video or approve a supported capture source.',
+  },
+  {
+    step: '02',
+    icon: ScanLine,
+    title: 'Explore the activity.',
+    detail: 'Run the detector and review how vehicles move through the frame.',
+  },
+  {
+    step: '03',
+    icon: Layers3,
+    title: 'Keep the context.',
+    detail: 'Open your history, analytics and review tools when needed.',
+  },
 ];
 
 function Brand() {
   return (
-    <Link to="/" className="vgx-brand" aria-label="VisionGuard homepage">
-      <img className="vgx-brand-symbol" src="/brand-mark.svg?v=20261111" alt="" width="38" height="38" />
+    <Link to="/" className="vgn-brand" aria-label="VisionGuard homepage">
+      <img src="/brand-mark.svg?v=20261111" alt="" width="37" height="37" />
       <span>Vision<strong>Guard</strong><i>.</i></span>
     </Link>
   );
 }
 
 export function Landing() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [galleryView, setGalleryView] = useState<GalleryView>('scenes');
-  const activeView = gallery.find(item => item.id === galleryView) ?? gallery[0];
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [perspective, setPerspective] = useState<Perspective>('observe');
+  const selected = perspectives.find(item => item.id === perspective) ?? perspectives[0];
 
   return (
-    <div className="vgx">
-      <a href="#content" className="vgx-skip">Skip to content</a>
+    <div className="vgn">
+      <a href="#main" className="vgn-skip">Skip to content</a>
 
-      <header className="vgx-header">
-        <nav className="vgx-wrap vgx-nav" aria-label="Primary navigation">
+      <header className="vgn-header">
+        <nav className="vgn-shell vgn-nav" aria-label="Primary navigation">
           <Brand />
-          <div className="vgx-nav-links">
-            <a href="#vision">The vision</a>
-            <a href="#explore">Explore</a>
-            <a href="#capabilities">Capabilities</a>
+          <div className="vgn-nav-links">
+            <a href="#platform">The platform</a>
+            <a href="#capabilities">What it does</a>
             <a href="#workflow">How it works</a>
           </div>
-          <div className="vgx-nav-actions">
-            <Link to="/login" className="vgx-signin">Sign in</Link>
-            <Link to="/register" className="vgx-btn vgx-btn-primary vgx-btn-small">Get started <ArrowUpRight size={16} /></Link>
+          <div className="vgn-nav-actions">
+            <Link className="vgn-sign-in" to="/login">Sign in</Link>
+            <Link className="vgn-button vgn-button-nav" to="/register">Get started <ArrowUpRight size={16} /></Link>
           </div>
           <button
             type="button"
-            className="vgx-mobile-menu-button"
-            aria-label={mobileMenuOpen ? 'Close navigation' : 'Open navigation'}
-            aria-expanded={mobileMenuOpen}
-            aria-controls="vgx-mobile-menu"
-            onClick={() => setMobileMenuOpen(value => !value)}
+            className="vgn-menu-button"
+            aria-expanded={mobileOpen}
+            aria-controls="vgn-mobile-navigation"
+            aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
+            onClick={() => setMobileOpen(open => !open)}
           >
-            {mobileMenuOpen ? <X size={21} /> : <Menu size={21} />}
+            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
           </button>
         </nav>
-        {mobileMenuOpen && (
-          <div id="vgx-mobile-menu" className="vgx-mobile-menu">
-            <a href="#vision" onClick={() => setMobileMenuOpen(false)}>The vision <ChevronRight size={17} /></a>
-            <a href="#explore" onClick={() => setMobileMenuOpen(false)}>Explore <ChevronRight size={17} /></a>
-            <a href="#capabilities" onClick={() => setMobileMenuOpen(false)}>Capabilities <ChevronRight size={17} /></a>
-            <a href="#workflow" onClick={() => setMobileMenuOpen(false)}>How it works <ChevronRight size={17} /></a>
-            <Link to="/login" onClick={() => setMobileMenuOpen(false)}>Sign in <ArrowUpRight size={17} /></Link>
-            <Link to="/register" className="vgx-mobile-menu-primary" onClick={() => setMobileMenuOpen(false)}>Get started <ArrowUpRight size={17} /></Link>
-          </div>
+        {mobileOpen && (
+          <nav className="vgn-mobile-navigation" id="vgn-mobile-navigation" aria-label="Mobile navigation">
+            <a href="#platform" onClick={() => setMobileOpen(false)}>The platform <ChevronRight size={16} /></a>
+            <a href="#capabilities" onClick={() => setMobileOpen(false)}>What it does <ChevronRight size={16} /></a>
+            <a href="#workflow" onClick={() => setMobileOpen(false)}>How it works <ChevronRight size={16} /></a>
+            <Link to="/login" onClick={() => setMobileOpen(false)}>Sign in <ChevronRight size={16} /></Link>
+            <Link className="vgn-mobile-primary" to="/register" onClick={() => setMobileOpen(false)}>Get started <ArrowUpRight size={17} /></Link>
+          </nav>
         )}
       </header>
 
-      <main id="content">
-        <section className="vgx-hero" id="vision">
-          <div className="vgx-wrap">
-            <div className="vgx-hero-meta">
-              <span className="vgx-eyebrow"><CircleDot size={13} /> THE NEXT PERSPECTIVE ON TRAFFIC</span>
-              <span className="vgx-edition">VISUAL INTELLIGENCE / 01</span>
+      <main id="main">
+        <section className="vgn-hero">
+          <div className="vgn-shell vgn-hero-grid">
+            <div className="vgn-hero-content">
+              <span className="vgn-eyebrow"><span /> TRAFFIC INTELLIGENCE, REIMAGINED</span>
+              <h1>Every frame has<br /><em>more to say.</em></h1>
+              <p>See movement, make sense of activity and keep the bigger picture in focus. One connected workspace for video-based traffic analysis.</p>
+              <div className="vgn-hero-actions">
+                <Link to="/register" className="vgn-button vgn-button-accent">Open VisionGuard <ArrowUpRight size={18} /></Link>
+                <a href="#platform" className="vgn-button vgn-button-ghost">Explore the platform <ArrowRight size={17} /></a>
+              </div>
+              <div className="vgn-hero-footnote">
+                <span><CircleDot size={14} /> Browser-based analysis</span>
+                <span className="vgn-footnote-divider" />
+                <span>Built for human review</span>
+              </div>
             </div>
-            <div className="vgx-hero-heading">
+
+            <div className="vgn-hero-demo" id="demo">
+              <div className="vgn-stage">
+                <div className="vgn-stage-chrome">
+                  <span className="vgn-stage-title"><span /> VISIONGUARD / SCENE EXPLORER</span>
+                  <span className="vgn-stage-tag">INTERACTIVE PREVIEW</span>
+                </div>
+                <div className="vgn-stage-image" key={selected.id}>
+                  <img src={selected.image} alt={selected.alt} fetchPriority={selected.id === 'observe' ? 'high' : 'auto'} />
+                  <div className="vgn-stage-corner vgn-stage-corner-a" aria-hidden="true" />
+                  <div className="vgn-stage-corner vgn-stage-corner-b" aria-hidden="true" />
+                  <div className="vgn-stage-corner vgn-stage-corner-c" aria-hidden="true" />
+                  <div className="vgn-stage-corner vgn-stage-corner-d" aria-hidden="true" />
+                  <div className="vgn-stage-image-label">ILLUSTRATIVE SCENE — NO LIVE INFERENCE</div>
+                  <div className="vgn-stage-image-no"><span>{selected.eyebrow}</span><strong>{selected.title}</strong></div>
+                </div>
+                <div className="vgn-stage-tabs" role="group" aria-label="Explore the VisionGuard analysis workflow">
+                  <span>EXPLORE A PERSPECTIVE</span>
+                  <div>
+                    {perspectives.map(item => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={item.id === perspective ? 'vgn-stage-tab vgn-stage-tab-active' : 'vgn-stage-tab'}
+                        aria-pressed={item.id === perspective}
+                        onClick={() => setPerspective(item.id)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <p className="vgn-demo-caption"><MousePointer2 size={13} /> {selected.description} <span>Illustration only · Try real analysis after sign-in</span></p>
+            </div>
+          </div>
+        </section>
+
+        <div className="vgn-rail">
+          <div className="vgn-shell">
+            <span>THE TOOLS BEHIND THE PICTURE</span>
+            <div><span>YOLO11s</span><i /> <span>ONNX Runtime Web</span><i /><span>Visual tracking</span><i /><span>Session history</span></div>
+          </div>
+        </div>
+
+        <section className="vgn-section vgn-intro" id="platform">
+          <div className="vgn-shell">
+            <div className="vgn-section-top"><span>01 / A CLEARER PERSPECTIVE</span><span>LESS NOISE. MORE CONTEXT.</span></div>
+            <div className="vgn-intro-heading">
+              <h2>More than a box<br />around a <em>vehicle.</em></h2>
               <div>
-                <h1>See beyond<br />the <span>ordinary.</span></h1>
+                <p>Video analysis should help you understand what happened—not leave you with disconnected detections and numbers.</p>
+                <p>VisionGuard connects the visual moment to a broader workflow: track activity, explore results, and return to sessions later.</p>
               </div>
-              <div className="vgx-hero-aside">
-                <span className="vgx-hero-glyph" aria-hidden="true"><ScanLine size={28} strokeWidth={1.5} /></span>
-                <p>More than boxes on a screen. VisionGuard connects traffic footage, visual tracking, and insights in a workspace made for understanding the road.</p>
-                <div className="vgx-hero-actions">
-                  <Link to="/register" className="vgx-btn vgx-btn-primary vgx-btn-large">Open VisionGuard <ArrowUpRight size={19} /></Link>
-                  <a href="#explore" className="vgx-text-link">Discover the platform <ArrowRight size={17} /></a>
-                </div>
-              </div>
-            </div>
-            <div className="vgx-hero-tags">
-              <span><CheckCircle2 size={15} /> Analyze in your browser</span>
-              <span><CheckCircle2 size={15} /> Choose when to store video</span>
-              <span><CheckCircle2 size={15} /> Keep human review central</span>
             </div>
 
-            <div className="vgx-hero-scene">
-              <div className="vgx-hero-photo">
-                <img src="/traffic_operations_center.jpg" alt="Illustrative roadway and traffic operations scene" fetchPriority="high" />
-                <div className="vgx-hero-photo-shade" aria-hidden="true" />
-                <div className="vgx-hero-photo-top"><span><span className="vgx-status-dot" /> A CLOSER LOOK AT THE ROAD</span><span>01 / 03</span></div>
-                <div className="vgx-hero-photo-bottom">
-                  <div><small>THE BIGGER PICTURE</small><strong>Context changes everything.</strong></div>
-                  <span className="vgx-hero-frame-icon" aria-hidden="true"><ScanLine size={26} strokeWidth={1.4} /></span>
+            <div className="vgn-editorial-grid">
+              <article className="vgn-editorial-main">
+                <div className="vgn-card-index">01 / THE SCENE</div>
+                <div className="vgn-editorial-art">
+                  <img src="/traffic_flow_analysis.jpg" alt="Illustrative overhead view of road traffic" loading="lazy" />
+                  <span className="vgn-art-label">ORIGINAL FOOTAGE PROVIDES THE CONTEXT</span>
                 </div>
-              </div>
-              <div className="vgx-hero-side">
-                <div className="vgx-hero-small-photo">
-                  <img src="/traffic_flow_analysis.jpg" alt="Illustrative traffic-flow photography" loading="lazy" />
-                  <span>TRAFFIC / FLOW</span>
+                <div className="vgn-editorial-copy">
+                  <h3>Keep your eyes<br />on the whole story.</h3>
+                  <p>Start with the road. Let the analysis add useful observations without taking the scene away.</p>
                 </div>
-                <div className="vgx-hero-info-card">
-                  <div className="vgx-info-icon"><Activity size={24} strokeWidth={1.5} /></div>
-                  <div><span>DETECTION. TRACKING. INSIGHT.</span><strong>A different way<br />to see movement.</strong></div>
-                </div>
-              </div>
-            </div>
-            <div className="vgx-hero-photo-foot">
-              <span>VISIONGUARD — TRAFFIC INTELLIGENCE</span>
-              <span>Illustrative imagery · Explore the actual workspace to run analysis</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="vgx-statement">
-          <div className="vgx-wrap vgx-statement-grid">
-            <div className="vgx-section-code"><span>01 / THE IDEA</span><span className="vgx-code-dash" /></div>
-            <div>
-              <h2>Traffic tells a story.<br /><em>Make sense of it.</em></h2>
-              <p>VisionGuard goes beyond a single frame—connecting vehicle detection, tracking, historical activity, and review. Less jumping between tools. More clarity where it counts.</p>
-            </div>
-          </div>
-        </section>
-
-        <section className="vgx-explore" id="explore">
-          <div className="vgx-wrap">
-            <div className="vgx-section-kicker"><span>02 / TAKE A LOOK INSIDE</span><span>ONE PLATFORM, MORE PERSPECTIVES</span></div>
-            <div className="vgx-section-heading">
-              <h2>From a moment<br />to a <em>fuller picture.</em></h2>
-              <p>Explore the different perspectives behind traffic analysis. Every frame is a starting point—not the entire answer.</p>
-            </div>
-            <div className="vgx-gallery">
-              <div className="vgx-gallery-main">
-                <div className="vgx-gallery-image">
-                  <img src={activeView.src} alt={activeView.alt} loading="lazy" key={activeView.id} />
-                  <span className="vgx-gallery-image-index">VISION / {activeView.number}</span>
-                  <span className="vgx-gallery-image-caption">Illustrative scene — not live AI output</span>
-                </div>
-                <div className="vgx-gallery-details">
-                  <div><span>0{gallery.findIndex(item => item.id === galleryView) + 1} / PERSPECTIVE</span><h3>{activeView.headline}</h3><p>{activeView.detail}</p></div>
-                </div>
-              </div>
-              <div className="vgx-gallery-aside">
-                <div className="vgx-gallery-options" role="group" aria-label="Select a traffic perspective">
-                  {gallery.map(item => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      className={'vgx-gallery-tab' + (galleryView === item.id ? ' vgx-gallery-tab-active' : '')}
-                      aria-pressed={galleryView === item.id}
-                      onClick={() => setGalleryView(item.id)}
-                    >
-                      <span>{item.number}</span><strong>{item.label}</strong>
-                    </button>
-                  ))}
-                </div>
-                <div className="vgx-gallery-secondary">
-                  <img src="/landing_hero.jpg" alt="Illustrative roadway photography" loading="lazy" />
-                  <div><span>BEYOND THE FRAME</span><strong>Every angle adds perspective.</strong></div>
-                </div>
-              </div>
-            </div>
-            <div className="vgx-gallery-bottom">
-              <span><Sparkles size={15} /> Concept imagery is illustrative. Actual detections appear in the analysis workspace.</span>
-              <Link to="/register">Explore the workspace <ArrowUpRight size={17} /></Link>
-            </div>
-          </div>
-        </section>
-
-        <section className="vgx-capabilities" id="capabilities">
-          <div className="vgx-wrap">
-            <div className="vgx-section-kicker"><span>03 / WHAT'S INSIDE</span><span>BUILT AROUND THE WAY YOU WORK</span></div>
-            <div className="vgx-section-heading vgx-section-heading-tight">
-              <h2>Powerful underneath.<br /><em>Clear on the surface.</em></h2>
-              <p>Purposeful tools from the first detection to the final review.</p>
-            </div>
-            <div className="vgx-capability-list">
-              {capabilities.map(({ n, icon: Icon, label, title, description }) => (
-                <article className="vgx-capability" key={n}>
-                  <span className="vgx-capability-count">{n}</span>
-                  <div className="vgx-capability-title"><span className="vgx-capability-icon"><Icon size={24} strokeWidth={1.7} /></span><div><span>{label}</span><h3>{title}</h3></div></div>
-                  <p>{description}</p>
+              </article>
+              <div className="vgn-editorial-aside">
+                <article className="vgn-editorial-detail">
+                  <div className="vgn-card-index">02 / THE WORKFLOW</div>
+                  <div className="vgn-detail-art" aria-hidden="true">
+                    <span className="vgn-detail-line" />
+                    <div><ScanLine size={17} /><span>Detection</span><b>01</b></div>
+                    <div><Activity size={17} /><span>Tracking</span><b>02</b></div>
+                    <div><BarChart3 size={17} /><span>Analysis</span><b>03</b></div>
+                  </div>
+                  <div className="vgn-small-copy"><h3>From frames to findings.</h3><p>One journey from footage to recorded activity.</p></div>
                 </article>
-              ))}
+                <article className="vgn-editorial-note">
+                  <div className="vgn-card-index">03 / YOUR DECISION</div>
+                  <LockKeyhole size={29} strokeWidth={1.55} aria-hidden="true" />
+                  <div className="vgn-small-copy"><h3>Your footage. Your call.</h3><p>Browser analysis doesn't require sending the original file to cloud storage.</p></div>
+                </article>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="vgx-visual-story">
-          <div className="vgx-wrap vgx-visual-story-grid">
-            <div className="vgx-visual-story-image">
-              <img src="/traffic_monitoring_corridor.jpg" alt="Illustrative view of traffic along a road corridor" loading="lazy" />
-              <div className="vgx-story-image-label"><span>TRAFFIC INTELLIGENCE</span><span>VISUAL CONTEXT / 04</span></div>
+        <section className="vgn-section vgn-capabilities" id="capabilities">
+          <div className="vgn-shell">
+            <div className="vgn-section-top vgn-section-top-dark"><span>02 / THE TOOLKIT</span><span>MADE TO WORK TOGETHER</span></div>
+            <div className="vgn-capability-heading">
+              <h2>Under the hood,<br /><em>real capability.</em></h2>
+              <p>Four connected ways to turn moving pixels into something you can actually review.</p>
             </div>
-            <div className="vgx-visual-story-copy">
-              <span>FROM THE ROAD TO THE RECORD</span>
-              <h2>Clarity at<br />every <em>step.</em></h2>
-              <p>One workflow helps you turn footage into reviewable information, without losing sight of where each observation came from.</p>
-              <Link to="/register" className="vgx-btn vgx-btn-light vgx-btn-large">Explore VisionGuard <ArrowUpRight size={18} /></Link>
-            </div>
-          </div>
-        </section>
-
-        <section className="vgx-workflow" id="workflow">
-          <div className="vgx-wrap">
-            <div className="vgx-section-kicker"><span>04 / THE WORKFLOW</span><span>THREE STEPS FROM START TO INSIGHT</span></div>
-            <div className="vgx-section-heading vgx-workflow-heading">
-              <h2>It starts with<br /><em>one frame.</em></h2>
-              <p>Designed to make traffic analysis approachable, while leaving the detailed work to the application.</p>
-            </div>
-            <div className="vgx-workflow-grid">
-              {process.map(({ n, title, detail, icon: Icon }) => (
-                <article className="vgx-workflow-card" key={n}>
-                  <div><span>{n}</span><Icon size={26} strokeWidth={1.5} /></div>
+            <div className="vgn-capability-grid">
+              {capabilities.map(({ number, title, text, icon: Icon }) => (
+                <article className="vgn-capability" key={number}>
+                  <div className="vgn-capability-top"><span>{number} / 04</span><Icon size={22} strokeWidth={1.5} /></div>
                   <h3>{title}</h3>
-                  <p>{detail}</p>
-                  <span className="vgx-step-line" />
+                  <p>{text}</p>
                 </article>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="vgx-trust">
-          <div className="vgx-wrap vgx-trust-grid">
-            <div className="vgx-trust-heading">
-              <span>05 / BUILT WITH CONTEXT</span>
-              <h2>Smart technology.<br /><em>Clear boundaries.</em></h2>
-              <p>Good intelligence explains its limits. VisionGuard keeps decisions about footage, measurements, and review in view.</p>
+        <section className="vgn-section vgn-how" id="workflow">
+          <div className="vgn-shell">
+            <div className="vgn-section-top"><span>03 / THE SIMPLE PROCESS</span><span>THREE STEPS TO START</span></div>
+            <div className="vgn-how-heading">
+              <h2>From upload<br />to <em>understanding.</em></h2>
+              <p>Bring the footage. Explore what's visible. Return when you need the context again.</p>
             </div>
-            <div className="vgx-trust-list">
-              <div><LockKeyhole size={23} /><section><h3>Storage stays a choice.</h3><p>Supported video analysis can run in your browser. Local retention is optional; cloud originals require explicit upload and configured storage.</p></section><span>01</span></div>
-              <div><Activity size={23} /><section><h3>Speed is an estimate.</h3><p>Image-derived motion proxies are not calibrated road-speed measurements or confirmed evidence of speeding.</p></section><span>02</span></div>
-              <div><ShieldCheck size={23} /><section><h3>Human review comes first.</h3><p>Automated observations support further investigation and verification; they do not replace human judgement.</p></section><span>03</span></div>
+            <div className="vgn-steps">
+              {process.map(({ step, icon: Icon, title, detail }) => (
+                <article key={step} className="vgn-step">
+                  <div className="vgn-step-top"><span>{step}</span><Icon size={25} strokeWidth={1.5} /></div>
+                  <h3>{title}</h3><p>{detail}</p>
+                </article>
+              ))}
+            </div>
+            <div className="vgn-honesty">
+              <span className="vgn-honesty-mark"><ShieldCheck size={23} strokeWidth={1.7} /></span>
+              <div><strong>Meaningful insights. Real-world limits.</strong><p>Image-derived speed is an estimate, not a calibrated measurement. Cloud video backup requires explicit upload and configured storage. AI-generated findings always need human review.</p></div>
             </div>
           </div>
         </section>
 
-        <section className="vgx-final">
-          <div className="vgx-wrap">
-            <div className="vgx-final-inner">
-              <div className="vgx-final-orbit" aria-hidden="true"><span /><span /><span /></div>
-              <div className="vgx-final-copy">
-                <span>YOUR NEXT PERSPECTIVE STARTS HERE</span>
-                <h2>See the road<br /><em>differently.</em></h2>
-                <p>Bring your footage into a workspace built for clearer observations, connected insights, and responsible review.</p>
-                <div><Link to="/register" className="vgx-btn vgx-btn-white vgx-btn-large">Get started <ArrowUpRight size={18} /></Link><Link to="/login" className="vgx-final-login">Already have an account? Sign in <ArrowRight size={16} /></Link></div>
+        <section className="vgn-cta">
+          <div className="vgn-shell vgn-cta-grid">
+            <div>
+              <span className="vgn-cta-eyebrow"><Sparkles size={16} /> THE ROAD LOOKS DIFFERENT FROM HERE</span>
+              <h2>See what your<br /><em>footage can say.</em></h2>
+              <p>Less guesswork between the scene and the insight. Explore VisionGuard's connected analysis workspace.</p>
+              <div className="vgn-cta-actions">
+                <Link className="vgn-button vgn-button-cta" to="/register">Get started <ArrowUpRight size={18} /></Link>
+                <Link to="/login" className="vgn-cta-signin">Already have an account? Sign in <ArrowRight size={16} /></Link>
               </div>
+            </div>
+            <div className="vgn-cta-image" aria-hidden="true">
+              <div className="vgn-cta-ring vgn-cta-ring-a" /><div className="vgn-cta-ring vgn-cta-ring-b" />
+              <div className="vgn-cta-mark"><ScanLine size={91} strokeWidth={1.12} /></div>
+              <div className="vgn-cta-tag">FRAME BY FRAME. BIGGER PICTURE.</div>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="vgx-footer">
-        <div className="vgx-wrap">
-          <div className="vgx-footer-main">
-            <div><Brand /><p>Traffic intelligence, made easier to understand.</p></div>
-            <div><a href="#vision">Home</a><a href="#explore">Explore</a><a href="#capabilities">Capabilities</a><a href="#workflow">Workflow</a><Link to="/login">Sign in</Link></div>
-          </div>
-          <div className="vgx-footer-bottom"><span>© {new Date().getFullYear()} VisionGuard. All rights reserved.</span><span><ShieldCheck size={15} /> AI-assisted analysis · Human-verified decisions</span></div>
+      <footer className="vgn-footer">
+        <div className="vgn-shell vgn-footer-top">
+          <Brand />
+          <span>Built for clarity on the road.</span>
+          <div><a href="#platform">Platform</a><a href="#capabilities">Capabilities</a><a href="#workflow">Workflow</a><Link to="/login">Sign in</Link></div>
+        </div>
+        <div className="vgn-shell vgn-footer-bottom">
+          <span>© {new Date().getFullYear()} VisionGuard. All rights reserved.</span>
+          <span><ShieldCheck size={14} /> Assistive analysis. Human decisions.</span>
         </div>
       </footer>
     </div>
