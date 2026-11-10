@@ -55,8 +55,8 @@ describe('VisionGuard public landing experience', () => {
     expect(html.split('src="/brand-mark.svg?v=20261111"').length - 1).toBe(2);
     expect(html).toContain('vgn-footer');
     expect(html).not.toContain('vgn-footer-wordmark');
-    const controls = html.split('class="vgn-stage-tab').slice(1);
+    const controls = html.match(/<button[^>]*class="vgn-stage-tab(?: vgn-stage-tab-active)?"[^>]*>[\s\S]*?<\/button>/g) ?? [];
     expect(controls).toHaveLength(3);
-    expect(controls.every(tab => !tab.split('</button>')[0].includes('lucide-arrow'))).toBe(true);
+    expect(controls.every(tab => !tab.includes('lucide-arrow'))).toBe(true);
   });
 });
