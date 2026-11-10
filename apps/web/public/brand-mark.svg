@@ -1,10 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="VisionGuard camera framing a vehicle">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="VisionGuard tracking orbit">
   <rect width="64" height="64" rx="15" fill="#292725"/>
-  <path d="M13 23V15Q13 13 15 13H23 M41 13H49Q51 13 51 15V23 M13 41V49Q13 51 15 51H23 M41 51H49Q51 51 51 49V41" fill="none" stroke="#F49B65" stroke-width="3.6" stroke-linecap="round"/>
-  <path d="M23.5 34L26.2 27Q27 25 30 25H34Q37 25 37.8 27L40.5 34" fill="none" stroke="#FAF6EF" stroke-width="3.1" stroke-linejoin="round"/>
-  <rect x="20" y="32" width="24" height="14" rx="4" fill="#FAF6EF"/>
-  <path d="M24 34H40L38 38H26Z" fill="#292725"/>
-  <rect x="24" y="40" width="5" height="2.5" rx="1.25" fill="#F49B65"/>
-  <rect x="35" y="40" width="5" height="2.5" rx="1.25" fill="#F49B65"/>
-  <path d="M25 46V48 M39 46V48" stroke="#FAF6EF" stroke-width="3.1" stroke-linecap="round"/>
+  <path d="M44.8 23.1 A17.6 17.6 0 1 0 48.3 35.2 H34.4" fill="none" stroke="#FAF6F0" stroke-width="6.5" stroke-linejoin="round" stroke-linecap="round"/>
+  <circle cx="44.8" cy="18.2" r="4.8" fill="#F19B6C"/>
 </svg>
