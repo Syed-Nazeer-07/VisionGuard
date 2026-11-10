@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Activity, ArrowRight, ArrowUpRight, BarChart3,
   ChevronRight, CircleDot, FileText, Film, Layers3, LockKeyhole,
@@ -97,10 +96,10 @@ const process = [
 
 function Brand() {
   return (
-    <Link to="/" className="vgn-brand" aria-label="VisionGuard homepage">
+    <a href="/" className="vgn-brand" aria-label="VisionGuard homepage">
       <img src="/brand-mark.svg?v=20261111" alt="" width="37" height="37" />
       <span>Vision<strong>Guard</strong><i>.</i></span>
-    </Link>
+    </a>
   );
 }
 
@@ -122,8 +121,8 @@ export function Landing() {
             <a href="#workflow">How it works</a>
           </div>
           <div className="vgn-nav-actions">
-            <Link className="vgn-sign-in" to="/login">Sign in</Link>
-            <Link className="vgn-button vgn-button-nav" to="/register">Get started <ArrowUpRight size={16} /></Link>
+            <a className="vgn-sign-in" href="/login">Sign in</a>
+            <a className="vgn-button vgn-button-nav" href="/register">Get started <ArrowUpRight size={16} /></a>
           </div>
           <button
             type="button"
@@ -141,8 +140,8 @@ export function Landing() {
             <a href="#platform" onClick={() => setMobileOpen(false)}>The platform <ChevronRight size={16} /></a>
             <a href="#capabilities" onClick={() => setMobileOpen(false)}>What it does <ChevronRight size={16} /></a>
             <a href="#workflow" onClick={() => setMobileOpen(false)}>How it works <ChevronRight size={16} /></a>
-            <Link to="/login" onClick={() => setMobileOpen(false)}>Sign in <ChevronRight size={16} /></Link>
-            <Link className="vgn-mobile-primary" to="/register" onClick={() => setMobileOpen(false)}>Get started <ArrowUpRight size={17} /></Link>
+            <a href="/login">Sign in <ChevronRight size={16} /></a>
+            <a className="vgn-mobile-primary" href="/register">Get started <ArrowUpRight size={17} /></a>
           </nav>
         )}
       </header>
@@ -155,7 +154,7 @@ export function Landing() {
               <h1>Every frame has<br /><em>more to say.</em></h1>
               <p>See movement, make sense of activity and keep the bigger picture in focus. One connected workspace for video-based traffic analysis.</p>
               <div className="vgn-hero-actions">
-                <Link to="/register" className="vgn-button vgn-button-accent">Open VisionGuard <ArrowUpRight size={18} /></Link>
+                <a href="/register" className="vgn-button vgn-button-accent">Open VisionGuard <ArrowUpRight size={18} /></a>
                 <a href="#platform" className="vgn-button vgn-button-ghost">Explore the platform <ArrowRight size={17} /></a>
               </div>
               <div className="vgn-hero-footnote">
@@ -301,8 +300,8 @@ export function Landing() {
               <h2>See what your<br /><em>footage can say.</em></h2>
               <p>Less guesswork between the scene and the insight. Explore VisionGuard's connected analysis workspace.</p>
               <div className="vgn-cta-actions">
-                <Link className="vgn-button vgn-button-cta" to="/register">Get started <ArrowUpRight size={18} /></Link>
-                <Link to="/login" className="vgn-cta-signin">Already have an account? Sign in <ArrowRight size={16} /></Link>
+                <a className="vgn-button vgn-button-cta" href="/register">Get started <ArrowUpRight size={18} /></a>
+                <a href="/login" className="vgn-cta-signin">Already have an account? Sign in <ArrowRight size={16} /></a>
               </div>
             </div>
             <div className="vgn-cta-image" aria-hidden="true">
@@ -320,7 +319,7 @@ export function Landing() {
         <div className="vgn-shell vgn-footer-top">
           <Brand />
           <span>Built for clarity on the road.</span>
-          <div><a href="#platform">Platform</a><a href="#capabilities">Capabilities</a><a href="#workflow">Workflow</a><Link to="/login">Sign in</Link></div>
+          <div><a href="#platform">Platform</a><a href="#capabilities">Capabilities</a><a href="#workflow">Workflow</a><a href="/login">Sign in</a></div>
         </div>
         <div className="vgn-shell vgn-footer-bottom">
           <span>© {new Date().getFullYear()} VisionGuard. All rights reserved.</span>
