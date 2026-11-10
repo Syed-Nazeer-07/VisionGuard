@@ -185,3 +185,21 @@
   border-color: #3a484f;
 }
 .vg-auth-recovery :focus-visible { outline: 2px solid #6b8187; outline-offset: 3px; }
+
+
+/* Navigable auth controls must retain a visible click target at every width. */
+.vg-auth a[href], .vg-auth-recovery a[href] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.vg-auth button:not(:disabled), .vg-auth-recovery button:not(:disabled) {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.vg-auth button:disabled, .vg-auth-recovery button:disabled {
+  cursor: not-allowed;
+}
+.vg-auth .vg-auth-form-inner, .vg-auth-recovery .vg-auth-recovery-card {
+  position: relative;
+  z-index: 1;
+}
