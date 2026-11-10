@@ -6,30 +6,40 @@ import { Landing } from './Landing';
 const renderLanding = () =>
   renderToStaticMarkup(<MemoryRouter><Landing /></MemoryRouter>);
 
-describe('VisionGuard public landing experience', () => {
-  it('offers the correct sign-in and registration destinations', () => {
+describe('VisionGuard public landing page', () => {
+  it('keeps sign-in, registration, and main section navigation working', () => {
     const html = renderLanding();
     expect(html).toContain('href="/login"');
     expect(html).toContain('href="/register"');
-    expect(html).toContain('href="#experience"');
+    expect(html).toContain('href="#explore"');
     expect(html).toContain('href="#capabilities"');
     expect(html).toContain('href="#workflow"');
   });
 
-  it('labels the sample video as a preview, never as live model output', () => {
+  it('uses a multi-image gallery rather than a video or an old fake console screenshot', () => {
     const html = renderLanding();
-    expect(html).toContain('car-detection.mp4');
-    expect(html).toContain('preload="none"');
-    expect(html).toContain('SAMPLE FOOTAGE — NOT LIVE DETECTIONS');
-    expect(html).toContain('NO TRACKS OR SPEEDS ARE GENERATED IN THIS PREVIEW');
-    expect(html).toContain('Play sample traffic footage');
+    expect(html).toContain('traffic_operations_center.jpg');
+    expect(html).toContain('traffic_flow_analysis.jpg');
+    expect(html).toContain('traffic_monitoring_corridor.jpg');
+    expect(html).toContain('landing_hero.jpg');
+    expect(html).not.toContain('car-detection.mp4');
+    expect(html).not.toContain('<video');
+    expect(html).not.toContain('platform_preview.png');
+    expect(html).toContain('Illustrative scene — not live AI output');
+    expect(html).toContain('Select a traffic perspective');
   });
 
-  it('keeps calibration, storage choice, and human review limitations visible', () => {
+  it('keeps storage, speed limitations, and human review disclosures accessible', () => {
     const html = renderLanding();
-    expect(html).toContain('Image-derived speed values are approximations');
-    expect(html).toContain('cloud backup requires explicit upload');
-    expect(html).toContain('human review');
-    expect(html).toContain('Detect');
+    expect(html).toContain('cloud originals require explicit upload');
+    expect(html).toContain('not calibrated road-speed measurements');
+    expect(html).toContain('human judgement');
+  });
+
+  it('uses compact footer branding without the old oversized wordmark', () => {
+    const html = renderLanding();
+    expect(html).toContain('vgx-footer');
+    expect(html).not.toContain('vx-footer-wordmark');
+    expect(html).toContain('AI-assisted analysis');
   });
 });
