@@ -22,6 +22,24 @@ describe('live playback projected vehicle overlays', () => {
   it('expires an orphaned overlay within a fraction of a second', () => {
     expect(projectLiveTracks([vehicle], 2, 2.23, 200, 100)).toEqual([]);
   });
+  it('bridges a brief low-motion optical gap without blinking, but still expires', () => {
+    const confirmed = { ...vehicle, vx: 15, lastOpticalAt: 2 };
+    expect(projectLiveTracks([confirmed], 2, 2.29, 200, 100)).toHaveLength(1);
+    expect(projectLiveTracks([confirmed], 2, 2.35, 200, 100)).toEqual([]);
+  });
+  it('does not prolong high-speed, unconfirmed or predicted ghosts', () => {
+    const fast = { ...vehicle, vx: 175, lastOpticalAt: 2 };
+    expect(projectLiveTracks([fast], 2, 2.23, 200, 100)).toEqual([]);
+    const noOptical = { ...vehicle, lastOpticalAt: undefined };
+    expect(projectLiveTracks([noOptical], 2, 2.23, 200, 100)).toEqual([]);
+    const predicted = { ...vehicle, vx: 0, isPredicted: true, lastOpticalAt: 2 };
+    expect(projectLiveTracks([predicted], 2, 2.23, 200, 100)).toEqual([]);
+  });
+  it('continues to drop slow optical boxes when they exit the image', () => {
+    const leaving = { ...vehicle, x: 193, vx: 15, lastOpticalAt: 2 };
+    expect(projectLiveTracks([leaving], 2, 2.28, 200, 100)).toEqual([]);
+  });
+
   it('immediately removes boxes beyond the video edge', () => {
     const leaving = { ...vehicle, x: 203, w: 24, vx: 100 };
     expect(projectLiveTracks([leaving], 2, 2.18, 200, 100)).toEqual([]);
