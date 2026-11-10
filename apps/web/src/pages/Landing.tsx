@@ -235,7 +235,7 @@ export function Landing() {
                     <div className="vx-video-soft-mask" aria-hidden="true" />
                     <div className="vx-viewport-frame" aria-hidden="true"><span /><span /><span /><span /></div>
                     <div className="vx-viewport-label"><span /> SAMPLE FOOTAGE — NOT LIVE DETECTIONS</div>
-                    <button type="button" className="vx-video-toggle" onClick={toggleVideo} aria-label={playing ? 'Pause sample traffic footage' : 'Play sample traffic footage'}>
+                    <button type="button" className={'vx-video-toggle' + (playing ? ' vx-video-toggle-playing' : '')} onClick={toggleVideo} aria-label={playing ? 'Pause sample traffic footage' : 'Play sample traffic footage'}>
                       {playing ? <Pause size={25} fill="currentColor" /> : <Play size={26} fill="currentColor" />}
                     </button>
                     {videoIssue && <div className="vx-video-error" role="status">Sample video could not play in this browser.</div>}
