@@ -77,6 +77,7 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
-    include: ['src/**/*.test.ts'],
+    // Run both logic tests and React component (.tsx) smoke tests.
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 })
