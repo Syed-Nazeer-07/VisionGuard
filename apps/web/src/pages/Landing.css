@@ -129,7 +129,7 @@
 .vgx-gallery-details > svg { color: #be542f; }
 .vgx-gallery-aside { display: grid; grid-template-rows: auto minmax(0,1fr); gap: 17px; min-width: 0; }
 .vgx-gallery-options { overflow: hidden; padding: 7px 14px; background: #fff; border: 1px solid #e7dbcf; border-radius: 17px; }
-.vgx-gallery-tab { display: grid; align-items: center; grid-template-columns: 36px 1fr 20px; width: 100%; min-height: 63px; gap: 12px; padding: 9px 12px; background: transparent; border: 0; border-bottom: 1px solid #faf2e9; text-align: left; color: #86736a; cursor: pointer; transition: background .2s,color .2s; }
+.vgx-gallery-tab { display: grid; align-items: center; grid-template-columns: 36px 1fr; width: 100%; min-height: 63px; gap: 12px; padding: 9px 12px; background: transparent; border: 0; border-bottom: 1px solid #faf2e9; text-align: left; color: #86736a; cursor: pointer; transition: background .2s,color .2s; }
 .vgx-gallery-tab:last-child { border-bottom: 0; }
 .vgx-gallery-tab:hover { color: #be542f; background: #fffaf6; }
 .vgx-gallery-tab-active { color: #a3442c; background: #faf2e9; }
@@ -150,7 +150,7 @@
 .vgx-capabilities { padding-block: 120px 135px; background: #fff; }
 .vgx-section-heading-tight { padding-bottom: 58px; }
 .vgx-capability-list { border-top: 1px solid #f1e7dd; }
-.vgx-capability { display: grid; align-items: center; grid-template-columns: 44px minmax(0,1.03fr) minmax(250px,.78fr) 28px; gap: 27px; min-height: 166px; padding: 27px 12px 27px 0; border-bottom: 1px solid #f1e7dd; transition: background .23s ease,padding .23s ease; }
+.vgx-capability { display: grid; align-items: center; grid-template-columns: 44px minmax(0,1.03fr) minmax(250px,.78fr); gap: 27px; min-height: 166px; padding: 27px 12px 27px 0; border-bottom: 1px solid #f1e7dd; transition: background .23s ease,padding .23s ease; }
 .vgx-capability:hover { padding-left: 15px; padding-right: 0; background: #fffaf6; }
 .vgx-capability-count { align-self: start; padding-top: 14px; color: #988378; font: 750 11px ui-monospace, monospace; }
 .vgx-capability-title { display: flex; align-items: center; gap: 22px; min-width: 0; }
@@ -235,7 +235,7 @@
   .vgx-hero-heading { gap: 25px; }
   .vgx-hero-heading h1 { font-size: clamp(65px,7.7vw,105px); }
   .vgx-hero-scene { grid-template-columns: 1.28fr .72fr; }
-  .vgx-capability { grid-template-columns: 34px 1fr minmax(220px,.75fr) 20px; gap: 16px; }
+  .vgx-capability { grid-template-columns: 34px 1fr minmax(220px,.75fr); gap: 16px; }
   .vgx-visual-story-grid { gap: 36px; }
   .vgx-trust-grid { gap: 56px; }
 }
@@ -248,9 +248,8 @@
   .vgx-hero-scene { height: 500px; }
   .vgx-statement-grid { grid-template-columns: 1fr; gap: 22px; }
   .vgx-statement h2 { font-size: clamp(54px,8vw,81px); }
-  .vgx-capability { grid-template-columns: 35px 1fr 25px; }
+  .vgx-capability { grid-template-columns: 35px 1fr; }
   .vgx-capability > p { grid-column: 2; grid-row: 2; }
-  .vgx-capability-arrow { grid-column: 3; grid-row: 1; }
   .vgx-gallery { grid-template-columns: 1.1fr .9fr; }
   .vgx-visual-story-grid { grid-template-columns: 1fr; padding-block: 25px; gap: 25px; }
   .vgx-visual-story-image { height: 400px; }
@@ -290,7 +289,7 @@
   .vgx-gallery-aside { grid-template-columns: 1fr 1fr; grid-template-rows: auto; }
   .vgx-gallery-secondary { min-height: 245px; }
   .vgx-gallery-options { padding: 6px; }
-  .vgx-gallery-tab { gap: 6px; grid-template-columns: 23px 1fr 15px; min-height: 72px; }
+  .vgx-gallery-tab { gap: 6px; grid-template-columns: 23px 1fr; min-height: 72px; }
   .vgx-gallery-tab strong { font-size: 14px; }
   .vgx-gallery-bottom > span { line-height: 1.7; }
   .vgx-capability { min-height: 165px; }
@@ -327,7 +326,7 @@
   .vgx-gallery-tab > svg { display: none; }
   .vgx-gallery-tab strong { font-size: 12px; }
   .vgx-gallery-secondary { height: 220px; min-height: 0; }
-  .vgx-capability { grid-template-columns: 25px 1fr 19px; gap: 9px; }
+  .vgx-capability { grid-template-columns: 25px 1fr; gap: 9px; }
   .vgx-capability-title { gap: 12px; }
   .vgx-capability-icon { height: 41px; width: 41px; }
   .vgx-capability-icon svg { height: 20px; width: 20px; }
