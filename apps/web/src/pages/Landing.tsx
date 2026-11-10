@@ -1,183 +1,305 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, BarChart3, Database, Film, LockKeyhole, Shield, Video, ScanSearch, FileText, CloudUpload } from 'lucide-react';
+import {
+  Activity, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronRight,
+  CircleDot, CloudUpload, Cpu, Database, FileText, Film, Fingerprint,
+  Layers3, LockKeyhole, Menu, ScanLine, Shield, ShieldCheck, Sparkles,
+  Video, X, Zap
+} from 'lucide-react';
+import './Landing.css';
 
-const stages = [
+const highlights = [
+  { icon: ScanLine, title: 'Frame-by-frame visibility', detail: 'Vehicle detections and visual tracks in the same playback view.' },
+  { icon: BarChart3, title: 'Connected intelligence', detail: 'Session summaries, class breakdowns, and activity history in one place.' },
+  { icon: Fingerprint, title: 'Reviewable by design', detail: 'A clear path from AI-assisted observations to human review.' },
+  { icon: CloudUpload, title: 'Storage on your terms', detail: 'Keep footage on your device, or opt into cloud storage when configured.' },
+];
+
+const workflow = [
   {
-    number: '01', icon: Film, title: 'Select your footage',
-    description: 'Upload a local recording, open your camera, or approve capture of a live browser tab. Analysis starts alongside playback.'
+    number: '01', icon: Film, title: 'Bring the footage',
+    detail: 'Select a local video or approve a browser tab or camera capture. You decide what the app can see.',
   },
   {
-    number: '02', icon: ScanSearch, title: 'Detect and track',
-    description: 'YOLO11s and optical tracking identify road users across frames, with classes and approximate motion estimates.'
+    number: '02', icon: ScanLine, title: 'See the activity',
+    detail: 'YOLO11s and visual tracking identify road users and follow observed motion across sampled frames.',
   },
   {
-    number: '03', icon: FileText, title: 'Review and report',
-    description: 'Track activity appears across the overview, analytics, history, incidents and exportable reports under your account.'
-  }
+    number: '03', icon: FileText, title: 'Turn it into context',
+    detail: 'Return to your session history, inspect summaries, review incidents, and export reports.',
+  },
 ];
-const capabilities = [
-  { icon: Video, title: 'Live visual analysis', detail: 'Browser-side video inference with boxes and persistent track IDs.' },
-  { icon: BarChart3, title: 'Connected insights', detail: 'Session counts and vehicle classes backed by the same activity records.' },
-  { icon: Database, title: 'Saved analysis history', detail: 'Local-first tracking records with authenticated metadata synchronization.' },
-  { icon: CloudUpload, title: 'Optional video storage', detail: 'Original files are uploaded to Backblaze B2 only when you choose to save them.' }
+
+type PreviewMode = 'detect' | 'track' | 'review';
+
+const previewModes: { id: PreviewMode; name: string; title: string; description: string }[] = [
+  { id: 'detect', name: 'Detect', title: 'Spot what matters', description: 'Vehicle classes and bounding boxes in context.' },
+  { id: 'track', name: 'Track', title: 'Follow the movement', description: 'Persistent IDs and approximate on-screen motion.' },
+  { id: 'review', name: 'Review', title: 'Keep the context', description: 'Move from a session to reviewable information.' },
 ];
+
+function Brand({ light = false }: { light?: boolean }) {
+  return (
+    <Link to="/" className={'vg-brand' + (light ? ' vg-brand--light' : '')} aria-label="VisionGuard home">
+      <span className="vg-brand-mark" aria-hidden="true"><Shield size={21} strokeWidth={2} /><span className="vg-brand-mark-dot" /></span>
+      <span>Vision<span className="vg-brand-emphasis">Guard</span><span className="vg-brand-period">.</span></span>
+    </Link>
+  );
+}
 
 export function Landing() {
-  return <div className="min-h-screen bg-white text-[#18283d] antialiased">
-    <header className="sticky top-0 z-40 border-b border-[#e7ecf1] bg-white/95 backdrop-blur-lg">
-      <nav className="mx-auto flex h-[68px] max-w-7xl items-center justify-between gap-5 px-5 sm:px-8" aria-label="Main navigation">
-        <Link to="/" className="flex items-center gap-2.5 text-[17px] font-bold tracking-[-.035em]">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-[#1b365c] text-white">
-            <Shield size={19} strokeWidth={1.8}/>
-          </span>
-          VisionGuard
-        </Link>
-        <div className="hidden items-center gap-7 text-[13px] font-medium text-slate-600 md:flex">
-          <a href="#workflow" className="hover:text-[#2356a8]">Workflow</a>
-          <a href="#capabilities" className="hover:text-[#2356a8]">Capabilities</a>
-          <a href="#architecture" className="hover:text-[#2356a8]">Architecture</a>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link to="/login" className="hidden text-sm font-semibold text-slate-700 hover:text-[#2356a8] sm:inline">Sign in</Link>
-          <Link to="/register" className="vg-primary">Get started <ArrowRight size={15}/></Link>
-        </div>
-      </nav>
-    </header>
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('detect');
+  const selectedPreview = previewModes.find(mode => mode.id === previewMode) ?? previewModes[0];
+  const closeMenu = () => setMenuOpen(false);
 
-    <main>
-      <section className="overflow-hidden bg-[#f6f8fb]">
-        <div className="mx-auto grid max-w-7xl items-center gap-12 px-5 py-16 sm:px-8 sm:py-20 lg:grid-cols-[.95fr_1.05fr] lg:gap-16 lg:py-28">
-          <div>
-            <p className="mb-5 text-xs font-semibold uppercase tracking-[.16em] text-[#42658d]">Video analysis / Vehicle tracking</p>
-            <h1 className="max-w-[690px] text-[clamp(2.5rem,5vw,4.6rem)] font-semibold leading-[1.08] tracking-[-.055em] text-[#17283e]">
-              Traffic footage, turned into useful information.
-            </h1>
-            <p className="mt-6 max-w-[540px] text-base leading-8 text-[#607085]">
-              Analyze video and live tab captures with YOLO11s. Review vehicle tracks, keep session history, and generate reports from one workspace.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/register" className="vg-primary min-h-11 px-5">Create an account <ArrowRight size={16}/></Link>
-              <Link to="/login" className="vg-secondary min-h-11 px-5">Open workspace</Link>
-            </div>
-            <p className="mt-6 text-xs leading-5 text-slate-500">
-              Local analysis available. Video cloud storage is optional. Source accuracy depends on the model and footage.
-            </p>
-          </div>
-          <div className="min-w-0 overflow-hidden rounded-2xl border border-[#dce4ed] bg-white p-2 shadow-[0_25px_65px_-35px_rgba(22,43,74,.38)] sm:p-3">
-            <div className="flex items-center justify-between px-2 pb-3 pt-1">
-              <span className="text-xs font-semibold text-[#33475e]">Traffic video analysis</span>
-              <span className="text-[11px] text-slate-400">Illustrative footage</span>
-            </div>
-            <img src="/traffic_monitoring_corridor.jpg" alt="Road traffic captured from an elevated observation point"
-              className="aspect-[16/10] w-full rounded-xl object-cover" loading="eager"/>
-            <div className="flex flex-wrap items-center gap-2 px-2 pb-1 pt-3 text-[11px] font-medium text-[#5e7086]">
-              <span>YOLO11s · ONNX Runtime Web</span>
-              <span aria-hidden="true">·</span>
-              <span>Local-first tracking</span>
-            </div>
-          </div>
-        </div>
-      </section>
+  return (
+    <div className="vg-landing">
+      <a className="vg-skip-link" href="#main-content">Skip to content</a>
 
-      <section id="workflow" className="scroll-mt-24 border-b border-[#e8edf3] py-20 sm:py-24">
-        <div className="mx-auto max-w-7xl px-5 sm:px-8">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#42658d]">The workflow</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">From video to structured activity</h2>
-            <p className="mt-4 text-sm leading-7 text-slate-600">A simple path from the original footage to records you can inspect later.</p>
+      <header className="vg-landing-header">
+        <nav className="vg-landing-nav vg-container" aria-label="Main navigation">
+          <Brand />
+          <div className="vg-nav-links">
+            <a href="#platform">Platform</a>
+            <a href="#workflow">How it works</a>
+            <a href="#approach">Our approach</a>
           </div>
-          <div className="mt-11 grid gap-4 md:grid-cols-3">
-            {stages.map(item => {
-              const Icon = item.icon;
-              return <article key={item.number} className="rounded-xl border border-[#e3e9ef] p-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-400">{item.number}</span>
-                  <Icon size={20} className="text-[#315a8b]"/>
-                </div>
-                <h3 className="mt-8 text-base font-semibold text-[#18283d]">{item.title}</h3>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{item.description}</p>
-              </article>;
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section id="capabilities" className="scroll-mt-24 bg-[#fafbfd] py-20 sm:py-24">
-        <div className="mx-auto max-w-7xl px-5 sm:px-8">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#42658d]">One workspace</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Tools that work together</h2>
-          </div>
-          <div className="mt-11 grid gap-4 sm:grid-cols-2">
-            {capabilities.map(item=>{
-              const Icon=item.icon;
-              return <article key={item.title} className="flex gap-4 rounded-xl border border-[#e3e9ef] bg-white p-6">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#ebf1f8] text-[#315a8b]">
-                  <Icon size={20}/>
-                </span>
-                <div>
-                  <h3 className="text-sm font-semibold text-[#1b2e45]">{item.title}</h3>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">{item.detail}</p>
-                </div>
-              </article>;
-            })}
-          </div>
-        </div>
-      </section>
-
-      <section id="architecture" className="scroll-mt-24 border-t border-[#e8edf3] py-20 sm:py-24">
-        <div className="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[.14em] text-[#42658d]">Architecture</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] sm:text-4xl">Built with clear data boundaries</h2>
-            <p className="mt-5 text-sm leading-8 text-slate-600">
-              VisionGuard keeps analysis processing separate from account metadata and original video files.
-              The web app can process supported video locally, while authenticated accounts allow session history to synchronize.
-            </p>
-            <Link to="/register" className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-[#2356a8] hover:underline">
-              Try the workspace <ArrowRight size={16}/>
+          <div className="vg-nav-actions">
+            <Link className="vg-nav-login" to="/login">Sign in</Link>
+            <Link className="vg-button vg-button--small vg-button--accent" to="/register">
+              Launch workspace <ArrowUpRight size={16} />
             </Link>
           </div>
-          <div className="space-y-4">
-            <div className="flex gap-3 border-b border-[#e7edf3] pb-4">
-              <ScanSearch size={20} className="mt-1 shrink-0 text-[#315a8b]"/>
-              <div><h3 className="text-sm font-semibold">Analysis in your browser</h3>
-                <p className="mt-1.5 text-sm leading-7 text-slate-600">YOLO11s inference with WebGPU where compatible and a WebAssembly fallback.</p></div>
-            </div>
-            <div className="flex gap-3 border-b border-[#e7edf3] pb-4">
-              <LockKeyhole size={20} className="mt-1 shrink-0 text-[#315a8b]"/>
-              <div><h3 className="text-sm font-semibold">Authentication and structured records</h3>
-                <p className="mt-1.5 text-sm leading-7 text-slate-600">Supabase Auth and PostgreSQL store account-owned metadata, session summaries and review flags.</p></div>
-            </div>
-            <div className="flex gap-3 pb-4">
-              <CloudUpload size={20} className="mt-1 shrink-0 text-[#315a8b]"/>
-              <div><h3 className="text-sm font-semibold">Video storage only when requested</h3>
-                <p className="mt-1.5 text-sm leading-7 text-slate-600">Original uploaded videos can be retained on your device or explicitly saved to Backblaze B2.</p></div>
-            </div>
+          <button
+            className="vg-mobile-toggle"
+            type="button"
+            aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={menuOpen}
+            aria-controls="vg-mobile-navigation"
+            onClick={() => setMenuOpen(open => !open)}
+          >
+            {menuOpen ? <X size={21} /> : <Menu size={21} />}
+          </button>
+        </nav>
+        {menuOpen && (
+          <div id="vg-mobile-navigation" className="vg-mobile-navigation">
+            <a href="#platform" onClick={closeMenu}>Platform <ChevronRight size={16} /></a>
+            <a href="#workflow" onClick={closeMenu}>How it works <ChevronRight size={16} /></a>
+            <a href="#approach" onClick={closeMenu}>Our approach <ChevronRight size={16} /></a>
+            <Link to="/login" onClick={closeMenu}>Sign in <ChevronRight size={16} /></Link>
+            <Link to="/register" onClick={closeMenu} className="vg-mobile-primary">Launch workspace <ArrowUpRight size={16} /></Link>
           </div>
-        </div>
-      </section>
+        )}
+      </header>
 
-      <section className="bg-[#182c46] px-5 py-16 text-white sm:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-[-.03em]">Start with your own footage.</h2>
-            <p className="mt-2 max-w-xl text-sm leading-7 text-slate-300">
-              Reviewable data, without pretending that uncalibrated speed estimates are legally verified offences.
-            </p>
+      <main id="main-content">
+        <section className="vg-hero">
+          <div className="vg-hero-grid" aria-hidden="true" />
+          <div className="vg-hero-glow vg-hero-glow--left" aria-hidden="true" />
+          <div className="vg-hero-glow vg-hero-glow--right" aria-hidden="true" />
+          <div className="vg-container vg-hero-layout">
+            <div className="vg-hero-copy">
+              <div className="vg-eyebrow vg-hero-eyebrow"><span className="vg-live-dot" /> MEET YOUR TRAFFIC INTELLIGENCE WORKSPACE <ArrowUpRight size={13} /></div>
+              <h1>See the road.<br /><span>Understand<br className="vg-desktop-break" /> the motion.</span></h1>
+              <p className="vg-hero-description">
+                From moving footage to meaningful context. Detect road users, follow visual tracks, and bring analysis, history, and review into one connected workspace.
+              </p>
+              <div className="vg-hero-actions">
+                <Link to="/register" className="vg-button vg-button--accent vg-button--hero">
+                  Get started <ArrowUpRight size={18} />
+                </Link>
+                <a href="#platform" className="vg-button vg-button--outline vg-button--hero">
+                  Explore the platform <ArrowRight size={17} />
+                </a>
+              </div>
+              <div className="vg-hero-footnote">
+                <span className="vg-footnote-icon"><Check size={13} /></span>
+                Browser-based analysis <span className="vg-footnote-separator" />
+                Your footage stays local unless you choose otherwise
+              </div>
+            </div>
+
+            <div className="vg-hero-visual">
+              <div className="vg-monitor-halo" aria-hidden="true" />
+              <div className="vg-visual-corner vg-visual-corner--top" aria-hidden="true">V/G · 001</div>
+              <div className="vg-monitor">
+                <div className="vg-monitor-toolbar">
+                  <div className="vg-monitor-ident"><span className="vg-monitor-led" /><span>VISIONGUARD</span><span className="vg-monitor-slash">/</span><span className="vg-monitor-strong">ANALYSIS PREVIEW</span></div>
+                  <div className="vg-monitor-indicator"><CircleDot size={12} /> PRODUCT CONCEPT</div>
+                </div>
+                <div className={'vg-monitor-scene vg-monitor-scene--' + previewMode}>
+                  <img src="/traffic_monitoring_corridor.jpg" alt="Illustrative aerial view of traffic on a road" loading="eager" fetchPriority="high" />
+                  <div className="vg-monitor-image-shade" aria-hidden="true" />
+                  {previewMode !== 'review' && (
+                    <div className="vg-sample-tracks" aria-hidden="true">
+                      <div className="vg-sample-track vg-sample-track--one">
+                        <span className="vg-track-corner vg-track-corner--tl" /><span className="vg-track-corner vg-track-corner--tr" />
+                        <span className="vg-track-corner vg-track-corner--bl" /><span className="vg-track-corner vg-track-corner--br" />
+                        <span className="vg-track-caption">#08 · CAR</span>
+                      </div>
+                      <div className="vg-sample-track vg-sample-track--two">
+                        <span className="vg-track-corner vg-track-corner--tl" /><span className="vg-track-corner vg-track-corner--tr" />
+                        <span className="vg-track-corner vg-track-corner--bl" /><span className="vg-track-corner vg-track-corner--br" />
+                        <span className="vg-track-caption">#12 · TRUCK</span>
+                      </div>
+                      {previewMode === 'track' && <div className="vg-track-route"><span /><span /><span /><span /></div>}
+                    </div>
+                  )}
+                  {previewMode === 'review' && (
+                    <div className="vg-review-surface" aria-hidden="true">
+                      <div className="vg-review-top"><FileText size={19} /><span>SESSION REVIEW</span></div>
+                      <div className="vg-review-row"><span className="vg-review-symbol"><Check size={13} /></span> Video activity captured <span>01</span></div>
+                      <div className="vg-review-row"><span className="vg-review-symbol"><Check size={13} /></span> Tracks and classes <span>02</span></div>
+                      <div className="vg-review-row"><span className="vg-review-symbol"><Check size={13} /></span> Reviewable timeline <span>03</span></div>
+                    </div>
+                  )}
+                  <div className="vg-monitor-scan" aria-hidden="true" />
+                  <div className="vg-monitor-top-info"><span><span className="vg-blink-dot" /> VISUAL INTELLIGENCE</span><span>DEMONSTRATION</span></div>
+                  <div className="vg-monitor-bottom-info"><ScanLine size={13} /><span>ILLUSTRATIVE TRACKING OVERLAY — NOT LIVE DETECTIONS</span></div>
+                </div>
+                <div className="vg-monitor-console">
+                  <div className="vg-monitor-tabs" role="tablist" aria-label="Preview product workflow">
+                    {previewModes.map(mode => (
+                      <button
+                        key={mode.id}
+                        id={'vg-preview-tab-' + mode.id}
+                        type="button"
+                        role="tab"
+                        aria-controls="vg-preview-panel"
+                        aria-selected={previewMode === mode.id}
+                        className={'vg-monitor-tab' + (previewMode === mode.id ? ' vg-monitor-tab--active' : '')}
+                        onClick={() => setPreviewMode(mode.id)}
+                      >
+                        {mode.name}
+                      </button>
+                    ))}
+                  </div>
+                  <div id="vg-preview-panel" role="tabpanel" aria-labelledby={'vg-preview-tab-' + previewMode} className="vg-monitor-summary">
+                    <span className="vg-monitor-summary-icon"><Activity size={16} /></span>
+                    <div><strong>{selectedPreview.title}</strong><p>{selectedPreview.description}</p></div>
+                    <ArrowUpRight size={17} className="vg-monitor-summary-arrow" />
+                  </div>
+                </div>
+              </div>
+              <div className="vg-orbit-card vg-orbit-card--top"><span className="vg-orbit-icon"><Zap size={16} /></span><span>YOLO11s <small>INFERENCE ENGINE</small></span></div>
+              <div className="vg-orbit-card vg-orbit-card--bottom"><span className="vg-orbit-pulse"><Activity size={17} /></span><span>From pixels <small>TO REVIEWABLE INSIGHTS</small></span></div>
+              <div className="vg-visual-corner vg-visual-corner--bottom" aria-hidden="true">INTELLIGENCE // VISUALIZED</div>
+            </div>
           </div>
-          <Link to="/register" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-5 text-sm font-semibold text-[#182c46] hover:bg-slate-100">
-            Create account <ArrowRight size={16}/>
-          </Link>
+          <div className="vg-container vg-hero-footer">
+            <span>BUILT AROUND YOUR WORKFLOW</span>
+            <div><span><Cpu size={15} /> YOLO11s + ONNX</span><span><Layers3 size={15} /> WebGPU / WASM</span><span><ShieldCheck size={15} /> Review-first</span><span><Database size={15} /> Session history</span></div>
+          </div>
+        </section>
+
+        <section id="platform" className="vg-section vg-platform">
+          <div className="vg-container">
+            <div className="vg-section-heading">
+              <div><p className="vg-kicker"><span>01 / PLATFORM</span> <span className="vg-kicker-line" /></p><h2>A clearer view.<br /><span>At every step.</span></h2></div>
+              <p>One place to move from raw footage to something you can actually understand, revisit, and act on responsibly.</p>
+            </div>
+            <div className="vg-bento">
+              <article className="vg-bento-card vg-bento-card--wide">
+                <div className="vg-bento-card-copy">
+                  <span className="vg-card-index">01 / UNIFIED WORKSPACE</span>
+                  <h3>Everything connects.<br />Nothing gets lost.</h3>
+                  <p>Your footage, vehicle tracks, session history, analytics, and incident review belong to the same experience.</p>
+                  <Link to="/register" className="vg-text-link">Explore your workspace <ArrowUpRight size={16} /></Link>
+                </div>
+                <div className="vg-bento-preview">
+                  <div className="vg-bento-preview-top"><span className="vg-bento-preview-dot" /> ANALYSIS DASHBOARD <span className="vg-bento-preview-top-right">CONCEPT VIEW</span></div>
+                  <img src="/platform_preview.png" alt="Preview image of the VisionGuard application interface" loading="lazy" />
+                  <span className="vg-bento-preview-glow" aria-hidden="true" />
+                </div>
+              </article>
+              <article className="vg-bento-card vg-bento-card--compute">
+                <div className="vg-compute-orbit" aria-hidden="true"><span className="vg-compute-ring vg-compute-ring--one" /><span className="vg-compute-ring vg-compute-ring--two" /><span className="vg-compute-ring vg-compute-ring--three" /><span className="vg-compute-center"><ScanLine size={33} /></span></div>
+                <span className="vg-card-index">02 / BROWSER-FIRST</span>
+                <h3>Intelligence close<br />to the source.</h3>
+                <p>Run supported analysis directly in your browser, with WebGPU acceleration where available and a WebAssembly fallback.</p>
+              </article>
+              <article className="vg-bento-card vg-bento-card--history">
+                <div className="vg-history-art" aria-hidden="true">
+                  <div><span className="vg-history-rail-dot" /> <span className="vg-history-item-line vg-history-item-line--long" /></div>
+                  <div><span className="vg-history-rail-dot" /> <span className="vg-history-item-line" /></div>
+                  <div><span className="vg-history-rail-dot vg-history-rail-dot--active" /> <span className="vg-history-item-line vg-history-item-line--medium" /></div>
+                  <span className="vg-history-caption">ACTIVITY / TIMELINE</span>
+                </div>
+                <span className="vg-card-index">03 / CONNECTED RECORDS</span>
+                <h3>Work worth<br />coming back to.</h3>
+                <p>Review session summaries, class counts, and activity records without starting from scratch.</p>
+              </article>
+            </div>
+            <div className="vg-feature-grid">
+              {highlights.map(({ icon: Icon, title, detail }) => (
+                <article className="vg-feature" key={title}>
+                  <div className="vg-feature-icon"><Icon size={21} strokeWidth={1.8} /></div>
+                  <h3>{title}</h3>
+                  <p>{detail}</p>
+                  <span className="vg-feature-asterisk"><ArrowUpRight size={15} /></span>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="workflow" className="vg-section vg-workflow">
+          <div className="vg-container">
+            <div className="vg-section-heading vg-section-heading--workflow">
+              <div><p className="vg-kicker"><span>02 / HOW IT WORKS</span> <span className="vg-kicker-line" /></p><h2>From footage<br /><span>to foresight.</span></h2></div>
+              <p>Powerful underneath. Surprisingly straightforward on the surface.</p>
+            </div>
+            <div className="vg-workflow-steps">
+              {workflow.map(({ number, icon: Icon, title, detail }, index) => (
+                <article className="vg-workflow-step" key={number}>
+                  <div className="vg-step-number"><span>{number}</span>{index < workflow.length - 1 && <span className="vg-step-connector" aria-hidden="true" />}</div>
+                  <div className="vg-step-icon"><Icon size={24} strokeWidth={1.6} /></div>
+                  <h3>{title}</h3>
+                  <p>{detail}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section id="approach" className="vg-section vg-approach">
+          <div className="vg-container vg-approach-grid">
+            <div className="vg-approach-intro">
+              <p className="vg-kicker"><span>03 / THE PHILOSOPHY</span> <span className="vg-kicker-line" /></p>
+              <h2>Powerful vision.<br /><span>Grounded claims.</span></h2>
+              <p>Good intelligence doesn't just look impressive. It makes its limitations clear and gives people control over what happens next.</p>
+              <Link className="vg-text-link" to="/register">Experience VisionGuard <ArrowUpRight size={16} /></Link>
+              <div className="vg-approach-image"><img src="/traffic_flow_analysis.jpg" loading="lazy" alt="A road traffic scene viewed from above" /></div>
+            </div>
+            <div className="vg-approach-list">
+              <div className="vg-approach-row"><span className="vg-approach-number">01</span><span className="vg-approach-icon"><Cpu size={23} /></span><div><h3>Built for the browser</h3><p>YOLO11s detection and frame-to-frame visual tracking, without making a cloud video upload mandatory.</p></div></div>
+              <div className="vg-approach-row"><span className="vg-approach-number">02</span><span className="vg-approach-icon"><LockKeyhole size={23} /></span><div><h3>Clear storage choices</h3><p>Local video retention is opt-in. Cloud originals require explicit upload and configured Backblaze B2 storage.</p></div></div>
+              <div className="vg-approach-row"><span className="vg-approach-number">03</span><span className="vg-approach-icon"><Activity size={23} /></span><div><h3>Measurements with context</h3><p>Image-derived motion and speed proxies are approximate—not calibrated road-speed evidence.</p></div></div>
+              <div className="vg-approach-row"><span className="vg-approach-number">04</span><span className="vg-approach-icon"><ShieldCheck size={23} /></span><div><h3>Human review stays central</h3><p>Automated observations should support review, not replace verification or legal judgement.</p></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section className="vg-final-cta">
+          <div className="vg-container vg-final-inner">
+            <div className="vg-final-grid" aria-hidden="true" />
+            <div className="vg-final-eyebrow"><Sparkles size={14} /> THE NEXT FRAME IS YOURS</div>
+            <h2>See more.<br /><span>Understand better.</span></h2>
+            <p>Bring your own footage into a connected traffic intelligence workspace, built for clarity from first frame to final review.</p>
+            <div className="vg-final-actions"><Link className="vg-button vg-button--accent vg-button--hero" to="/register">Start with VisionGuard <ArrowUpRight size={18} /></Link><Link className="vg-final-login" to="/login">Already have an account? Sign in <ArrowRight size={16} /></Link></div>
+            <span className="vg-final-decoration" aria-hidden="true"><ScanLine size={160} strokeWidth={0.5} /></span>
+          </div>
+        </section>
+      </main>
+
+      <footer className="vg-landing-footer">
+        <div className="vg-container vg-footer-top">
+          <div><Brand light /><p>Clarity in every frame.<br />Context behind every decision.</p></div>
+          <div className="vg-footer-links"><a href="#platform">Platform</a><a href="#workflow">Workflow</a><a href="#approach">Our approach</a><Link to="/login">Sign in</Link></div>
         </div>
-      </section>
-    </main>
-    <footer className="border-t border-[#e8edf3] py-7">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 text-xs text-slate-500 sm:px-8">
-        <span className="flex items-center gap-2 font-semibold text-[#263950]"><Shield size={15}/> VisionGuard</span>
-        <span>Traffic analytics · Review before enforcement</span>
-        <Link to="/login" className="hover:text-[#2356a8]">Sign in</Link>
-      </div>
-    </footer>
-  </div>;
+        <div className="vg-container vg-footer-bottom"><span>© {new Date().getFullYear()} VisionGuard. Built for responsible traffic intelligence.</span><span><Shield size={14} /> Analysis is assistive. Review remains essential.</span></div>
+      </footer>
+    </div>
+  );
 }
