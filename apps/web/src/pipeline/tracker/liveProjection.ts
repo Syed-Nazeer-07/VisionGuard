@@ -26,8 +26,28 @@ export interface LiveTrack {
 // When the optical pipeline stalls, expire old boxes quickly instead of
 // painting them over unrelated background after a vehicle has departed.
 export const MAX_TRACK_AGE_SEC = 0.22;
-export const MAX_PROJECTION_SEC = 0.14;
+export const MAX_PROJECTION_SEC = 0.17;
 export const MAX_PREDICTION_BRIDGE_SEC = 0.17;
+/**
+ * A confidently optical-matched, slow-moving vehicle can tolerate one extra
+ * missed feature sample before its box vanishes. Fast vehicles, prediction-only
+ * bridges and raw detector frames retain the strict 220ms expiration.
+ *
+ * A short conditional grace interval reduces on/off blinking without extending
+ * unverified geometry over empty road or at the image boundary.
+ */
+export const OPTICALLY_CONFIRMED_SLOW_TRACK_AGE_SEC = 0.34;
+export function allowedOverlayAge(track: LiveTrack, observedTime: number): number {
+  if (track.isPredicted || track.lastOpticalAt === undefined ||
+      !Number.isFinite(track.lastOpticalAt) ||
+      Math.abs(track.lastOpticalAt - observedTime) > 0.025) {
+    return MAX_TRACK_AGE_SEC;
+  }
+  const relativeSpeedPerSecond =
+    Math.hypot(track.vx, track.vy) / Math.max(8, Math.min(track.w, track.h));
+  return relativeSpeedPerSecond <= 1.2
+    ? OPTICALLY_CONFIRMED_SLOW_TRACK_AGE_SEC : MAX_TRACK_AGE_SEC;
+}
 
 /** Prevent late asynchronous inference responses from wiping fresh evidence. */
 export function hasFreshOpticalObservation(
@@ -72,12 +92,13 @@ export function projectLiveTracks(
 ): LiveTrack[] {
   const age = mediaTime - observedTime;
   if (
-    !Number.isFinite(age) || age < -0.065 || age > MAX_TRACK_AGE_SEC ||
+    !Number.isFinite(age) || age < -0.065 || age > OPTICALLY_CONFIRMED_SLOW_TRACK_AGE_SEC ||
     frameWidth <= 0 || frameHeight <= 0
   ) return [];
 
   return tracks.flatMap((track) => {
-    if (![track.x, track.y, track.w, track.h, track.vx, track.vy].every(Number.isFinite)) return [];
+    if (![track.x, track.y, track.w, track.h, track.vx, track.vy].every(Number.isFinite) ||
+        age > allowedOverlayAge(track, observedTime)) return [];
     const twoWheeler = track.className === 'motorcycle' || track.className === 'bicycle';
     const minimumSize = twoWheeler ? 4 : 7;
     const minimumConfidence = track.className === 'motorcycle' ? .28 :
