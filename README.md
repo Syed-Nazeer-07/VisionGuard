@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="apps/web/public/favicon.svg" alt="VisionGuard logo" width="68" />
-  <h1>VisionGuard</h1>
+  <img src="apps/web/public/brand-logo.svg" alt="VisionGuard — traffic intelligence" width="300" />
   <p><strong>Traffic footage → vehicle tracking → reviewable insight.</strong></p>
   <p>Browser-based traffic video analysis with persistent tracking, session history, analytics and incident-review workflows.</p>
   <p>
