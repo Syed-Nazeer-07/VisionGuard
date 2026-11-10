@@ -22,7 +22,7 @@ import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
 import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
 import {
-  hasFreshOpticalObservation, projectLiveTracks, type LiveTrack
+  projectLiveTracks, type LiveTrack
 } from '../pipeline/tracker/liveProjection';
 
 // A separate, public HTTPS model host (for example R2) avoids Pages' 25 MiB
@@ -287,11 +287,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (anchor < 0 || closestDistance > 0.14) {
           // One late inference result must not erase newer optically matched
           // vehicles. Expire genuinely stale overlays as before.
-          if (!hasFreshOpticalObservation(
-            latestRef.current?.time, displayedVideoMediaTime(
-              video.currentTime, presentedMediaTimeRef.current, video.paused, video.seeking
-            )
-          )) {
+          // Do not clear a currently visible, image-confirmed track merely
+          // because an unrelated YOLO result arrived after its history anchor
+          // expired. Reuse the SAME age, velocity and edge guards as canvas
+          // rendering, so there is no extra ghost-retention policy here.
+          const latest = latestRef.current;
+          const displayedTime = displayedVideoMediaTime(
+            video.currentTime, presentedMediaTimeRef.current, video.paused, video.seeking
+          );
+          const hasProjectableEvidence = latest !== null &&
+            projectLiveTracks(
+              latest.tracks, latest.time, displayedTime,
+              video.videoWidth, video.videoHeight
+            ).length > 0;
+          if (!hasProjectableEvidence) {
             flowTracksRef.current = [];
             latestRef.current = null;
           }
