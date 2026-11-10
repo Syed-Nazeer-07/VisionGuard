@@ -64,11 +64,11 @@ export function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Keep the visible form synchronized with navigation in both directions.
+  // Browser Back from /register to /login must not leave the sign-up form up.
   useEffect(() => {
-    if (location.pathname === '/register') {
-      setMode('register');
-    }
-  }, [location]);
+    setMode(location.pathname === '/register' ? 'register' : 'login');
+  }, [location.pathname]);
 
   const {
     register: registerLogin,
