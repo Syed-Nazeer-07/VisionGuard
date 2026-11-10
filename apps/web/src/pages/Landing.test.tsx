@@ -38,7 +38,7 @@ describe('VisionGuard public landing page', () => {
 
   it('uses the original logo and reserves directional arrows for navigation', () => {
     const html = renderLanding();
-    expect(html.split('src="/brand-mark.svg?v=20261110b"').length - 1).toBe(2);
+    expect(html.split('src="/brand-mark.svg?v=20261111"').length - 1).toBe(2);
     expect(html).not.toContain('vgx-info-arrow');
     expect(html).not.toContain('vgx-capability-arrow');
     const tabs = html.split('class="vgx-gallery-tab').slice(1);
