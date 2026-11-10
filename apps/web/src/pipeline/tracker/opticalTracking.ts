@@ -164,6 +164,29 @@ export function advanceOpticalTracks<T extends LiveTrack>(
       );
       if (match) features.push(match);
     }
+    // Plain vehicle roofs often have too little texture for the seven central
+    // patches, especially when cars occupy only a few dozen pixels. Try the
+    // vehicle's shoulder/window edges before dropping an otherwise real box.
+    // This is NOT used to revive predicted ghosts: only genuinely confirmed
+    // tracks qualify, and the existing multi-feature motion-consensus checks
+    // below still reject inconsistent/background movement.
+    if (!reacquiring && features.length < 2) {
+      const edgeOffsets = [
+        [-.34, -.34], [.34, -.34], [-.34, .34], [.34, .34],
+        [0, -.38], [0, .38]
+      ];
+      for (const [ox, oy] of edgeOffsets) {
+        const x = centerX + track.w * sx * ox;
+        const y = centerY + track.h * sy * oy;
+        const match = matchFeature(
+          previous, current, x, y, predictX, predictY, search, patchRadius,
+          isSmallTwoWheeler ? 16 : 18, isSmallTwoWheeler ? 24 : 21
+        );
+        if (match) features.push(match);
+      }
+      // Additional edge texture must provide several independent agreements.
+      if (features.length < 3) continue;
+    }
     if (reacquiring ? features.length < 3 :
         features.length < 2 && !(isSmallTwoWheeler && features.length === 1 && features[0].error < 8)) continue;
     const dx = median(features.map(f => f.dx));
