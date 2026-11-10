@@ -9,6 +9,7 @@ import { useAuthStore } from '../../store/auth';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, User, Building, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import './AuthTheme.css';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -197,21 +198,21 @@ export function Login() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
-      className="min-h-screen flex bg-white"
+      className="vg-auth min-h-screen flex bg-[#f5f6f4]"
     >
       
       {/* Left Panel - Roadway Surveillance Showcase (Dedicated Sign In Visual Panel) */}
-      <div className="hidden lg:flex lg:w-[52%] xl:w-[54%] relative bg-slate-950 flex-col justify-between p-12 xl:p-16 border-r border-slate-800 overflow-hidden text-white select-none">
+      <div className="vg-auth-showcase hidden lg:flex lg:w-[48%] xl:w-[52%] relative bg-[#1d2428] flex-col justify-between p-12 xl:p-16 overflow-hidden text-white select-none">
         {/* Photorealistic Roadway CCTV Surveillance Background Image */}
-        <div className="absolute inset-0 z-0">
+        <div className="vg-auth-photo absolute inset-0 z-0">
           <img 
             src="/signin_hero.jpg" 
             alt="VisionGuard Roadway CCTV Surveillance" 
-            className="w-full h-full object-cover object-center filter brightness-[0.76] contrast-[1.12]"
+            className="w-full h-full object-cover object-center"
           />
           {/* Subtle dark gradient scrim matching navy and indigo palette */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/75 to-slate-950/80" />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-slate-950/60" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#161d20] via-[#1d2428]/80 to-[#1d2428]/60" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#161d20]/70 via-transparent to-[#161d20]/55" />
         </div>
         
         {/* Top Brand Logo & Status Indicator */}
@@ -220,8 +221,8 @@ export function Login() {
             <img src="/brand-mark.svg?v=20261111" alt="" width={36} height={36} className="w-9 h-9 rounded-lg" />
             <span className="text-xl font-bold text-white tracking-tight">VisionGuard</span>
           </Link>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/60 text-xs font-mono text-emerald-400">
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <div className="vg-auth-secure inline-flex items-center gap-2 px-3 py-2 rounded-full backdrop-blur-md text-[10px] font-semibold tracking-[0.13em]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#d9e1e2]"></span>
             <span>SECURE ACCESS</span>
           </div>
         </div>
@@ -229,18 +230,18 @@ export function Login() {
         {/* Center Editorial Content */}
         <div className="relative z-10 my-auto py-8">
           <div className="max-w-[480px]">
-            <div className="inline-block px-2.5 py-1 mb-4 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-[11px] font-semibold tracking-wider uppercase font-mono">
-              VisionGuard / Workspace
+            <div className="vg-auth-kicker inline-flex items-center px-3 py-2 mb-7 rounded text-[10px] font-semibold tracking-[0.17em] uppercase">
+              VISIONGUARD / YOUR WORKSPACE
             </div>
-            <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight mb-4 tracking-tight">
-              Traffic analysis in one workspace.
+            <h1 className="vg-auth-headline text-4xl xl:text-[52px] font-semibold text-white leading-[1.11] mb-5 tracking-[-0.055em]">
+              A clearer view starts here.
             </h1>
-            <p className="text-[15px] text-slate-300 leading-relaxed mb-8">
-              Review traffic footage, monitor vehicle detections, and keep reports organized in one place.
+            <p className="text-[15px] text-[#bec7ca] leading-[1.8] mb-8">
+              Analyze traffic footage, follow the movement, and return to the insights that matter—all from one workspace.
             </p>
           </div>
           
-          <div className="mt-7 flex flex-wrap gap-2 text-xs text-slate-200">
+          <div className="vg-auth-tags mt-8 flex flex-wrap gap-2.5 text-xs text-[#e6e9e7]">
             <span className="rounded-md border border-white/15 bg-slate-950/40 px-3 py-2">Video analysis</span>
             <span className="rounded-md border border-white/15 bg-slate-950/40 px-3 py-2">Vehicle tracking</span>
             <span className="rounded-md border border-white/15 bg-slate-950/40 px-3 py-2">Activity reports</span>
@@ -248,14 +249,14 @@ export function Login() {
         </div>
 
         {/* Bottom Security / Copyright */}
-        <div className="relative z-10 flex items-center justify-between text-xs text-slate-400 border-t border-slate-800/60 pt-4">
+        <div className="relative z-10 flex items-center justify-between text-xs text-[#acb9bb] border-t border-white/20 pt-5">
           <span>Role-based workspace access</span>
           <span>VisionGuard</span>
         </div>
       </div>
 
       {/* Right Panel - Auth Form */}
-      <div className="w-full lg:w-[48%] xl:w-[46%] flex flex-col items-center justify-center p-6 sm:p-12 bg-white relative h-screen overflow-y-auto">
+      <div className="vg-auth-form w-full lg:w-[52%] xl:w-[48%] flex flex-col items-center justify-center p-6 sm:p-12 bg-[#f5f6f4] relative min-h-screen lg:h-screen overflow-y-auto">
         
         {/* Mobile Logo Header */}
         <div className="absolute top-8 left-8 lg:hidden flex items-center space-x-2">
@@ -265,11 +266,11 @@ export function Login() {
           </Link>
         </div>
 
-        <div className="w-full max-w-[420px] m-auto flex flex-col justify-center">
+        <div className="vg-auth-form-inner w-full max-w-[440px] m-auto flex flex-col justify-center">
           
           {/* Header / Tabs - Underline Style */}
           <div className="mb-8">
-            <div className="flex space-x-8 border-b border-gray-100 mb-6 relative">
+            <div className="vg-auth-tabs flex space-x-9 border-b mb-7 relative">
               <button
                 onClick={() => switchMode('login')}
                 className={cn(
@@ -281,7 +282,7 @@ export function Login() {
                 {mode === 'login' && (
                   <motion.div
                     layoutId="auth-tab-underline"
-                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-gray-900"
+                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#283239]"
                     initial={false}
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                   />
@@ -299,7 +300,7 @@ export function Login() {
                 {mode === 'register' && (
                   <motion.div
                     layoutId="auth-tab-underline"
-                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-gray-900"
+                    className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#283239]"
                     initial={false}
                     transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
                   />
@@ -315,10 +316,10 @@ export function Login() {
                 exit={{ opacity: 0, y: -5 }}
                 transition={{ duration: 0.2 }}
               >
-                <h2 className="text-[22px] font-bold text-gray-900 mb-1 tracking-tight">
+                <h2 className="text-[28px] font-semibold text-[#242d32] mb-2 tracking-[-.045em]">
                   {mode === 'login' ? 'Sign in to VisionGuard' : 'Create your account'}
                 </h2>
-                <p className="text-gray-500 text-[14px]">
+                <p className="text-[#6a767b] text-[14px] leading-[1.7]">
                   {mode === 'login' 
                     ? 'Access your workspace, analysis history, and reports.' 
                     : 'Join your workspace with standard user access.'}
@@ -438,7 +439,7 @@ export function Login() {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-3 px-4 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-all cursor-pointer hover:shadow-md hover:-translate-y-px flex justify-center items-center h-[46px]"
+                    className="vg-auth-submit w-full flex justify-center items-center h-[49px] rounded-lg text-white font-semibold disabled:cursor-not-allowed"
                   >
                     {isLoading ? (
                       <div className="flex items-center justify-center space-x-2">
@@ -573,7 +574,7 @@ export function Login() {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="w-full py-3 px-4 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-all cursor-pointer hover:shadow-md hover:-translate-y-px mt-2 flex justify-center items-center h-[46px]"
+                    className="vg-auth-submit mt-2 w-full flex justify-center items-center h-[49px] rounded-lg text-white font-semibold disabled:cursor-not-allowed"
                   >
                     {isLoading ? (
                       <div className="flex items-center justify-center space-x-2">
