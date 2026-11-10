@@ -36,6 +36,16 @@ describe('VisionGuard public landing page', () => {
     expect(html).toContain('human judgement');
   });
 
+  it('uses the original logo and reserves directional arrows for navigation', () => {
+    const html = renderLanding();
+    expect((html.match(/src="\\/brand-mark\\.svg"/g) ?? []).length).toBe(2);
+    expect(html).not.toContain('vgx-info-arrow');
+    expect(html).not.toContain('vgx-capability-arrow');
+    const tabs = html.match(/<button[^>]*class="vgx-gallery-tab[^"]*"[^>]*>[\\s\\S]*?<\\/button>/g) ?? [];
+    expect(tabs).toHaveLength(3);
+    expect(tabs.every(tab => !tab.includes('lucide-arrow'))).toBe(true);
+  });
+
   it('uses compact footer branding without the old oversized wordmark', () => {
     const html = renderLanding();
     expect(html).toContain('vgx-footer');
