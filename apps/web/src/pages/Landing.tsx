@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity, ArrowRight, ArrowUpRight, BarChart3, Check, CheckCircle2,
-  ChevronRight, CloudUpload, Database, FileText, Film, Layers3,
+  ChevronRight, Database, FileText, Film, Layers3,
   LockKeyhole, Menu, ScanLine, Shield, ShieldCheck, Sparkles, X
 } from 'lucide-react';
 import './Landing.css';
