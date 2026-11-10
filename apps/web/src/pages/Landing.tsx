@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BarChart3, Check,
-  ChevronRight, CirclePlay, Database, FileText, Film, Layers3, LockKeyhole,
+  ChevronRight, CirclePlay, FileText, Film, Layers3, LockKeyhole,
   Menu, MoveUpRight, Pause, Play, Radar, ScanLine, Shield, ShieldCheck,
   Sparkles, Video, X,
 } from 'lucide-react';
