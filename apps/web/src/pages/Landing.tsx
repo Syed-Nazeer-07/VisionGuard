@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Activity, ArrowDownRight, ArrowRight, ArrowUpRight, BarChart3,
-  Check, CheckCircle2, ChevronRight, CircleDot, FileText, Film,
-  Fingerprint, Layers3, LockKeyhole, Menu, ScanLine, Shield,
+  Activity, ArrowRight, ArrowUpRight, BarChart3,
+  CheckCircle2, ChevronRight, CircleDot, FileText, Film,
+  Fingerprint, Layers3, LockKeyhole, Menu, ScanLine,
   ShieldCheck, Sparkles, X,
 } from 'lucide-react';
 import './Landing.css';
@@ -80,7 +80,7 @@ const process = [
 function Brand() {
   return (
     <Link to="/" className="vgx-brand" aria-label="VisionGuard homepage">
-      <span className="vgx-brand-icon" aria-hidden="true"><Shield size={21} strokeWidth={2.1} /><span /></span>
+      <img className="vgx-brand-symbol" src="/brand-mark.svg" alt="" width="38" height="38" />
       <span>Vision<strong>Guard</strong><i>.</i></span>
     </Link>
   );
@@ -143,7 +143,7 @@ export function Landing() {
                 <h1>See beyond<br />the <span>ordinary.</span></h1>
               </div>
               <div className="vgx-hero-aside">
-                <span className="vgx-hero-glyph" aria-hidden="true"><ArrowDownRight size={31} strokeWidth={1.5} /></span>
+                <span className="vgx-hero-glyph" aria-hidden="true"><ScanLine size={28} strokeWidth={1.5} /></span>
                 <p>More than boxes on a screen. VisionGuard connects traffic footage, visual tracking, and insights in a workspace made for understanding the road.</p>
                 <div className="vgx-hero-actions">
                   <Link to="/register" className="vgx-btn vgx-btn-primary vgx-btn-large">Open VisionGuard <ArrowUpRight size={19} /></Link>
@@ -170,12 +170,11 @@ export function Landing() {
               <div className="vgx-hero-side">
                 <div className="vgx-hero-small-photo">
                   <img src="/traffic_flow_analysis.jpg" alt="Illustrative traffic-flow photography" loading="lazy" />
-                  <span>TRAFFIC / FLOW <ArrowUpRight size={16} /></span>
+                  <span>TRAFFIC / FLOW</span>
                 </div>
                 <div className="vgx-hero-info-card">
                   <div className="vgx-info-icon"><Activity size={24} strokeWidth={1.5} /></div>
                   <div><span>DETECTION. TRACKING. INSIGHT.</span><strong>A different way<br />to see movement.</strong></div>
-                  <ArrowUpRight className="vgx-info-arrow" size={23} />
                 </div>
               </div>
             </div>
@@ -212,7 +211,6 @@ export function Landing() {
                 </div>
                 <div className="vgx-gallery-details">
                   <div><span>0{gallery.findIndex(item => item.id === galleryView) + 1} / PERSPECTIVE</span><h3>{activeView.headline}</h3><p>{activeView.detail}</p></div>
-                  <ArrowUpRight size={25} />
                 </div>
               </div>
               <div className="vgx-gallery-aside">
@@ -225,7 +223,7 @@ export function Landing() {
                       aria-pressed={galleryView === item.id}
                       onClick={() => setGalleryView(item.id)}
                     >
-                      <span>{item.number}</span><strong>{item.label}</strong><ArrowUpRight size={17} />
+                      <span>{item.number}</span><strong>{item.label}</strong>
                     </button>
                   ))}
                 </div>
@@ -255,7 +253,6 @@ export function Landing() {
                   <span className="vgx-capability-count">{n}</span>
                   <div className="vgx-capability-title"><span className="vgx-capability-icon"><Icon size={24} strokeWidth={1.7} /></span><div><span>{label}</span><h3>{title}</h3></div></div>
                   <p>{description}</p>
-                  <span className="vgx-capability-arrow"><ArrowUpRight size={21} /></span>
                 </article>
               ))}
             </div>
