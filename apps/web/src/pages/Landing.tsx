@@ -80,7 +80,7 @@ const process = [
 function Brand() {
   return (
     <Link to="/" className="vgx-brand" aria-label="VisionGuard homepage">
-      <img className="vgx-brand-symbol" src="/brand-mark.svg" alt="" width="38" height="38" />
+      <img className="vgx-brand-symbol" src="/brand-mark.svg?v=20261110b" alt="" width="38" height="38" />
       <span>Vision<strong>Guard</strong><i>.</i></span>
     </Link>
   );

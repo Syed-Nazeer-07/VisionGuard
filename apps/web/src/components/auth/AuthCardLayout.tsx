@@ -9,7 +9,7 @@ export function AuthCardLayout({
   return <main className="flex min-h-screen items-center justify-center bg-[#f5f7fa] px-4 py-12 text-slate-900">
     <div className="w-full max-w-[430px]">
       <Link to="/" className="mb-8 inline-flex items-center gap-2.5 text-[16px] font-bold tracking-tight text-[#1b2c43]">
-        <img src="/brand-mark.svg" alt="" width={36} height={36} className="h-9 w-9 rounded-[10px]" />
+        <img src="/brand-mark.svg?v=20261110b" alt="" width={36} height={36} className="h-9 w-9 rounded-[10px]" />
         VisionGuard
       </Link>
       <section className="vg-panel p-6 shadow-sm sm:p-8">

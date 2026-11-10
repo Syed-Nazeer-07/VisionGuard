@@ -217,7 +217,7 @@ export function Login() {
         {/* Top Brand Logo & Status Indicator */}
         <div className="relative z-10 flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-2.5 group">
-            <img src="/brand-mark.svg" alt="" width={36} height={36} className="w-9 h-9 rounded-lg" />
+            <img src="/brand-mark.svg?v=20261110b" alt="" width={36} height={36} className="w-9 h-9 rounded-lg" />
             <span className="text-xl font-bold text-white tracking-tight">VisionGuard</span>
           </Link>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/60 text-xs font-mono text-emerald-400">
@@ -260,7 +260,7 @@ export function Login() {
         {/* Mobile Logo Header */}
         <div className="absolute top-8 left-8 lg:hidden flex items-center space-x-2">
           <Link to="/" className="flex items-center space-x-2">
-            <img src="/brand-mark.svg" alt="" width={32} height={32} className="h-8 w-8 rounded-lg" />
+            <img src="/brand-mark.svg?v=20261110b" alt="" width={32} height={32} className="h-8 w-8 rounded-lg" />
             <span className="text-xl font-bold text-gray-900 tracking-tight">VisionGuard</span>
           </Link>
         </div>

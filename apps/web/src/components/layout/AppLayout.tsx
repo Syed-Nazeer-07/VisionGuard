@@ -97,7 +97,7 @@ export function AppLayout() {
       <div className="flex h-[66px] shrink-0 items-center justify-between border-b border-[#e9edf2] px-4">
         <Link to="/app" onClick={() => setMobileOpen(false)}
           className={'flex min-w-0 items-center gap-2.5 ' + (collapsed ? 'mx-auto' : '')}>
-          <img src="/brand-mark.svg" alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-[10px]" />
+          <img src="/brand-mark.svg?v=20261110b" alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-[10px]" />
           {!collapsed && <span className="truncate text-[16px] font-bold tracking-[-.035em] text-[#29241f]">Vision<span className="font-medium">Guard</span><span className="text-[#C65A38]">.</span></span>}
         </Link>
         <button type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
