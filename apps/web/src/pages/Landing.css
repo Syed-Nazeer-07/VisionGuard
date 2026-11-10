@@ -32,8 +32,7 @@
 .vgx-brand { display: inline-flex; gap: 10px; align-items: center; color: #292420; font-size: 20px; font-weight: 760; letter-spacing: -.065em; white-space: nowrap; }
 .vgx-brand strong { font-weight: 520; }
 .vgx-brand i { font-style: normal; color: #c47451; }
-.vgx-brand-icon { position: relative; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: #a7432c; color: white; box-shadow: 0 5px 14px rgba(190, 84, 47, .13); }
-.vgx-brand-icon > span { position: absolute; width: 5px; height: 5px; right: 6px; top: 6px; background: #f3bc7e; border-radius: 50%; }
+.vgx-brand-symbol { display: block; height: 38px; width: 38px; flex-shrink: 0; border-radius: 11px; box-shadow: 0 5px 14px rgba(56,35,24,.10); }
 .vgx-nav-links { display: flex; gap: 29px; align-items: center; }
 .vgx-nav-links a, .vgx-signin { color: #6b564d; font-size: 12px; font-weight: 600; transition: color .2s; }
 .vgx-nav-links a:hover, .vgx-signin:hover { color: #be542f; }
