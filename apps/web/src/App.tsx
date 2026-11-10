@@ -57,10 +57,16 @@ function AppHome() {
 }
 
 function App() {
+  const hasAuthenticatedSession = useAuthStore(state => Boolean(state.session))
+
   useEffect(() => {
     document.title = 'VisionGuard'
-    evidenceQueue.startRetentionWorker()
   }, [])
+
+  // Public visitors do not need the evidence DB query or retention timer.
+  useEffect(() => {
+    if (hasAuthenticatedSession) evidenceQueue.startRetentionWorker()
+  }, [hasAuthenticatedSession])
 
   return (
     <AuthProvider>
