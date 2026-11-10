@@ -34,6 +34,31 @@ describe('optical tracking between slow YOLO observations', () => {
     expect(result[0].motionPxPerSec).toBeGreaterThan(0);
     expect(result[0].id).toBe(10);
   });
+  it('keeps a low-texture vehicle by matching its edges instead of blinking', () => {
+    const edgeFrame = (time: number, shift: number): GrayFrame => {
+      const width = 100, height = 80;
+      const pixels = new Uint8Array(width * height);
+      for (let y = 28; y <= 52; y++) {
+        for (let x = 28; x <= 52; x++) {
+          // Only a thin, identifiable vehicle perimeter contains detail;
+          // the central roof is featureless (common in traffic footage).
+          if (x > 30 && x < 50 && y > 30 && y < 50) continue;
+          const sampleX = x + shift;
+          if (sampleX >= 0 && sampleX < width) {
+            pixels[y * width + sampleX] = 50 + (x * 13 + y * 31) % 170;
+          }
+        }
+      }
+      return { time, width, height, sourceWidth: width, sourceHeight: height, pixels };
+    };
+    const previous = edgeFrame(2, 0);
+    const current = edgeFrame(2.10, 3);
+    const tracked = advanceOpticalTracks([vehicle], previous, current);
+    expect(tracked).toHaveLength(1);
+    expect(tracked[0].x).toBeCloseTo(43, 0);
+    expect(tracked[0].lastOpticalAt).toBe(2.10);
+  });
+
   it('removes a vehicle when its appearance disappears', () => {
     const empty = makeFrame(2.1, 100);
     const result = advanceOpticalTracks([vehicle], makeFrame(2, 0), empty);
