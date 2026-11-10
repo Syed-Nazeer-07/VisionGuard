@@ -1,30 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" fill="none">
-  <!-- Dark navy background matching the VisionGuard branding -->
-  <rect width="32" height="32" rx="7" fill="#0F172A" />
-
-  <!-- VisionGuard white shield outline -->
-  <path
-    d="M16 26 C16 26 24 22 24 16 V9 L16 6 L8 9 V16 C8 22 16 26 16 26 Z"
-    stroke="#FFFFFF"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    fill="none"
-  />
-
-  <!-- Minimal indigo traffic road lines -->
-  <path
-    d="M12.5 22.5 L14.7 12.5 M19.5 22.5 L17.3 12.5"
-    stroke="#818CF8"
-    stroke-width="1.75"
-    stroke-linecap="round"
-  />
-
-  <!-- Road center dashes -->
-  <path
-    d="M16 13.5 V15.5 M16 18.5 V21"
-    stroke="#FFFFFF"
-    stroke-width="1.25"
-    stroke-linecap="round"
-  />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="VisionGuard logo">
+  <rect width="64" height="64" rx="16" fill="#26221F"/>
+  <path d="M16 20 L27.5 46 C29.5 50.5 34.5 50.5 36.5 46 L48 20" fill="none" stroke="#FFF6EB" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 24 V28 M32 35 V40" fill="none" stroke="#F29269" stroke-width="3.3" stroke-linecap="round"/>
+  <circle cx="32" cy="16.5" r="3.9" fill="#F29269"/>
 </svg>
