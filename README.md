@@ -5,7 +5,7 @@
   <p>
     <a href="https://visionguard.syednazeerofficial2007.workers.dev/"><img src="https://img.shields.io/badge/Live%20App-Open%20VisionGuard-2563EB?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Open the live VisionGuard application" /></a>
   </p>
-  <p><a href="https://visionguard.syednazeerofficial2007.workers.dev/"><strong>🌐 Try VisionGuard live</strong></a></p>
+
   <p>
     <a href="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml"><img src="https://github.com/Syed-Nazeer-07/VisionGuard/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
     <img src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" alt="React 19" />
