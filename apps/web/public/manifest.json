@@ -4,21 +4,21 @@
   "description": "AI-Powered Traffic Violation Detection & Video Analytics Platform",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0F172A",
-  "theme_color": "#0F172A",
+  "background_color": "#FFFAF5",
+  "theme_color": "#26221F",
   "icons": [
     {
-      "src": "/favicon.svg",
+      "src": "/favicon.svg?v=20261110",
       "sizes": "any",
       "type": "image/svg+xml"
     },
     {
-      "src": "/favicon-32x32.png",
+      "src": "/favicon-32x32.png?v=20261110",
       "sizes": "32x32",
       "type": "image/png"
     },
     {
-      "src": "/apple-touch-icon.png",
+      "src": "/apple-touch-icon.png?v=20261110",
       "sizes": "180x180",
       "type": "image/png"
     }
