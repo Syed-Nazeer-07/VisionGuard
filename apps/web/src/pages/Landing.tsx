@@ -4,7 +4,7 @@ import {
   Activity, ArrowRight, ArrowUpRight, BarChart3, Check, ChevronRight,
   CircleDot, CloudUpload, Cpu, Database, FileText, Film, Fingerprint,
   Layers3, LockKeyhole, Menu, ScanLine, Shield, ShieldCheck, Sparkles,
-  Video, X, Zap
+  X, Zap
 } from 'lucide-react';
 import './Landing.css';
 
