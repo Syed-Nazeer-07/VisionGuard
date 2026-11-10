@@ -92,7 +92,6 @@
 .vgx-hero-info-card > div:nth-child(2) { position: relative; z-index: 1; }
 .vgx-hero-info-card > div:nth-child(2) > span { display: block; margin-bottom: 10px; color: #86736a; font: 750 9px ui-monospace, monospace; letter-spacing: .05em; }
 .vgx-hero-info-card strong { display: block; color: #8d3d2a; font-size: clamp(22px,2.1vw,29px); font-weight: 700; letter-spacing: -.055em; line-height: 1.17; }
-.vgx-info-arrow { position: absolute; top: 25px; right: 25px; color: #c47451; }
 .vgx-hero-photo-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 15px; color: #988378; font: 620 9px ui-monospace, monospace; letter-spacing: .045em; }
 
 /* Large editorial statement */
@@ -125,7 +124,6 @@
 .vgx-gallery-details > div > span { color: #86736a; font: 720 9px ui-monospace, monospace; letter-spacing: .08em; }
 .vgx-gallery-details h3 { margin-top: 8px; font-size: 24px; font-weight: 700; color: #292420; letter-spacing: -.05em; }
 .vgx-gallery-details p { margin-top: 5px; font-size: 12px; color: #86736a; }
-.vgx-gallery-details > svg { color: #be542f; }
 .vgx-gallery-aside { display: grid; grid-template-rows: auto minmax(0,1fr); gap: 17px; min-width: 0; }
 .vgx-gallery-options { overflow: hidden; padding: 7px 14px; background: #fff; border: 1px solid #e7dbcf; border-radius: 17px; }
 .vgx-gallery-tab { display: grid; align-items: center; grid-template-columns: 36px 1fr; width: 100%; min-height: 63px; gap: 12px; padding: 9px 12px; background: transparent; border: 0; border-bottom: 1px solid #faf2e9; text-align: left; color: #86736a; cursor: pointer; transition: background .2s,color .2s; }
@@ -157,7 +155,6 @@
 .vgx-capability-title > div > span { color: #988378; font: 760 9px ui-monospace, monospace; letter-spacing: .11em; }
 .vgx-capability h3 { color: #292420; margin-top: 8px; font-size: clamp(23px,2.55vw,35px); line-height: 1.2; font-weight: 710; letter-spacing: -.058em; }
 .vgx-capability > p { max-width: 380px; font-size: 12px; line-height: 1.9; color: #86736a; }
-.vgx-capability-arrow { color: #988378; }
 
 /* Blue feature panel with real photograph */
 .vgx-visual-story { padding-block: 45px; background: #292421; color: #fff; }
@@ -322,7 +319,6 @@
   .vgx-gallery-aside { grid-template-columns: 1fr; }
   .vgx-gallery-options { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
   .vgx-gallery-tab { grid-template-columns: 1fr; min-height: 65px; padding: 8px; }
-  .vgx-gallery-tab > svg { display: none; }
   .vgx-gallery-tab strong { font-size: 12px; }
   .vgx-gallery-secondary { height: 220px; min-height: 0; }
   .vgx-capability { grid-template-columns: 25px 1fr; gap: 9px; }
