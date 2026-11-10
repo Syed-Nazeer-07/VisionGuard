@@ -306,9 +306,11 @@ export function Landing() {
               </div>
             </div>
             <div className="vgn-cta-image" aria-hidden="true">
-              <div className="vgn-cta-ring vgn-cta-ring-a" /><div className="vgn-cta-ring vgn-cta-ring-b" />
-              <div className="vgn-cta-mark"><ScanLine size={91} strokeWidth={1.12} /></div>
-              <div className="vgn-cta-tag">FRAME BY FRAME. BIGGER PICTURE.</div>
+              <img src="/traffic_operations_center.jpg" alt="" loading="lazy" />
+              <div className="vgn-cta-image-label">
+                <span>VISIONGUARD / ROAD INTELLIGENCE</span>
+                <strong>Every frame, in context.</strong>
+              </div>
             </div>
           </div>
         </section>
