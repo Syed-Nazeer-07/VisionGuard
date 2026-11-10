@@ -8,7 +8,7 @@ import { checkGoogleProvider } from '../../services/googleAuthAvailability';
 import { useAuthStore } from '../../store/auth';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Eye, EyeOff, Mail, Lock, User, Building, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, Building, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -217,9 +217,7 @@ export function Login() {
         {/* Top Brand Logo & Status Indicator */}
         <div className="relative z-10 flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-2.5 group">
-            <div className="w-9 h-9 rounded-lg bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-white" />
-            </div>
+            <img src="/brand-mark.svg" alt="" width={36} height={36} className="w-9 h-9 rounded-lg" />
             <span className="text-xl font-bold text-white tracking-tight">VisionGuard</span>
           </Link>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/80 backdrop-blur-md border border-slate-700/60 text-xs font-mono text-emerald-400">
@@ -262,7 +260,7 @@ export function Login() {
         {/* Mobile Logo Header */}
         <div className="absolute top-8 left-8 lg:hidden flex items-center space-x-2">
           <Link to="/" className="flex items-center space-x-2">
-            <Shield className="w-7 h-7 text-gray-900" />
+            <img src="/brand-mark.svg" alt="" width={32} height={32} className="h-8 w-8 rounded-lg" />
             <span className="text-xl font-bold text-gray-900 tracking-tight">VisionGuard</span>
           </Link>
         </div>
