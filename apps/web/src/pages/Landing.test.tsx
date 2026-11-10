@@ -38,12 +38,12 @@ describe('VisionGuard public landing page', () => {
 
   it('uses the original logo and reserves directional arrows for navigation', () => {
     const html = renderLanding();
-    expect((html.match(/src="\\/brand-mark\\.svg"/g) ?? []).length).toBe(2);
+    expect(html.split('src="/brand-mark.svg"').length - 1).toBe(2);
     expect(html).not.toContain('vgx-info-arrow');
     expect(html).not.toContain('vgx-capability-arrow');
-    const tabs = html.match(/<button[^>]*class="vgx-gallery-tab[^"]*"[^>]*>[\\s\\S]*?<\\/button>/g) ?? [];
+    const tabs = html.split('class="vgx-gallery-tab').slice(1);
     expect(tabs).toHaveLength(3);
-    expect(tabs.every(tab => !tab.includes('lucide-arrow'))).toBe(true);
+    expect(tabs.every(tab => !tab.split('</button>')[0].includes('lucide-arrow'))).toBe(true);
   });
 
   it('uses compact footer branding without the old oversized wordmark', () => {
