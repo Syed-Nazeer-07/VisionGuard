@@ -50,8 +50,10 @@ def check_click_target(driver, selector: str, destination: str, *, scrolled=Fals
     if scrolled:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight * .55)")
         time.sleep(.1)
-    width = driver.get_window_size()["width"]
-    if width <= 1020:
+    width = driver.execute_script("return innerWidth")
+    # Only header route links collapse into the responsive menu. Closing CTA
+    # links remain in their own section and must be independently hit-tested.
+    if width <= 1020 and (not selector or ".vgn-nav-actions" in selector):
         menu = driver.find_element(By.CSS_SELECTOR, ".vgn-menu-button")
         menu.click()
         selector = ".vgn-mobile-navigation a[href='%s']" % destination
@@ -101,7 +103,7 @@ def check_click_target(driver, selector: str, destination: str, *, scrolled=Fals
 
 def check_anchor_scroll(driver):
     navigate_home(driver)
-    width = driver.get_window_size()["width"]
+    width = driver.execute_script("return innerWidth")
     if width <= 1020:
         driver.find_element(By.CSS_SELECTOR, ".vgn-menu-button").click()
         anchor = driver.find_element(By.CSS_SELECTOR, '.vgn-mobile-navigation a[href="#platform"]')
@@ -148,7 +150,7 @@ def main():
         for width, height in BREAKPOINTS:
             driver.set_window_size(width, height)
             print(f"Checking native navigation at {width}x{height}", flush=True)
-            if width <= 1020:
+            if driver.execute_script("return innerWidth") <= 1020:
                 check_click_target(driver, "", "/login")
                 check_click_target(driver, "", "/register")
             else:
