@@ -38,6 +38,14 @@ jobs:
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
       - run: npm run test -w web
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+      # DOM unit tests can't detect an element visually covering a link.
+      # Chrome checks actual pointer hits, responsive menu, and native
+      # /login + /register navigation at multiple viewport widths.
+      - name: Browser-level landing click-target smoke test
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: |
+          python3 -m pip install --disable-pip-version-check 'selenium==4.29.0'
+          python3 scripts/smoke_landing_hit_targets.py
 
       - name: Test Cloudflare Pages release guard
         run: npm run test:deploy
