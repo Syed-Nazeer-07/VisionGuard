@@ -414,3 +414,69 @@
   .vgn-cta-image-label { left:14px; bottom:16px; font-size:9px; }
   .vgn-cta-image-label strong { font-size:10px; }
 }
+
+
+/* Navigation hit-target hardening.
+   Decorative presentation layers must never intercept primary route links. */
+.vgn a[href] {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.vgn-header { isolation: isolate; }
+.vgn-nav, .vgn-nav-links, .vgn-nav-actions,
+.vgn-hero-actions, .vgn-cta-actions, .vgn-footer-top > div:last-child {
+  position: relative;
+  z-index: 2;
+}
+.vgn-nav-actions { flex-shrink: 0; }
+.vgn-nav-actions a, .vgn-hero-actions a, .vgn-cta-actions a,
+.vgn-mobile-navigation a, .vgn-footer-top a {
+  position: relative;
+  z-index: 3;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.vgn-nav-actions a, .vgn-footer-top > div:last-child a {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+}
+.vgn-cta-grid > div:first-child {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+}
+.vgn-cta-image, .vgn-cta-image * { pointer-events: none; }
+.vgn-stage-corner, .vgn-stage-image-label, .vgn-stage-image-no { pointer-events: none; }
+/* Swap to the functional mobile menu before the desktop links crowd each other. */
+@media (min-width: 721px) and (max-width: 1020px) {
+  .vgn-nav-links, .vgn-nav-actions { display: none; }
+  .vgn-menu-button { display: grid; }
+  .vgn-mobile-navigation {
+    display: flex;
+    flex-direction: column;
+    padding: 10px 30px 19px;
+    border-top: 1px solid #363e41;
+    background: #1b2327;
+  }
+  .vgn-mobile-navigation a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 49px;
+    padding-inline: 5px;
+    border-bottom: 1px solid #353d41;
+    color: #e5e9e9;
+    font-size: 13px;
+    font-weight: 650;
+  }
+  .vgn-mobile-navigation .vgn-mobile-primary {
+    margin-top: 12px;
+    min-height: 47px;
+    padding-inline: 13px;
+    border: 0;
+    border-radius: 7px;
+    background: #e7eceb;
+    color: #1d292e;
+  }
+}
