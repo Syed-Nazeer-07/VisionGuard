@@ -27,6 +27,7 @@ function describeError(e: unknown): string {
 class EvidenceQueueSystem {
   private queue: EvidenceJob[] = [];
   private isProcessing = false;
+  private retentionWorkerStarted = false;
   private errorListeners = new Set<(errorMsg: string) => void>();
   
   // Metrics
@@ -58,9 +59,13 @@ class EvidenceQueueSystem {
   }
 
   public startRetentionWorker() {
-    // Run once initially, then every 24 hours (86400000ms)
-    this.executeRetentionPolicy();
-    setInterval(() => this.executeRetentionPolicy(), 86400000);
+    // Auth state may be refreshed or changed multiple times in one tab.
+    // Never launch duplicate retention timers (or simultaneous first runs).
+    if (this.retentionWorkerStarted) return;
+    this.retentionWorkerStarted = true;
+    // Run once after a verified session is available, then every 24 hours.
+    void this.executeRetentionPolicy();
+    setInterval(() => { void this.executeRetentionPolicy(); }, 86400000);
   }
 
   private async executeRetentionPolicy() {
