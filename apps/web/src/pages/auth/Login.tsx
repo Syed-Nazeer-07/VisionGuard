@@ -461,7 +461,7 @@ export function Login() {
                   onSubmit={handleSignupSubmit(onSignup)}
                   className="space-y-3.5"
                 >
-                  <div className="grid grid-cols-2 gap-3.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
                       <label className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Full Name</label>
                       <div className="relative group">
