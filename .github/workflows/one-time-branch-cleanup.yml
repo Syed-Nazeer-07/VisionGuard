@@ -1,0 +1,71 @@
+name: One-time cleanup of merged historical branches
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/one-time-branch-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  prune:
+    if: github.repository == 'Syed-Nazeer-07/VisionGuard'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove only inactive refs whose commits are already on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deleted=0
+          skipped=0
+
+          # Guard against ever deleting refs with an open pull request.
+          mapfile -t open_heads < <(gh api --paginate "repos/${REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].head.ref')
+
+          # Branches from old drafts are NOT deleted if their commits
+          # have not landed in main. This intentionally avoids data loss.
+          mapfile -t candidates < <(gh api --paginate "repos/${REPOSITORY}/branches?per_page=100" --jq '.[] | select(.protected == false) | .name')
+          for branch in "${candidates[@]}"; do
+            case "$branch" in
+              backup/*|master|chore/standalone-model-export-workflow|feat/yolo11-accuracy-export-options|fix/phase2-analysis-metrics-persistence) ;;
+              *) continue ;;
+            esac
+            if [[ "$branch" == "main" || "$branch" == "" ]]; then
+              continue
+            fi
+            active=false
+            for pr_head in "${open_heads[@]}"; do
+              if [[ "$pr_head" == "$branch" ]]; then active=true; break; fi
+            done
+            if [[ "$active" == true ]]; then
+              echo "KEEP OPEN-PR: $branch"
+              skipped=$((skipped + 1))
+              continue
+            fi
+
+            # A ref is safe to delete only when its commit is an ancestor
+            # of main, i.e. comparing main...ref reports zero ahead commits.
+            encoded=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$branch")
+            ahead=$(gh api "repos/${REPOSITORY}/compare/main...${encoded}" --jq '.ahead_by')
+            if [[ "$ahead" != "0" ]]; then
+              echo "KEEP UNMERGED ($ahead commits): $branch"
+              skipped=$((skipped + 1))
+              continue
+            fi
+            if gh api --method DELETE "repos/${REPOSITORY}/git/refs/heads/${encoded}"; then
+              echo "DELETED: $branch"
+              deleted=$((deleted + 1))
+            else
+              echo "KEEP PERMISSION DENIED: $branch"
+              skipped=$((skipped + 1))
+            fi
+          done
+
+          echo "Deleted $deleted historical refs; kept $skipped because they could not be safely deleted."
+          echo "### One-time GitHub branch cleanup" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deleted **$deleted** merged/obsolete refs; retained **$skipped** blocked/unmerged refs." >> "$GITHUB_STEP_SUMMARY"
