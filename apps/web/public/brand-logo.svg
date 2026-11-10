@@ -1,9 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 314 64" role="img" aria-label="VisionGuard">
-  <rect width="64" height="64" rx="16" fill="#26221F"/>
-  <path d="M16 20 L27.5 46 C29.5 50.5 34.5 50.5 36.5 46 L48 20" fill="none" stroke="#FFF6EB" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M32 24 V28 M32 35 V40" fill="none" stroke="#F29269" stroke-width="3.3" stroke-linecap="round"/>
-  <circle cx="32" cy="16.5" r="3.9" fill="#F29269"/>
-  <text x="78" y="42" fill="#29241F" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="35" font-weight="760" letter-spacing="-1.8">Vision</text>
-  <text x="190" y="42" fill="#29241F" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="35" font-weight="470" letter-spacing="-1.8">Guard</text>
-  <circle cx="298" cy="39" r="4.2" fill="#C65A38"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 334 64" role="img" aria-label="VisionGuard">
+  <rect width="64" height="64" rx="15" fill="#292725"/>
+  <path d="M13 23V15Q13 13 15 13H23 M41 13H49Q51 13 51 15V23 M13 41V49Q13 51 15 51H23 M41 51H49Q51 51 51 49V41" fill="none" stroke="#F49B65" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M23.5 34L26.2 27Q27 25 30 25H34Q37 25 37.8 27L40.5 34" fill="none" stroke="#FAF6EF" stroke-width="3.1" stroke-linejoin="round"/>
+  <rect x="20" y="32" width="24" height="14" rx="4" fill="#FAF6EF"/>
+  <path d="M24 34H40L38 38H26Z" fill="#292725"/>
+  <rect x="24" y="40" width="5" height="2.5" rx="1.25" fill="#F49B65"/>
+  <rect x="35" y="40" width="5" height="2.5" rx="1.25" fill="#F49B65"/>
+  <path d="M25 46V48 M39 46V48" stroke="#FAF6EF" stroke-width="3.1" stroke-linecap="round"/>
+  <text x="80" y="42" fill="#292725" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-weight="750" font-size="35" letter-spacing="-1.7">Vision</text>
+  <text x="192" y="42" fill="#292725" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-weight="500" font-size="35" letter-spacing="-1.7">Guard</text>
+  <circle cx="315" cy="40" r="4" fill="#D16B40"/>
 </svg>
