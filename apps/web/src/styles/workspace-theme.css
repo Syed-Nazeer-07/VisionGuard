@@ -1,0 +1,649 @@
+/*
+ * VisionGuard Workspace / Atelier theme.
+ * Single, scoped visual layer above workspace.css. The tracking engine,
+ * player geometry, responsive navigation and semantic status colors stay intact.
+ *
+ * Tokens: porcelain canvas, white surfaces, graphite chrome, ember action.
+ * This file intentionally contains no decorative gradient, blur or overlay.
+ */
+.vg-shell {
+  --vg-canvas: #f7f6f3;
+  --vg-surface: #ffffff;
+  --vg-ink: #1b2025;
+  --vg-muted: #646a70;
+  --vg-line: #e5e4df;
+  --vg-accent: #cf5635;
+  --vg-accent-hover: #b9472a;
+  --vg-accent-soft: #fff0e9;
+  --vg-sidebar: #191b20;
+  --vg-sidebar-muted: #adb0b7;
+  font-family: "Segoe UI Variable Text", Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  font-synthesis: none;
+  color: var(--vg-ink);
+  background: var(--vg-canvas);
+}
+.vg-shell .vg-main-scroll {
+  background: var(--vg-canvas);
+  color: var(--vg-ink);
+}
+.vg-shell .vg-page {
+  max-width: 1510px;
+  padding: clamp(20px, 2.4vw, 38px);
+  padding-bottom: 48px;
+}
+.vg-shell a,
+.vg-shell button,
+.vg-shell select,
+.vg-shell input {
+  -webkit-tap-highlight-color: transparent;
+}
+.vg-shell :is(a[href], button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--vg-accent);
+  outline-offset: 3px;
+}
+.vg-shell .vg-workspace-skip {
+  color: #161b1f;
+  background: #fff5ef;
+}
+
+/* Graphite navigation: quiet until the selected section is active. */
+.vg-shell .vg-side-bar {
+  background: var(--vg-sidebar);
+  border-color: #303138;
+  color: #f7f6f3;
+  box-shadow: none;
+}
+.vg-shell .vg-side-head {
+  height: 78px;
+  border-color: #303138;
+}
+.vg-shell .vg-side-logo {
+  color: #f8f7f5;
+  font-weight: 750;
+}
+.vg-shell .vg-brand-dot { color: #f07a52; }
+.vg-shell .vg-side-group-label,
+.vg-shell .vg-side-launch-caption {
+  color: #83868f;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .12em;
+}
+.vg-shell .vg-side-nav-item {
+  height: 44px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #b7b9bf;
+  font-size: 13px;
+  font-weight: 555;
+  letter-spacing: -.005em;
+}
+.vg-shell .vg-side-nav-item > svg { opacity: .92; }
+.vg-shell .vg-side-nav-item:hover,
+.vg-shell .vg-side-settings:hover {
+  color: #fff;
+  background: #282a30;
+  border-color: #35363d;
+}
+.vg-shell .vg-side-nav-item[aria-current="page"] {
+  color: #fff;
+  background: #333137;
+  border-color: #464047;
+  font-weight: 700;
+}
+.vg-shell .vg-side-nav-item[aria-current="page"] > svg {
+  color: #ff9c75;
+  opacity: 1;
+}
+.vg-shell .vg-side-nav-item[aria-current="page"]::before {
+  width: 3px;
+  height: 23px;
+  left: -4px;
+  background: #f17b54;
+}
+.vg-shell .vg-side-icon-button { color: #b7b7bc; }
+.vg-shell .vg-side-icon-button:hover {
+  color: #fff;
+  background: #2e3036;
+  border-color: #4a4b52;
+}
+.vg-shell .vg-side-launch-link {
+  min-height: 44px;
+  border: 1px solid #ed815d;
+  border-radius: 10px;
+  background: #ea7650;
+  color: #211c1a;
+  font-size: 13px;
+  font-weight: 770;
+  box-shadow: none;
+}
+.vg-shell .vg-side-launch-link:hover {
+  border-color: #ffa17f;
+  background: #ffa17f;
+}
+.vg-shell .vg-side-footer { border-color: #303138; }
+.vg-shell .vg-side-account {
+  border: 1px solid #3a3b41;
+  border-radius: 12px;
+  background: #27292f;
+}
+.vg-shell .vg-side-account-name { color: #f9f8f6; font-size: 12.5px; }
+.vg-shell .vg-side-account-role { color: #b6b6bd; font-size: 11px; }
+.vg-shell .vg-side-avatar {
+  background: #f0d8cd;
+  color: #543227;
+  font-weight: 780;
+}
+.vg-shell .vg-side-signout { color: #c4c3c9; }
+.vg-shell .vg-side-signout:hover { background: #3c3e45; color: white; }
+.vg-shell .vg-mobile-bar {
+  background: #fff;
+  border-color: var(--vg-line);
+  color: var(--vg-ink);
+}
+
+/* Editorial hierarchy, comfortable body text and precise cards. */
+.vg-shell .vg-page-header {
+  margin-bottom: 24px;
+  padding-bottom: 22px;
+  border-color: var(--vg-line);
+}
+.vg-shell .vg-page-header h1 {
+  color: #1c2024;
+  font-size: clamp(30px, 2.9vw, 40px);
+  font-weight: 760;
+  letter-spacing: -.043em;
+  line-height: 1.12;
+}
+.vg-shell .vg-page-header p {
+  margin-top: 10px;
+  color: #646970;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.vg-shell .vg-page-kicker {
+  margin-bottom: 10px;
+  color: #ad5037;
+  font-size: 11px;
+  font-weight: 780;
+  letter-spacing: .095em;
+  line-height: 1.4;
+}
+.vg-shell .vg-panel {
+  border: 1px solid var(--vg-line);
+  border-radius: 14px;
+  background: var(--vg-surface);
+  box-shadow: 0 2px 6px rgba(32, 26, 22, .025);
+}
+.vg-shell .vg-section-head {
+  min-height: 66px;
+  padding: 17px 21px;
+  border-color: #eeece8;
+}
+.vg-shell .vg-section-head h2 {
+  color: #26282b;
+  font-size: 15px;
+  font-weight: 730;
+  letter-spacing: -.015em;
+}
+.vg-shell .vg-section-subtitle {
+  margin-top: 5px;
+  color: #6e7379;
+  font-size: 12.5px;
+  font-weight: 480;
+}
+.vg-shell .vg-section-head a,
+.vg-shell .vg-empty-state a {
+  color: #ba4930;
+  font-size: 12.5px;
+  font-weight: 720;
+}
+.vg-shell .vg-section-head a:hover,
+.vg-shell .vg-empty-state a:hover { color: #8e301c; }
+.vg-shell .vg-metadata-chip {
+  min-height: 29px;
+  padding: 5px 10px;
+  border: 1px solid #e6e2db;
+  border-radius: 8px;
+  background: #f7f5f1;
+  color: #5d6265;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+.vg-shell .vg-empty-row,
+.vg-shell .vg-empty-state {
+  color: #656971;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.vg-shell .vg-empty-state strong { color: #25292e; }
+.vg-shell .vg-data-row {
+  transition: background-color .12s ease;
+}
+.vg-shell .vg-data-row:hover,
+.vg-shell .vg-run-row:hover { background: #fbf8f5; }
+.vg-shell .vg-run-name {
+  color: #272b30;
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.vg-shell .vg-run-meta { color: #6d7075; font-size: 12px; }
+.vg-shell .vg-run-count { color: #272b30; font-size: 17px; }
+.vg-shell .vg-run-icon {
+  background: #fff0e7;
+  border-color: #f6dccb;
+  color: #ac4e32;
+}
+
+/* Primary buttons should look deliberate, never pale and noninteractive. */
+.vg-shell .vg-primary {
+  min-height: 43px;
+  padding-inline: 15px;
+  border: 1px solid #24262a;
+  border-radius: 10px;
+  background: #24262a;
+  color: white;
+  font-size: 13px;
+  font-weight: 730;
+}
+.vg-shell .vg-primary:not(:disabled):hover {
+  background: #36393c;
+  border-color: #36393c;
+}
+.vg-shell .vg-secondary {
+  min-height: 43px;
+  padding-inline: 15px;
+  border: 1px solid #dddcd7;
+  border-radius: 10px;
+  background: #fff;
+  color: #303438;
+  font-size: 13px;
+  font-weight: 680;
+}
+.vg-shell .vg-secondary:not(:disabled):hover {
+  border-color: #aaa5a0;
+  background: #f8f6f3;
+}
+.vg-shell .vg-field {
+  min-height: 42px;
+  border: 1px solid #dddcd6;
+  border-radius: 10px;
+  background: #fff;
+  color: #22262b;
+  font-size: 13px;
+}
+.vg-shell .vg-field:focus {
+  border-color: #db7251;
+  outline: 3px solid rgba(215, 102, 66, .13);
+}
+.vg-shell .vg-search-field {
+  min-height: 45px;
+  border-color: #dddcd7;
+  border-radius: 11px;
+  color: #84817d;
+}
+.vg-shell .vg-search-field:focus-within {
+  border-color: #d57a58;
+  box-shadow: 0 0 0 3px rgba(215, 102, 66, .12);
+}
+.vg-shell .vg-search-field > input {
+  color: #282a2e;
+  font-size: 13px;
+}
+.vg-shell .vg-search-field > input::placeholder { color: #8c8c8c; }
+
+/* Dashboard: architectural hero, not a sci-fi gradient banner. */
+.vg-shell .vg-dashboard-hero {
+  min-height: 245px;
+  gap: 22px;
+  padding: clamp(24px, 3.2vw, 42px);
+  border: 1px solid #28292d;
+  border-radius: 16px;
+  background: #202125;
+  box-shadow: none;
+}
+.vg-shell .vg-dashboard-hero::after { display: none; }
+.vg-shell .vg-dashboard-kicker {
+  color: #ffa183;
+  font-size: 11px;
+  font-weight: 740;
+  letter-spacing: .10em;
+}
+.vg-shell .vg-dashboard-hero h1 {
+  max-width: 650px;
+  margin: 10px 0 12px;
+  color: #fbfaf7;
+  font-size: clamp(32px, 3.7vw, 50px);
+  font-weight: 740;
+  letter-spacing: -.052em;
+  line-height: 1.08;
+}
+.vg-shell .vg-dashboard-hero p {
+  max-width: 560px;
+  color: #c9c8c4;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.vg-shell .vg-dashboard-action {
+  min-height: 44px;
+  padding: 11px 16px;
+  border: 1px solid #ec8664;
+  border-radius: 10px;
+  background: #ec8664;
+  color: #25201d;
+  font-size: 12.5px;
+  font-weight: 780;
+}
+.vg-shell .vg-dashboard-action:hover {
+  background: #ffad8e;
+  border-color: #ffad8e;
+}
+.vg-shell .vg-dashboard-alt-action {
+  border-color: #5a5554;
+  color: #fbf6f1;
+  font-size: 12.5px;
+}
+.vg-shell .vg-dashboard-alt-action:hover {
+  background: #353237;
+  border-color: #81746f;
+}
+.vg-shell .vg-dashboard-last-activity {
+  color: #c0bdb9;
+  font-size: 12px;
+}
+
+/* Numeric cards are deliberately compact, with no arbitrary colored stripe. */
+.vg-shell .vg-metric-grid { margin-bottom: 18px; }
+.vg-shell .vg-stat {
+  min-height: 140px;
+  padding: 21px 22px 19px;
+  border: 1px solid var(--vg-line);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(32, 26, 22, .025);
+}
+.vg-shell .vg-stat:hover {
+  border-color: #d5cac1;
+  transform: none;
+}
+.vg-shell .vg-stat::before { display: none; }
+.vg-shell .vg-stat-label {
+  color: #6e7076;
+  font-size: 12.5px;
+  font-weight: 680;
+}
+.vg-shell .vg-stat-value {
+  margin-top: 13px;
+  color: #26282b;
+  font-size: clamp(31px, 3vw, 40px);
+  font-weight: 750;
+  letter-spacing: -.055em;
+}
+.vg-shell .vg-stat-foot {
+  color: #777b7e;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* Tabs, filters and list pagination remain functional, now visually unified. */
+.vg-shell .vg-range-control {
+  border-color: #e2e0dc;
+  background: #eeece8;
+}
+.vg-shell .vg-range-option {
+  color: #6b6c70;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.vg-shell .vg-range-option:hover { color: #29282a; background: #f9f7f4; }
+.vg-shell .vg-range-option[aria-pressed="true"] {
+  background: #fff;
+  color: #222427;
+  box-shadow: 0 1px 4px rgba(42, 34, 30, .08);
+}
+.vg-shell .vg-filter-pill {
+  min-height: 41px;
+  border: 1px solid #e3e1dc;
+  background: #fff;
+  color: #5d6065;
+  font-size: 12.5px;
+}
+.vg-shell .vg-filter-pill:hover {
+  border-color: #c9bfb6;
+  background: #fbf7f3;
+}
+.vg-shell .vg-filter-pill[aria-pressed="true"] {
+  border-color: #29292d;
+  background: #29292d;
+  color: white;
+}
+.vg-shell .vg-filter-pill > b {
+  background: #f2f0ec;
+  color: #67676a;
+}
+.vg-shell .vg-filter-pill[aria-pressed="true"] > b {
+  background: #4c4543;
+  color: white;
+}
+.vg-shell .vg-list-pager {
+  min-height: 61px;
+  border-color: #ebe9e4;
+  background: #fff;
+}
+.vg-shell .vg-list-pager-summary,
+.vg-shell .vg-list-size-label { color: #696a6f; font-size: 12px; }
+.vg-shell .vg-list-size-label select,
+.vg-shell .vg-list-pager-actions button {
+  border-color: #e1ded8;
+  border-radius: 9px;
+  background: #fff;
+  color: #303135;
+}
+.vg-shell .vg-list-pager-actions button:not(:disabled):hover {
+  border-color: #d28c70;
+  background: #fff6ef;
+}
+.vg-shell .vg-list-page-count { color: #3c3d42; }
+
+/* Settings, report surfaces and upload panels. */
+.vg-shell .vg-settings-tab {
+  color: #5d6166;
+  font-size: 13px;
+}
+.vg-shell .vg-settings-tab:hover { background: #f7f4ef; color: #302e2d; }
+.vg-shell .vg-settings-tab[aria-pressed="true"] {
+  background: #fff0e7;
+  color: #a44127;
+  box-shadow: inset 3px 0 0 #e37f58;
+}
+.vg-shell .vg-settings-tab > svg { color: #7a706a; }
+.vg-shell .vg-settings-save { background: #fff; }
+.vg-shell .vg-report-empty {
+  border-color: #eae4dc;
+  background: #faf7f2;
+}
+.vg-shell .vg-report-empty > strong { color: #24282d; }
+.vg-shell .vg-report-empty > p { color: #62666a; font-size: 13px; }
+.vg-shell .vg-report-empty > a { color: #ae442b; }
+
+/* Player stays dark for legibility; surrounding controls match the workspace. */
+.vg-shell .vg-analysis-header .vg-page-kicker { color: #aa5138; }
+.vg-shell .vg-analysis-heading h1 { color: #202328; }
+.vg-shell .vg-analysis-heading p { color: #686c73; font-size: 14px; }
+.vg-shell .vg-analysis-player-card {
+  border: 1px solid #2c2d33;
+  border-radius: 15px;
+  background: #151619;
+  box-shadow: 0 8px 25px rgba(23, 18, 17, .09);
+}
+.vg-shell .vg-analysis-stage-head,
+.vg-shell .vg-analysis-player-footer {
+  border-color: #36363b;
+  background: #202126;
+}
+.vg-shell .vg-analysis-stage-head > span:first-child,
+.vg-shell .vg-analysis-source-title { color: #f9f7f4; }
+.vg-shell .vg-analysis-source-meta { color: #c4c0bd; }
+.vg-shell .vg-analysis-focus-toggle {
+  background: #fff;
+  border-color: #dedad3;
+  color: #2b2e30;
+}
+.vg-shell .vg-analysis-focus-toggle:hover {
+  background: #fff2e9;
+  border-color: #d5ac9b;
+}
+.vg-shell .vg-analysis-focus-toggle[aria-pressed="true"] {
+  background: #29292d;
+  border-color: #29292d;
+  color: white;
+}
+
+/* Live telemetry reads as one bright, structured data surface—not a dark island. */
+.vg-shell .vg-monitor {
+  border: 1px solid var(--vg-line);
+  border-radius: 14px;
+  background: #fff;
+  color: #25282d;
+  box-shadow: 0 2px 6px rgba(32, 26, 22, .025);
+}
+.vg-shell .vg-monitor-heading {
+  padding: 15px 21px;
+  border-color: #eceae6;
+}
+.vg-shell .vg-monitor-overline { color: #aa523a; }
+.vg-shell .vg-monitor-heading h2 {
+  color: #25282b;
+  font-size: 15px;
+}
+.vg-shell .vg-monitor-state {
+  border: 1px solid #e7e4de;
+  background: #f7f6f3;
+  color: #65666c;
+}
+.vg-shell .vg-monitor .vg-analysis-telemetry-card {
+  min-height: 126px;
+  padding: 20px 22px 21px;
+  border-color: #ebe8e4;
+  background: #fff;
+}
+.vg-shell .vg-monitor .vg-analysis-telemetry-card + .vg-analysis-telemetry-card {
+  border-left-color: #ebe8e4;
+}
+.vg-shell .vg-telemetry-title {
+  color: #5e6369;
+  font-size: 12.5px;
+  font-weight: 660;
+}
+.vg-shell .vg-telemetry-icon {
+  background: #fff0e9;
+  border-color: #f5dfd3;
+  color: #bc5638;
+}
+.vg-shell .vg-monitor .vg-analysis-telemetry-card > .vg-telemetry-value {
+  color: #1f2428;
+  font-weight: 760;
+}
+.vg-shell .vg-telemetry-unit { color: #777a80; }
+.vg-shell .vg-telemetry-detail {
+  color: #72757b;
+  font-size: 12px;
+}
+.vg-shell .vg-telemetry-warning { color: #995b22; }
+
+/* Secondary storage information shares the same typography and borders. */
+.vg-shell .vg-storage-disclosure {
+  border-color: var(--vg-line);
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(32, 26, 22, .025);
+}
+.vg-shell .vg-storage-summary:hover { background: #fdfaf7; }
+.vg-shell .vg-storage-summary-copy strong { color: #2a2d30; }
+.vg-shell .vg-storage-summary-copy > span { color: #707176; }
+.vg-shell .vg-storage-summary-icon,
+.vg-shell .vg-storage-tile-icon {
+  background: #fff0e9;
+  border-color: #f5dfd3;
+  color: #b95338;
+}
+.vg-shell .vg-storage-mini-status {
+  background: #f4f2ed;
+  color: #56585e;
+}
+.vg-shell .vg-storage-manage { color: #b44c32; }
+.vg-shell .vg-storage-content { background: #fcfbf8; border-color: #eae8e3; }
+.vg-shell .vg-storage-grid .vg-storage-tile { border-color: #e9e5de; }
+.vg-shell .vg-storage-switch:checked {
+  border-color: #cd5d3e;
+  background: #cd5d3e;
+}
+.vg-shell .vg-storage-notice {
+  background: #f5f3ee;
+  color: #5c6165;
+}
+.vg-shell .vg-storage-notice svg,
+.vg-shell .vg-storage-notice strong { color: #9f523a; }
+.vg-shell .vg-storage-upload {
+  border-color: #27282c;
+  background: #27282c;
+  color: white;
+}
+.vg-shell .vg-storage-upload:hover { background: #3a3b3f; }
+
+/* Focus theater is intentionally dark for distraction-free video playback.
+   The clear contrast is a functional mode change, not a second app theme. */
+.vg-shell .vg-analyze-page.vg-analyze-focus { background: #151518; }
+.vg-shell .vg-analyze-focus .vg-analysis-header { background: #151518; }
+.vg-shell .vg-analyze-focus .vg-monitor {
+  border-color: #36363d;
+  background: #222227;
+  color: #fafafa;
+}
+.vg-shell .vg-analyze-focus .vg-monitor-heading { border-color: #3b3b42; }
+.vg-shell .vg-analyze-focus .vg-monitor-heading h2,
+.vg-shell .vg-analyze-focus .vg-monitor .vg-analysis-telemetry-card > .vg-telemetry-value { color: #fffaf6; }
+.vg-shell .vg-analyze-focus .vg-monitor .vg-analysis-telemetry-card {
+  border-color: #38383d;
+  background: transparent;
+}
+.vg-shell .vg-analyze-focus .vg-telemetry-title { color: #dfdbd7; }
+.vg-shell .vg-analyze-focus .vg-telemetry-detail { color: #b6b4b2; }
+.vg-shell .vg-analyze-focus .vg-telemetry-unit { color: #d2ccc7; }
+.vg-shell .vg-analyze-focus .vg-telemetry-icon {
+  background: #3d302e;
+  border-color: #66453d;
+  color: #ffad89;
+}
+.vg-shell .vg-analyze-focus .vg-monitor-state { border-color: #4b4a50; background: #303035; color: #efebea; }
+.vg-shell .vg-analyze-focus .vg-analysis-focus-toggle[aria-pressed="true"] {
+  background: #fff4ee;
+  border-color: #fff4ee;
+  color: #212125;
+}
+
+/* Touch targets and responsive rhythm. */
+@media (max-width: 900px) {
+  .vg-shell .vg-monitor .vg-analysis-telemetry-card:last-child {
+    border-top-color: #ebe8e4;
+  }
+}
+@media (max-width: 760px) {
+  .vg-shell .vg-page { padding: 20px 16px 38px; }
+  .vg-shell .vg-page-header h1 { font-size: 31px; }
+  .vg-shell .vg-dashboard-hero { min-height: 0; }
+  .vg-shell .vg-monitor .vg-analysis-telemetry-card { padding: 18px; }
+}
+@media (max-width: 620px) {
+  .vg-shell .vg-monitor .vg-analysis-telemetry-card + .vg-analysis-telemetry-card {
+    border-top-color: #ebe8e4;
+  }
+  .vg-shell .vg-analyze-focus .vg-monitor .vg-analysis-telemetry-card + .vg-analysis-telemetry-card {
+    border-top-color: #38383d;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-shell .vg-side-nav-item,
+  .vg-shell .vg-data-row,
+  .vg-shell .vg-stat { transition: none; }
+}
