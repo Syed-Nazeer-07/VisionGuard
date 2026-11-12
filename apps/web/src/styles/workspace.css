@@ -624,45 +624,6 @@
   background: #091118;
   isolation: isolate;
 }
-.vg-shell .vg-analysis-telemetry {
-  gap: 12px;
-}
-.vg-shell .vg-analysis-telemetry-card {
-  position: relative;
-  overflow: hidden;
-  min-width: 0;
-  min-height: 133px;
-  padding: 20px 21px;
-  border-color: #d9e3e4;
-  border-radius: 14px;
-  background: #fff;
-  box-shadow: 0 2px 14px rgba(32,49,55,.025);
-}
-.vg-shell .vg-analysis-telemetry-card::before {
-  position: absolute;
-  content: "";
-  left: 0;
-  top: 19px;
-  height: 30px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
-  background: #8aadb7;
-  pointer-events: none;
-}
-.vg-shell .vg-analysis-telemetry-card:nth-child(2)::before { background: #b0c0c4; }
-.vg-shell .vg-analysis-telemetry-card:nth-child(3)::before { background: #8ea99e; }
-.vg-shell .vg-analysis-telemetry-card > div:nth-child(2) {
-  font-size: clamp(24px, 2.5vw, 32px);
-  letter-spacing: -.05em;
-  color: #283b43;
-}
-.vg-shell .vg-analysis-retain,
-.vg-shell .vg-analysis-cloud {
-  border: 1px solid #dce5e6;
-  border-radius: 13px;
-  box-shadow: 0 2px 11px rgba(25,45,51,.022);
-}
-.vg-shell .vg-analysis-retain { background: white; }
 .vg-shell .vg-analysis-details { min-width: 0; }
 /* Focus is a real toggle: keep telemetry + video, collapse storage controls. */
 .vg-shell .vg-analyze-focus { max-width: 1740px; }
@@ -1095,7 +1056,7 @@
   background: #263f41;
   color: #90d5ca;
 }
-.vg-shell .vg-telemetry-value {
+.vg-shell .vg-monitor .vg-analysis-telemetry-card > .vg-telemetry-value {
   margin-top: 9px;
   color: #f5faf9;
   font-size: clamp(30px, 3vw, 37px);
