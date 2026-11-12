@@ -89,6 +89,7 @@ export function AppLayout() {
   };
 
   return <div className="vg-shell flex h-screen overflow-hidden">
+    <a href="#main-content" className="vg-workspace-skip">Skip to workspace content</a>
     {mobileOpen && <button type="button" aria-label="Close navigation"
       className="fixed inset-0 z-30 bg-slate-950/35 md:hidden"
       onClick={() => setMobileOpen(false)} />}
