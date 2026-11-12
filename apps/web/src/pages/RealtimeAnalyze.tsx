@@ -1472,7 +1472,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </button>}
           <a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer"
             title="Optional: browse YouTube in a separate tab. Open a video, then select Analyze tab."
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold text-slate-500 transition-colors hover:text-[#426b7d]">
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold text-slate-500 transition-colors hover:text-[#bd5035]">
             Open YouTube <ExternalLink size={13}/>
           </a>
           {qualityEnabled && !!currentFileRef.current && !!qualityFramesRef.current.length &&
@@ -1505,7 +1505,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const enabled = event.target.checked;
             setKeepTabConnected(enabled);
             if (ownerId) localStorage.setItem('visionguard:keep-tab-on-navigation:' + ownerId, enabled ? 'yes' : 'no');
-          }} className="h-4 w-4 accent-[#426b7d]"/>
+          }} className="h-4 w-4 accent-[#bd5035]"/>
           Keep sharing on other VisionGuard pages
         </label>
       </div>}
@@ -1640,7 +1640,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
-              <Film size={42} className="text-[#b9d4dd]" />
+              <Film size={42} className="text-[#f2a27e]" />
               <div className="text-lg font-semibold">Select an analysis source</div>
               <p className="max-w-md text-sm text-slate-300">Choose video, camera, or tab above.</p>
               <p className="max-w-md text-xs leading-5 text-slate-400">YouTube: play it in another tab → Analyze tab → Share that tab.</p>
