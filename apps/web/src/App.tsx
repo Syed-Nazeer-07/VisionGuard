@@ -6,7 +6,6 @@ import { Landing } from './pages/Landing'
 import { Login } from './pages/auth/Login'
 import { ForgotPassword } from './pages/auth/ForgotPassword'
 import { ResetPassword } from './pages/auth/ResetPassword'
-import { evidenceQueue } from './pipeline/evidence/queue'
 import { useAuthStore } from './store/auth'
 import { lazy, Suspense, useEffect } from 'react'
 
@@ -71,9 +70,19 @@ function App() {
     document.title = 'VisionGuard'
   }, [])
 
-  // Public visitors do not need the evidence DB query or retention timer.
+  // Load the retention service only for an authenticated workspace.
+  // Public visitors should not download or initialize evidence-DB code.
   useEffect(() => {
-    if (hasAuthenticatedSession) evidenceQueue.startRetentionWorker()
+    if (!hasAuthenticatedSession) return;
+    let current = true;
+    void import('./pipeline/evidence/queue')
+      .then(({ evidenceQueue }) => {
+        if (current) evidenceQueue.startRetentionWorker();
+      })
+      .catch(error => {
+        if (current) console.warn('Evidence retention initialization failed:', error);
+      });
+    return () => { current = false; };
   }, [hasAuthenticatedSession])
 
   return (
