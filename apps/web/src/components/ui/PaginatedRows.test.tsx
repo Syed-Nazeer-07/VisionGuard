@@ -29,7 +29,7 @@ describe('PaginatedRows', () => {
       act(() => view.host.querySelector<HTMLButtonElement>('button[aria-label="Next sessions page"]')!.click());
       expect(view.host.textContent).toContain('Showing 11–20 of 67 sessions');
       expect(view.host.textContent).toContain('Session 11');
-      expect(view.host.textContent).not.toContain('Session 1<');
+      expect(view.host.querySelector('[data-testid="session-row"]')?.textContent).toBe('Session 11');
       const select = view.host.querySelector<HTMLSelectElement>('select[aria-label="Rows per page for sessions"]')!;
       act(() => {
         select.value = '25';
