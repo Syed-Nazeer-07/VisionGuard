@@ -296,15 +296,20 @@ export function ActivityReports() {
       setPdfBusy(false);
     }
   };
-  return <main className="vg-page">
+  return <main className="vg-page vg-data-page">
     <header className="vg-page-header">
-      <div><h1>Reports</h1><p>Export tracked activity by session</p></div>
+      <div><span className="vg-page-kicker">EXPORT CENTER / YOUR DATA</span><h1>Reports</h1><p>Create downloadable records from your saved traffic analysis sessions.</p></div>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     {exportError && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{exportError}</p>}
     <section className="vg-panel overflow-hidden">
-      <div className="vg-section-head"><h2>Export options</h2></div>
+      <div className="vg-section-head"><div><h2>Export options</h2><p className="vg-section-subtitle">Select the scope and choose your preferred format</p></div><span className="vg-metadata-chip">ON-DEVICE EXPORT</span></div>
       <div className="p-5 sm:p-6">
+        {loaded && !records.length && <div className="vg-report-empty mb-5">
+          <strong>No sessions available to export.</strong>
+          <p>Analyze a source to build a report. Reports use saved observations, never fabricated data.</p>
+          <Link to="/app/analyze">Start an analysis <ArrowUpRight size={15} aria-hidden="true"/></Link>
+        </div>}
         <label htmlFor="report-run" className="mb-2 block text-xs font-semibold text-slate-600">Select scope</label>
         <select id="report-run" value={selected} onChange={e=>setSelected(e.target.value)} className="vg-field w-full max-w-xl">
           <option value="all">All saved sessions</option>
@@ -317,7 +322,7 @@ export function ActivityReports() {
             note={totals.pendingReviews + ' pending · ' +
               (totals.reviewedFlags + totals.dismissedFlags) + ' handled'}/>
         </div>
-        <div className="mt-6 flex flex-wrap gap-2">
+        <div className="vg-report-actions mt-6 flex flex-wrap gap-2">
           <button type="button" disabled={pdfBusy || !loaded || !filtered.length} onClick={() => void downloadPdf()}
             className="vg-primary" aria-busy={pdfBusy}><Download size={15}/>{pdfBusy ? 'Preparing PDF…' : 'Download PDF'}</button>
           <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportCSV(filtered)}
@@ -326,7 +331,7 @@ export function ActivityReports() {
             onClick={()=>exportIncidentsCSV(filtered)}
             className="vg-secondary"><Download size={15}/> Incident review CSV</button>
         </div>
-        <p className="vg-footnote">PDF includes tracked vehicles and any saved review flags. Vehicle CSV contains tracks; incident CSV contains review flags. Image-derived speeds are approximate, not enforcement measurements.</p>
+        <p className="vg-footnote">PDF includes tracked vehicles and saved review flags. Vehicle CSV contains tracks; incident CSV contains review decisions. Image-derived speed remains an uncalibrated visual estimate, not an enforcement measurement.</p>
       </div>
     </section>
   </main>;
