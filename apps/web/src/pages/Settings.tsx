@@ -157,7 +157,7 @@ export default function Settings() {
                 Original video files are retained on this device only when you choose that option in Live Analysis.
                 Backblaze B2 upload is a separate, explicit action.
               </p>
-              <Link to="/app/analyze" className="mt-3 inline-flex text-xs font-semibold text-[#426b7d] hover:underline">
+              <Link to="/app/analyze" className="mt-3 inline-flex text-xs font-semibold text-[#bd5035] hover:underline">
                 Open video storage controls
               </Link>
             </div>
@@ -176,7 +176,7 @@ export default function Settings() {
               <input id="settings-confirm-password" className="vg-field w-full" type="password"
                 autoComplete="new-password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/>
             </div>
-            <Link to="/forgot-password" className="text-xs font-semibold text-[#426b7d] hover:underline">
+            <Link to="/forgot-password" className="text-xs font-semibold text-[#bd5035] hover:underline">
               Use email password recovery instead
             </Link>
           </>}
