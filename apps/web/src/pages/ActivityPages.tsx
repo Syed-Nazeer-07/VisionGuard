@@ -80,9 +80,14 @@ export function ActivityDashboard() {
         <p>Your traffic intelligence workspace. Revisit analyzed footage, review vehicle activity, and follow up on observations with context.</p>
       </div>
       <div className="vg-dashboard-hero-side">
-        <Link to="/app/analyze" className="vg-dashboard-action">
-          Start an analysis <ArrowUpRight size={17} aria-hidden="true"/>
-        </Link>
+        <div className="vg-dashboard-hero-actions">
+          <Link to="/app/analyze" className="vg-dashboard-action">
+            Start an analysis <ArrowUpRight size={17} aria-hidden="true"/>
+          </Link>
+          <Link to="/app/videos" className="vg-dashboard-alt-action">
+            Browse history <ArrowUpRight size={15} aria-hidden="true"/>
+          </Link>
+        </div>
         <span className="vg-dashboard-last-activity">
           {!loaded ? 'Loading workspace…' : mostRecent > 0
             ? 'Last analyzed · ' + niceDate(mostRecent)
