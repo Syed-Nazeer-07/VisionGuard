@@ -1169,13 +1169,9 @@
   font-size: 12.5px;
   font-weight: 720;
 }
-.vg-shell .vg-storage-manage > span {
-  display: inline-block;
-  font-size: 20px;
-  line-height: .5;
-  transition: transform .15s ease;
-}
-.vg-shell .vg-storage-disclosure[open] .vg-storage-manage > span { transform: rotate(180deg); }
+.vg-shell .vg-storage-manage > svg { transition: transform .15s ease; }
+.vg-shell .vg-storage-disclosure[open] .vg-storage-manage > svg { transform: rotate(180deg); }
+.vg-shell .vg-storage-mini-error { background: #fff1e7; color: #9e5a30; }
 .vg-shell .vg-storage-content {
   padding: 20px;
   border-top: 1px solid #e8eeee;
@@ -1366,5 +1362,5 @@
   .vg-shell .vg-storage-summary,
   .vg-shell .vg-storage-switch,
   .vg-shell .vg-storage-switch::before,
-  .vg-shell .vg-storage-manage > span { transition: none; }
+  .vg-shell .vg-storage-manage > svg { transition: none; }
 }
