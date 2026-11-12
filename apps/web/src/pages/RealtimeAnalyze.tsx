@@ -146,6 +146,25 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [unavailableOriginal, setUnavailableOriginal] = useState<string | null>(null);
   const [error, setError] = useState('');
 
+  // The player is retained across routes for reliable capture and tracking.
+  // Theater mode must never cover another route when analysis is hidden.
+  useEffect(() => {
+    if (!active) setFocusMode(false);
+  }, [active]);
+
+  // Focus View is an in-app theater mode (not the browser Fullscreen API).
+  // Esc always restores the normal workspace without interrupting playback.
+  useEffect(() => {
+    if (!focusMode) return;
+    const exitOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || document.fullscreenElement) return;
+      event.preventDefault();
+      setFocusMode(false);
+    };
+    window.addEventListener('keydown', exitOnEscape);
+    return () => window.removeEventListener('keydown', exitOnEscape);
+  }, [focusMode]);
+
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
     if (!frames.length || !currentFileRef.current) return;
@@ -1430,6 +1449,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   return (
     <div className={'vg-page vg-analyze-page space-y-5' + (focusMode ? ' vg-analyze-focus' : '')}>
       <header className="vg-page-header vg-analysis-header">
+        {focusMode && <div className="vg-focus-banner">
+          <span className="vg-focus-banner-dot" aria-hidden="true"/>
+          <span>Focus view</span>
+          <small>Press Esc to exit</small>
+        </div>}
         <div className="vg-analysis-heading">
           <span className="vg-page-kicker">VIDEO INTELLIGENCE / WORKSPACE</span>
           <h1>Live analysis</h1>
@@ -1478,9 +1502,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           {url && !webcamActive && !tabCaptureActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
             className="vg-secondary" title="Close current video"><X size={18} /></button>}
           <button type="button" onClick={() => setFocusMode(value => !value)}
-            aria-pressed={focusMode} aria-controls="vg-analysis-details"
+            aria-pressed={focusMode}
+            aria-controls="vg-analysis-player vg-analysis-telemetry vg-analysis-details"
+            aria-keyshortcuts="Escape"
             className={'vg-analysis-focus-toggle ' + (focusMode ? 'vg-analysis-focus-active' : '')}
-            title={focusMode ? 'Show storage and session tools' : 'Focus on the video and live telemetry'}>
+            title={focusMode ? 'Exit focus view (Esc)' : 'Enlarge video and telemetry; hide other workspace controls'}>
             {focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             {focusMode ? 'Exit focus' : 'Focus view'}
           </button>
@@ -1521,7 +1547,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
       </div>}
 
-      <section className="vg-panel vg-analysis-player-card overflow-hidden" aria-label="Video analysis player">
+      <section id="vg-analysis-player" className="vg-panel vg-analysis-player-card overflow-hidden" aria-label="Video analysis player">
         <div className="vg-analysis-stage-head">
           <span><ScanLine size={15} aria-hidden="true" /> ANALYSIS VIEWPORT</span>
           <span className="vg-analysis-engine-state">
@@ -1667,7 +1693,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
-      <section className="vg-monitor" aria-label="Live analysis telemetry">
+      <section id="vg-analysis-telemetry" className="vg-monitor" aria-label="Live analysis telemetry">
         <div className="vg-monitor-heading">
           <div className="vg-monitor-heading-title">
             <span className="vg-monitor-overline">LIVE TELEMETRY</span>
