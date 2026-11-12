@@ -1679,6 +1679,27 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
+      <div className="vg-analysis-telemetry grid gap-3 sm:grid-cols-3" aria-label="Live analysis telemetry">
+        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center gap-2 text-xs font-medium text-slate-500"><Activity size={14} /> Vehicles in frame</div>
+          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{visibleCount}</div>
+          <div className="text-xs text-slate-500">Stable tracks and high-confidence new vehicles</div>
+        </div>
+        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
+          <div className="text-xs font-medium text-slate-500">YOLO11s inference</div>
+          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
+            {inferenceMs === null ? '—' : inferenceMs + ' ms'}
+          </div>
+          <div className="text-xs text-slate-500">{provider ? provider.toUpperCase() : 'Preparing'} · {analyzedFrames} sampled frames · {detectionCount ?? '—'} raw vehicles</div>
+          {provider === 'wasm' && fallbackReason && <div className="mt-1 text-[11px] leading-4 text-amber-700" title={fallbackReason}>WebGPU unavailable; using slower CPU/WASM</div>}
+        </div>
+        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
+          <div className="text-xs font-medium text-slate-500">Uncalibrated speed proxy · km/h*</div>
+          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{liveMaxSpeed === null ? '— km/h' : liveMaxSpeed === 0 ? '0 km/h' : '≈' + Math.round(liveMaxSpeed) + ' km/h'}</div>
+          <div className="mt-1 text-xs leading-5 text-slate-500">Fastest visible optical estimate. *Not a measured road speed; camera/road calibration is required.</div>
+        </div>
+      </div>
+
       <div id="vg-analysis-details" className="vg-analysis-details space-y-4">
       {!webcamActive && !tabCaptureActive && !cloudPlaybackActive && <label className="vg-analysis-retain flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
         <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
@@ -1753,27 +1774,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </div>}
         </div>
       )}
-      <div className="vg-analysis-telemetry grid gap-3 sm:grid-cols-3" aria-label="Live analysis telemetry">
-        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500"><Activity size={14} /> Vehicles in frame</div>
-          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{visibleCount}</div>
-          <div className="text-xs text-slate-500">Stable tracks and high-confidence new vehicles</div>
-        </div>
-        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-xs font-medium text-slate-500">YOLO11s inference</div>
-          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
-            {inferenceMs === null ? '—' : inferenceMs + ' ms'}
-          </div>
-          <div className="text-xs text-slate-500">{provider ? provider.toUpperCase() : 'Preparing'} · {analyzedFrames} sampled frames · {detectionCount ?? '—'} raw vehicles</div>
-          {provider === 'wasm' && fallbackReason && <div className="mt-1 text-[11px] leading-4 text-amber-700" title={fallbackReason}>WebGPU unavailable; using slower CPU/WASM</div>}
-        </div>
-        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-xs font-medium text-slate-500">Uncalibrated speed proxy · km/h*</div>
-          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{liveMaxSpeed === null ? '— km/h' : liveMaxSpeed === 0 ? '0 km/h' : '≈' + Math.round(liveMaxSpeed) + ' km/h'}</div>
-          <div className="mt-1 text-xs leading-5 text-slate-500">Fastest visible optical estimate. *Not a measured road speed; camera/road calibration is required.</div>
-        </div>
-      </div>
-
       <p className="vg-footnote">
         Sustained unusual speed estimates and stationary vehicles amid moving traffic automatically
         create pending review candidates in Incidents. Crashes, helmets and signal violations
