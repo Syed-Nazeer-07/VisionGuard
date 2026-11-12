@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, Camera, ExternalLink, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, ScanLine, Upload, X } from 'lucide-react';
+import { Activity, AlertTriangle, Camera, Cloud, Cpu, ExternalLink, Film, Gauge, HardDrive, Info, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, ScanLine, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
@@ -1651,27 +1651,26 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           )}
         </div>
         {url && (
-          <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="vg-analysis-player-footer flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-slate-900">{filename}</div>
-              <div className="mt-1 text-xs text-slate-500">
-                {tabCaptureActive ? 'LIVE BROWSER TAB' :
-                  webcamActive ? 'LIVE CAMERA' : readableTime(position) + ' / ' + readableTime(duration)} · Playback at 1×
-                {openedSeconds !== null ? ' · Opened in ' + openedSeconds.toFixed(2) + 's' : ''}
+              <div className="vg-analysis-source-title truncate">{filename}</div>
+              <div className="vg-analysis-source-meta">
+                {tabCaptureActive ? 'Live browser tab' :
+                  webcamActive ? 'Live camera' : readableTime(position) + ' / ' + readableTime(duration)} · 1× playback
               </div>
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => void toggleFullscreen()}
-                className="vg-secondary" aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
+                className="vg-analysis-player-button" aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
                 {isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
                 {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
               </button>
               {detector === 'error' && <button type="button" onClick={startDetector}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
+                className="vg-analysis-player-button">
                 <RefreshCw size={14} /> Retry detector
               </button>}
               {!playing && <button type="button" onClick={() => void videoRef.current?.play().catch(e => setError(String(e)))}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700">
+                className="vg-analysis-player-button">
                 <Play size={14} /> Play
               </button>}
             </div>
@@ -1679,109 +1678,152 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
-      <div className="vg-analysis-telemetry grid gap-3 sm:grid-cols-3" aria-label="Live analysis telemetry">
-        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-500"><Activity size={14} /> Vehicles in frame</div>
-          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{visibleCount}</div>
-          <div className="text-xs text-slate-500">Stable tracks and high-confidence new vehicles</div>
-        </div>
-        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-xs font-medium text-slate-500">YOLO11s inference</div>
-          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
-            {inferenceMs === null ? '—' : inferenceMs + ' ms'}
+      <section className="vg-monitor" aria-label="Live analysis telemetry">
+        <div className="vg-monitor-heading">
+          <div className="vg-monitor-heading-title">
+            <span className="vg-monitor-overline">LIVE TELEMETRY</span>
+            <h2>At a glance</h2>
           </div>
-          <div className="text-xs text-slate-500">{provider ? provider.toUpperCase() : 'Preparing'} · {analyzedFrames} sampled frames · {detectionCount ?? '—'} raw vehicles</div>
-          {provider === 'wasm' && fallbackReason && <div className="mt-1 text-[11px] leading-4 text-amber-700" title={fallbackReason}>WebGPU unavailable; using slower CPU/WASM</div>}
-        </div>
-        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
-          <div className="text-xs font-medium text-slate-500">Uncalibrated speed proxy · km/h*</div>
-          <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{liveMaxSpeed === null ? '— km/h' : liveMaxSpeed === 0 ? '0 km/h' : '≈' + Math.round(liveMaxSpeed) + ' km/h'}</div>
-          <div className="mt-1 text-xs leading-5 text-slate-500">Fastest visible optical estimate. *Not a measured road speed; camera/road calibration is required.</div>
-        </div>
-      </div>
-
-      <div id="vg-analysis-details" className="vg-analysis-details space-y-4">
-      {!webcamActive && !tabCaptureActive && !cloudPlaybackActive && <label className="vg-analysis-retain flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
-        <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
-          disabled={!ownerId} className="h-4 w-4 accent-[#426b7d]" />
-        <span className="flex-1"><strong>Keep this video on this device</strong>
-          <span className="block text-xs text-slate-500">
-            Optional. Off means no original video is retained; analysis history remains.
-            Retention currently saves the most recent file on this device only.
-            {storage === 'saving' ? ' Saving…' : storage === 'saved' ? ' Video saved on this device.' :
-              storage === 'error' ? ' Local save failed.' : ''}
+          <span className="vg-monitor-state" data-state={detector}>
+            <span aria-hidden="true" className="vg-monitor-state-dot" />
+            {detector === 'ready' ? 'Detector ready' :
+              detector === 'loading' ? 'Starting detection' :
+              detector === 'error' ? 'Detector unavailable' : 'Awaiting video'}
           </span>
-        </span>
-      </label>}
-      {!webcamActive && !tabCaptureActive && currentFileRef.current && (
-        <div className="vg-panel vg-analysis-cloud p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">
-                {cloudUnavailable || cloudAvailability === 'unconfigured' ? 'Cloud backup not configured' :
-                  cloudAvailability === 'checking' ? 'Checking cloud backup…' :
-                  cloudAvailability === 'error' ? 'Cloud backup status unavailable' :
-                  'Backblaze B2 · optional cloud storage'}
-              </div>
-              <p className="mt-1 text-xs text-slate-500">
-                {cloudAvailability === 'unconfigured' || cloudUnavailable
-                  ? 'No B2 upload is possible until the app owner configures private server credentials. No original video was uploaded. You can keep a local copy on this device instead.'
-                  : cloudAvailability === 'error'
-                  ? 'Cannot verify cloud storage right now, so cloud uploads are disabled to prevent failed records. Your local analysis still works.'
-                  : cloudAvailability === 'checking'
-                  ? 'Checking whether secure cloud video backup is configured…'
-                  : 'Optional cloud backup. Saving an analysis does not upload the original video. You can also retain it on this device.'}
-              </p>
+        </div>
+        <div className="vg-analysis-telemetry">
+          <div className="vg-analysis-telemetry-card">
+            <div className="vg-telemetry-title">
+              <span className="vg-telemetry-icon"><Activity size={17} aria-hidden="true" /></span>
+              <span>Vehicles in frame</span>
             </div>
-            {!cloudUpload && !cloudUnavailable && cloudAvailability === 'configured' && (
-              <button type="button" onClick={() => void saveCurrentVideoToB2()} disabled={cloudStarting}
-                className="rounded-lg bg-[#355a6b] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                {cloudStarting ? 'Preparing B2 upload…' : 'Save video to B2'}
-              </button>
+            <div className="vg-telemetry-value tabular-nums">{visibleCount}</div>
+            <p className="vg-telemetry-detail">Currently visible tracks</p>
+          </div>
+          <div className="vg-analysis-telemetry-card">
+            <div className="vg-telemetry-title">
+              <span className="vg-telemetry-icon"><Cpu size={17} aria-hidden="true" /></span>
+              <span>Processing time</span>
+            </div>
+            <div className="vg-telemetry-value tabular-nums">
+              {inferenceMs === null ? '—' : inferenceMs}
+              {inferenceMs !== null && <span className="vg-telemetry-unit">ms</span>}
+            </div>
+            <p className="vg-telemetry-detail">{provider ? provider.toUpperCase() : 'Waiting for model'} · {analyzedFrames} analyzed frames</p>
+            {provider === 'wasm' && fallbackReason && <p className="vg-telemetry-warning" title={fallbackReason}>Using CPU fallback</p>}
+          </div>
+          <div className="vg-analysis-telemetry-card">
+            <div className="vg-telemetry-title">
+              <span className="vg-telemetry-icon"><Gauge size={17} aria-hidden="true" /></span>
+              <span>Speed estimate</span>
+            </div>
+            <div className="vg-telemetry-value tabular-nums">
+              {liveMaxSpeed === null ? '—' : liveMaxSpeed === 0 ? '0' : '≈' + Math.round(liveMaxSpeed)}
+              <span className="vg-telemetry-unit">km/h</span>
+            </div>
+            <p className="vg-telemetry-detail">Optical estimate · not calibrated</p>
+          </div>
+        </div>
+      </section>
+
+      <details id="vg-analysis-details" className="vg-analysis-details vg-storage-disclosure">
+        <summary className="vg-storage-summary">
+          <span className="vg-storage-summary-lead">
+            <span className="vg-storage-summary-icon"><HardDrive size={18} aria-hidden="true"/></span>
+            <span className="vg-storage-summary-copy">
+              <strong>Storage &amp; privacy</strong>
+              <span>Original footage, retention and backups</span>
+            </span>
+          </span>
+          <span className="vg-storage-summary-meta">
+            {!webcamActive && !tabCaptureActive && !cloudPlaybackActive &&
+              <span className="vg-storage-mini-status">{saveVideo ? 'Local retention on' : 'Local retention off'}</span>}
+            <span className="vg-storage-manage">Manage <span aria-hidden="true">⌄</span></span>
+          </span>
+        </summary>
+        <div className="vg-storage-content">
+          <div className="vg-storage-intro">Analysis history and original video files are stored separately. You choose whether to retain the original.</div>
+          <div className="vg-storage-grid">
+            {!webcamActive && !tabCaptureActive && !cloudPlaybackActive &&
+              <label className="vg-storage-tile vg-storage-device">
+                <span className="vg-storage-tile-icon"><HardDrive size={19} aria-hidden="true"/></span>
+                <span className="vg-storage-tile-text">
+                  <strong>Save on this device</strong>
+                  <span>Keep the latest original video for later replay.</span>
+                  <span className="vg-storage-tile-status" role="status">
+                    {storage === 'saving' ? 'Saving original…' :
+                      storage === 'saved' ? 'Original saved locally' :
+                      storage === 'error' ? 'Unable to save locally' :
+                      saveVideo ? 'Local retention enabled' : 'Local retention disabled'}
+                  </span>
+                </span>
+                <input type="checkbox" checked={saveVideo}
+                  onChange={event => changeSaveVideo(event.target.checked)}
+                  disabled={!ownerId} className="vg-storage-switch"
+                  aria-label="Keep this video on this device" />
+              </label>}
+            {!webcamActive && !tabCaptureActive && currentFileRef.current && (
+              <div className="vg-storage-tile vg-storage-cloud">
+                <span className="vg-storage-tile-icon"><Cloud size={19} aria-hidden="true"/></span>
+                <div className="vg-storage-tile-text">
+                  <div className="vg-storage-cloud-title">
+                    <strong>Cloud backup</strong>
+                    <span className="vg-storage-cloud-badge" data-status={
+                      cloudUnavailable || cloudAvailability === 'unconfigured' ? 'unavailable' :
+                      cloudAvailability === 'configured' ? 'ready' : 'pending'
+                    }>
+                      {cloudUnavailable || cloudAvailability === 'unconfigured' ? 'Unavailable' :
+                        cloudAvailability === 'configured' ? 'Available' :
+                        cloudAvailability === 'checking' ? 'Checking' : 'Status unknown'}
+                    </span>
+                  </div>
+                  <span>
+                    {cloudAvailability === 'unconfigured' || cloudUnavailable ?
+                      'Backblaze B2 is not configured. No file was uploaded.' :
+                      cloudAvailability === 'error' ?
+                      'Cloud availability could not be verified. Uploads are disabled.' :
+                      cloudAvailability === 'checking' ?
+                      'Checking secure cloud storage…' :
+                      'Optional cloud copy. Upload only when you choose to.'}
+                  </span>
+                  {!cloudUpload && !cloudUnavailable && cloudAvailability === 'configured' &&
+                    <button type="button" onClick={() => void saveCurrentVideoToB2()}
+                      disabled={cloudStarting} className="vg-storage-upload">
+                      <Upload size={15} aria-hidden="true"/>
+                      {cloudStarting ? 'Preparing upload…' : 'Upload original to B2'}
+                    </button>}
+                  {cloudUpload && <div className="vg-storage-progress">
+                    <div className="vg-storage-progress-head">
+                      <span>{cloudUpload.status === 'uploaded' ? 'Saved to Backblaze B2' :
+                        cloudUpload.status === 'failed' ? 'Cloud upload failed' : 'Uploading…'}</span>
+                      {cloudUpload.status !== 'failed' && <span>{cloudUpload.progress}%</span>}
+                    </div>
+                    {cloudUpload.status !== 'failed' && <div className="vg-storage-progress-track">
+                      <div style={{ width: Math.max(0, Math.min(100, cloudUpload.progress)) + '%' }} />
+                    </div>}
+                    {cloudUpload.status === 'uploaded' &&
+                      <a href="/app/archive-videos" className="vg-storage-archive">View cloud archive</a>}
+                  </div>}
+                  {cloudError && <div className="vg-storage-error" role="alert">
+                    <p>{cloudError}</p>
+                    {(!saveVideo || storage === 'error') && <button type="button"
+                      disabled={storage === 'saving'} onClick={() => changeSaveVideo(true)}
+                      className="vg-storage-upload"><HardDrive size={15}/> Keep locally instead</button>}
+                  </div>}
+                </div>
+              </div>
             )}
           </div>
-          {cloudUpload && (
-            <div className="mt-3 space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-600">
-                <span>{cloudUpload.status === 'uploaded' ? 'Saved in Backblaze B2' :
-                  cloudUpload.status === 'failed' ?
-                    (cloudUnavailable ? 'B2 storage is not configured' : 'B2 upload failed') :
-                    'Uploading to Backblaze B2'}</span>
-                {cloudUpload.status !== 'failed' &&
-                  <span className="font-semibold tabular-nums">{cloudUpload.progress}%</span>}
-              </div>
-              {cloudUpload.status !== 'failed' && <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-[#355a6b] transition-[width]"
-                  style={{ width: Math.max(0, Math.min(100, cloudUpload.progress)) + '%' }}/>
-              </div>}
-              {cloudUpload.status === 'uploaded' && <a href="/app/archive-videos"
-                className="inline-block text-xs font-semibold text-[#426b7d] hover:underline">View cloud video archive</a>}
-            </div>
-          )}
-          {cloudError && <div role="alert" className="mt-3 space-y-2">
-            <p className="text-xs leading-5 text-amber-800">{cloudError}</p>
-            {!saveVideo || storage === 'error' ? (
-              <button type="button" disabled={storage === 'saving'}
-                onClick={() => changeSaveVideo(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-[#cbdde1] bg-[#edf4f4] px-3 py-2 text-xs font-semibold text-[#325869] hover:bg-[#dcebed] disabled:opacity-50">
-                <Film size={14}/> Keep this original on my device
-              </button>
-            ) : storage === 'saving' ?
-              <p className="text-xs text-slate-600">Saving the original on this device…</p> :
-              storage === 'saved' ?
-                <p className="text-xs font-medium text-emerald-700">Original retained on this device.</p> :
-                <p className="text-xs text-slate-600">Check the local retention status above.</p>}
-          </div>}
+          <div className="vg-storage-notice">
+            <Info size={17} aria-hidden="true" />
+            <p><strong>About detection accuracy</strong>
+              Speed values are uncalibrated visual estimates—not measured road speeds.
+              Potential high-speed and stationary-vehicle events require human review.
+              Crash, helmet and signal violations cannot be verified by this vehicle model.
+            </p>
+          </div>
         </div>
-      )}
-      <p className="vg-footnote">
-        Sustained unusual speed estimates and stationary vehicles amid moving traffic automatically
-        create pending review candidates in Incidents. Crashes, helmets and signal violations
-        cannot be verified with this general vehicle model.
-        Speed values are uncalibrated visual estimates, not verified road speeds.
-        {storage === 'saving' ? ' Saving locally…' : storage === 'saved' ? ' Local copy retained.' : ''}
-      </p>
-      </div>
+      </details>
     </div>
   );
 }
