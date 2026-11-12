@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findFrameAtMediaTime, type LegacyFrameResult } from './legacyAnalysisArtifacts';
+import { decodeArtifact, findFrameAtMediaTime, type LegacyFrameResult } from './legacyAnalysisArtifacts';
 
 const frame = (media_time: number): LegacyFrameResult => ({
   frame_id: Math.round(media_time * 30),
@@ -29,6 +29,22 @@ describe('read-only legacy analysis artifact compatibility', () => {
     expect(findFrameAtMediaTime(frames, NaN)).toBeNull();
     expect(findFrameAtMediaTime(frames, Infinity)).toBeNull();
     expect(findFrameAtMediaTime(frames, 0, -1)).toBeNull();
+  });
+
+  it('loads older plain JSON even when storage labels it application/octet-stream', async () => {
+    const saved = {
+      version: '1', job_id: 'old-session', total_frames: 1,
+      frames: [frame(0)]
+    };
+    const blob = new Blob([JSON.stringify(saved)], { type: 'application/octet-stream' });
+    const restored = await decodeArtifact(blob);
+    expect(restored.job_id).toBe('old-session');
+    expect(restored.frames[0].media_time).toBe(0);
+  });
+
+  it('rejects corrupt archive payloads rather than displaying made-up frames', async () => {
+    await expect(decodeArtifact(new Blob(['{}'], { type: 'application/json' })))
+      .rejects.toThrow('no frame data');
   });
 
   it('retains the original frame type required by older archive entries', () => {
