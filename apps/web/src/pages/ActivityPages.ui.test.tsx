@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
@@ -7,7 +7,7 @@ import Settings from './Settings';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-function mount(element: React.ReactNode) {
+function mount(element: ReactNode) {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = createRoot(host);
