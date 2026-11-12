@@ -413,7 +413,7 @@ export function ActivityVideoLibrary() {
         {!localError && !localVideo && <p className="vg-empty-row">
           No original video retained on this device. Analysis records are still available below.
           To replay footage later, choose <strong>Keep this video on this device</strong> when analyzing.
-          <Link to="/app/analyze" className="ml-2 font-semibold text-[#2356a8] hover:underline">Open Live Analysis</Link>
+          <Link to="/app/analyze" className="ml-2 font-semibold text-[#426b7d] hover:underline">Open Live Analysis</Link>
         </p>}
         {localVideo && <div className="flex flex-wrap items-center gap-3 px-5 py-4">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
@@ -423,7 +423,7 @@ export function ActivityVideoLibrary() {
             <p className="truncate text-sm font-semibold text-slate-800">{localVideo.name}</p>
             <p className="mt-1 text-xs text-slate-500">Local only · {(localVideo.size/1048576).toFixed(1)} MB · Not uploaded to cloud</p>
           </div>
-          <Link to="/app/analyze" className="text-xs font-semibold text-[#2356a8] hover:underline">Resume analysis</Link>
+          <Link to="/app/analyze" className="text-xs font-semibold text-[#426b7d] hover:underline">Resume analysis</Link>
         </div>}
       </section>
       <section className="vg-panel overflow-hidden">
@@ -454,7 +454,7 @@ export function ActivityVideoLibrary() {
                       'Upload failed' : 'Not stored'}
                 </span>
                 <Link to={'/app/archive-videos?video='+encodeURIComponent(video.id)}
-                  className="text-xs font-semibold text-[#2356a8] hover:underline">Details</Link>
+                  className="text-xs font-semibold text-[#426b7d] hover:underline">Details</Link>
               </div>)}
           </div>}
       </section>
@@ -500,7 +500,7 @@ function IncidentRow({
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-semibold text-slate-800">{incidentLabel(event.type)}</p>
         <span className={automatic
-          ? 'rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700'
+          ? 'rounded-md bg-[#edf4f4] px-2 py-0.5 text-[10px] font-semibold text-[#426b7d]'
           : 'rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600'}>
           {automatic ? 'Automatic' : 'Manual'}
         </span>
@@ -521,7 +521,7 @@ function IncidentRow({
         {event.status === 'pending_review' ? <>
           <button type="button" onClick={() => onReview(run.id, event.id, 'approved')}
             aria-label={'Mark ' + incidentLabel(event.type) + ' as reviewed'}
-            className="rounded-md border border-blue-200 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50">
+            className="rounded-md border border-[#cbdde1] px-2 py-1 text-xs font-semibold text-[#426b7d] hover:bg-[#edf4f4]">
             Mark reviewed
           </button>
           <button type="button" onClick={() => onReview(run.id, event.id, 'rejected')}
