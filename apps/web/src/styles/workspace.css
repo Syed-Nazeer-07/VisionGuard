@@ -1,0 +1,358 @@
+/*
+ * VisionGuard workspace design system.
+ * Scoped to .vg-shell so the public landing/authentication experiences are
+ * independent. Purposeful contrast and hierarchy, never decorative overlays
+ * on interactive elements or heavy backdrop filters over the video player.
+ */
+.vg-shell {
+  --vg-ink: #1f2c33;
+  --vg-muted: #687980;
+  --vg-line: #e1e7e8;
+  --vg-accent: #426b7d;
+  --vg-canvas: #f5f7f6;
+  color: var(--vg-ink);
+  background: var(--vg-canvas);
+  font-family: Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+}
+.vg-shell .vg-side-bar {
+  isolation: isolate;
+  background: #1c262d;
+  color: #eaf0f0;
+  border-color: #303c43;
+  box-shadow: 7px 0 25px rgba(12, 26, 31, .06);
+}
+.vg-shell .vg-side-head { border-color: #334047; }
+.vg-shell .vg-side-logo { color: #f4f7f6; }
+.vg-shell .vg-brand-dot { color: #a8c5cf; }
+.vg-shell .vg-side-icon-button {
+  color: #aabac0;
+  border: 1px solid transparent;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.vg-shell .vg-side-icon-button:hover {
+  color: #fff;
+  border-color: #43545b;
+  background: #2b383f;
+}
+.vg-shell .vg-side-group-label {
+  color: #899ca5;
+  letter-spacing: .14em;
+  font-size: 10px;
+  font-weight: 700;
+}
+.vg-shell .vg-side-nav-item {
+  position: relative;
+  display: flex;
+  height: 43px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #aebfc5;
+  font-size: 12.8px;
+  font-weight: 540;
+  text-decoration: none;
+  transition: background .17s ease, color .17s ease, border-color .17s ease;
+}
+.vg-shell .vg-side-nav-item > svg { flex-shrink: 0; opacity: .88; }
+.vg-shell .vg-side-nav-item:hover {
+  color: #f5f7f7;
+  background: #2b3941;
+}
+.vg-shell .vg-side-nav-item:focus-visible,
+.vg-shell .vg-side-launch-link:focus-visible {
+  outline: 2px solid #d4e6ed;
+  outline-offset: 2px;
+}
+.vg-shell .vg-side-nav-item[aria-current="page"] {
+  background: #34444d;
+  border-color: #50616a;
+  color: #fff;
+  font-weight: 670;
+}
+.vg-shell .vg-side-nav-item[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  width: 3px;
+  height: 18px;
+  top: 50%;
+  left: -4px;
+  transform: translateY(-50%);
+  border-radius: 3px;
+  background: #b9d5df;
+  pointer-events: none;
+}
+.vg-shell .vg-side-launch-caption {
+  color: #8fa3ac;
+  letter-spacing: .14em;
+  font-weight: 680;
+  font-size: 10px;
+}
+.vg-shell .vg-side-launch-link {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid #aec5cd;
+  border-radius: 10px;
+  background: #e5eff0;
+  color: #20323b;
+  font-weight: 740;
+  font-size: 12.5px;
+  text-decoration: none;
+  transition: background .15s ease, border-color .15s ease;
+}
+.vg-shell .vg-side-launch-link:hover {
+  background: #fff;
+  border-color: #fff;
+}
+.vg-shell .vg-side-launch-link > span { flex: 1; }
+.vg-shell .vg-side-footer { border-color: #344249; }
+.vg-shell .vg-side-account {
+  background: #27343b;
+  border: 1px solid #3d4c53;
+  color: #eff4f4;
+}
+.vg-shell .vg-side-account-name { color: #f4f7f6; }
+.vg-shell .vg-side-account-role { color: #a4b5bb; }
+.vg-shell .vg-side-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #d9e7e8;
+  color: #273b45;
+  font-weight: 740;
+}
+.vg-shell .vg-side-settings { color: #b0c0c6; }
+.vg-shell .vg-side-settings:hover {
+  color: #fff;
+  background: #2b3941;
+}
+.vg-shell .vg-side-signout {
+  color: #bdccd1;
+  transition: background .15s, color .15s;
+}
+.vg-shell .vg-side-signout:hover { color: #fff; background: #394850; }
+.vg-shell .vg-mobile-bar {
+  border-color: #dce4e6;
+  background: #f9fbfa;
+  color: #23313a;
+}
+.vg-shell .vg-main-scroll {
+  background:
+    radial-gradient(ellipse 44% 30% at 95% 0%, rgba(180, 200, 203, .12), transparent 82%),
+    #f5f7f6;
+}
+.vg-shell .vg-page {
+  max-width: 1420px;
+  padding: clamp(20px, 2.4vw, 34px);
+  padding-bottom: 52px;
+}
+.vg-shell .vg-page-header {
+  padding-bottom: 21px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #e0e7e7;
+}
+.vg-shell .vg-page-header h1 {
+  font-size: clamp(25px, 2.5vw, 34px);
+  font-weight: 700;
+  color: #1f2c33;
+  letter-spacing: -.055em;
+}
+.vg-shell .vg-page-header p { color: #728087; }
+.vg-shell .vg-panel {
+  background: #fff;
+  border: 1px solid #dfe6e7;
+  border-radius: 17px;
+  box-shadow: 0 5px 24px rgba(25, 43, 49, .035), 0 1px 2px rgba(25, 43, 49, .02);
+}
+.vg-shell .vg-section-head {
+  min-height: 64px;
+  padding: 18px 21px;
+  border-bottom: 1px solid #e9eeee;
+}
+.vg-shell .vg-section-head h2 {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: #23333a;
+}
+.vg-shell .vg-section-head a {
+  color: #426d7e;
+  font-size: 12px;
+  font-weight: 680;
+}
+.vg-shell .vg-section-head a:hover { color: #264d5d; }
+.vg-shell .vg-stat {
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #dfe6e7;
+  border-radius: 16px;
+  min-height: 147px;
+  padding: 23px 22px 18px;
+  box-shadow: 0 4px 18px rgba(25, 43, 49, .032);
+  transition: border-color .17s ease, transform .17s ease;
+}
+.vg-shell .vg-stat:hover {
+  border-color: #bacbd1;
+  transform: translateY(-2px);
+}
+.vg-shell .vg-stat::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--vg-stat-accent, #7799a6);
+}
+.vg-shell .vg-stat:nth-child(2) { --vg-stat-accent: #91a5ae; }
+.vg-shell .vg-stat:nth-child(3) { --vg-stat-accent: #b2bbc0; }
+.vg-shell .vg-stat:nth-child(4) { --vg-stat-accent: #a6b8b2; }
+.vg-shell .vg-stat-label { color: #607079; font-size: 11.5px; font-weight: 650; letter-spacing: .015em; }
+.vg-shell .vg-stat-value {
+  font-size: clamp(29px, 3vw, 39px);
+  color: #203038;
+  font-weight: 730;
+  letter-spacing: -.06em;
+  margin-top: 14px;
+}
+.vg-shell .vg-stat-foot { color: #7b898e; font-size: 11px; line-height: 1.55; }
+.vg-shell .vg-field { border-color: #d0dbde; border-radius: 10px; color: #20313a; }
+.vg-shell .vg-field:focus { border-color: #618291; outline: 3px solid rgba(119, 160, 174, .15); }
+.vg-shell .vg-primary {
+  background: #24373f;
+  border-color: #24373f;
+  border-radius: 10px;
+  min-height: 41px;
+  font-weight: 670;
+  transition: background .15s ease, border-color .15s ease;
+}
+.vg-shell .vg-primary:hover { background: #3a535e; border-color: #3a535e; }
+.vg-shell .vg-secondary {
+  border-radius: 10px;
+  border-color: #d2dcdf;
+  min-height: 41px;
+  font-weight: 620;
+}
+.vg-shell .vg-secondary:hover { border-color: #a8bec8; background: #f2f7f7; }
+.vg-shell .vg-primary:focus-visible, .vg-shell .vg-secondary:focus-visible {
+  outline: 2px solid #6f909c;
+  outline-offset: 3px;
+}
+/* The real-data overview has a more editorial first impression, without
+   making up a live camera feed, a video thumbnail or simulated metrics. */
+.vg-shell .vg-dashboard-hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 26px;
+  padding: clamp(24px, 3.3vw, 42px);
+  margin-bottom: 22px;
+  border-radius: 19px;
+  border: 1px solid #344851;
+  background:
+    radial-gradient(circle at 96% 20%, rgba(166, 194, 202, .12), transparent 40%),
+    linear-gradient(115deg, #1d2b33, #293b43);
+  color: #f3f7f7;
+  overflow: hidden;
+}
+.vg-shell .vg-dashboard-hero::after {
+  content: "";
+  position: absolute;
+  right: -90px;
+  top: -120px;
+  width: 380px;
+  height: 380px;
+  border: 1px solid rgba(200, 219, 220, .14);
+  border-radius: 50%;
+  box-shadow: 0 0 0 75px rgba(200, 219, 220, .028), 0 0 0 150px rgba(200, 219, 220, .018);
+  pointer-events: none;
+}
+.vg-shell .vg-dashboard-hero > * { position: relative; z-index: 1; }
+.vg-shell .vg-dashboard-kicker {
+  color: #b5c9d0;
+  font-weight: 740;
+  font-size: 10px;
+  letter-spacing: .18em;
+}
+.vg-shell .vg-dashboard-hero h1 {
+  color: #f7f9f8;
+  font-weight: 680;
+  font-size: clamp(29px, 3.7vw, 48px);
+  line-height: 1.12;
+  letter-spacing: -.065em;
+  margin: 13px 0 12px;
+}
+.vg-shell .vg-dashboard-hero p {
+  color: #b7c8ce;
+  font-size: 13px;
+  line-height: 1.75;
+  margin: 0;
+  max-width: 470px;
+}
+.vg-shell .vg-dashboard-hero-side { display: flex; flex-direction: column; align-items: flex-start; gap: 11px; }
+.vg-shell .vg-dashboard-last-activity { color: #b8c8ce; font-size: 11px; }
+.vg-shell .vg-dashboard-action {
+  display: inline-flex;
+  min-height: 44px;
+  gap: 9px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 16px;
+  background: #e5eff0;
+  border: 1px solid #e5eff0;
+  border-radius: 10px;
+  color: #213039;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 750;
+  transition: background .15s, border-color .15s;
+}
+.vg-shell .vg-dashboard-action:hover { background: white; border-color: white; }
+.vg-shell .vg-dashboard-action:focus-visible { outline: 2px solid white; outline-offset: 3px; }
+.vg-shell .vg-metric-grid { margin-bottom: 22px; }
+.vg-shell .vg-run-row { transition: background .12s; }
+.vg-shell .vg-run-row:hover { background: #f7fafa; }
+.vg-shell .vg-run-icon {
+  background: #eaf0f1;
+  color: #4e7180;
+  border: 1px solid #dce6e8;
+}
+.vg-shell .vg-run-name { color: #26383f; font-size: 13px; font-weight: 690; }
+.vg-shell .vg-run-meta { color: #78878b; font-size: 11px; }
+.vg-shell .vg-run-count { color: #253942; font-size: 16px; font-weight: 720; }
+.vg-shell .vg-empty-state {
+  padding: 32px 25px;
+  color: #63757b;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.vg-shell .vg-empty-state strong { color: #34444c; display: block; margin-bottom: 4px; }
+.vg-shell .vg-empty-state a {
+  display: inline-flex;
+  margin-top: 14px;
+  color: #3c6c7d;
+  text-decoration: none;
+  font-weight: 730;
+}
+.vg-shell .vg-empty-state a:hover { text-decoration: underline; }
+@media (max-width: 900px) {
+  .vg-shell .vg-dashboard-hero { gap: 22px; }
+  .vg-shell .vg-dashboard-hero-side { align-items: flex-start; }
+}
+@media (max-width: 640px) {
+  .vg-shell .vg-page { padding: 18px 14px 34px; }
+  .vg-shell .vg-stat { min-height: 127px; padding: 19px 18px 15px; }
+  .vg-shell .vg-dashboard-hero { padding: 26px 21px; border-radius: 15px; }
+  .vg-shell .vg-dashboard-hero h1 { font-size: 33px; }
+  .vg-shell .vg-dashboard-hero::after { right: -240px; top: -180px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-shell .vg-stat, .vg-shell .vg-side-nav-item, .vg-shell .vg-dashboard-action {
+    transform: none;
+    transition: none;
+  }
+}
