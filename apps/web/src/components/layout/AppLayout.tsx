@@ -187,7 +187,9 @@ export function AppLayout() {
             </Suspense>}
           </div>
           {!activeAnalyze && <div className={MODERN_PATHS.has(location.pathname) ? '' : 'p-4 sm:p-6'}>
-            <Outlet/>
+            <Suspense fallback={<div role="status" className="vg-page text-sm text-[#687980]">Loading workspace page…</div>}>
+              <Outlet/>
+            </Suspense>
           </div>}
         </ErrorBoundary>
       </main>
