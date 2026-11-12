@@ -188,7 +188,7 @@ export function AppLayout() {
               <RealtimeAnalyze key={user?.id ?? 'signed-out'} active={activeAnalyze}/>
             </Suspense>}
           </div>
-          {!activeAnalyze && <div className={MODERN_PATHS.has(location.pathname) ? '' : 'p-4 sm:p-6'}>
+          {!activeAnalyze && <div className={MODERN_PATHS.has(location.pathname) ? '' : 'vg-admin-page p-4 sm:p-6'}>
             <Suspense fallback={<div role="status" className="vg-page text-sm text-[#687980]">Loading workspace page…</div>}>
               <Outlet/>
             </Suspense>
