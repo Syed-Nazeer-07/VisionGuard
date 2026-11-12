@@ -28,16 +28,16 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-[50vh] p-8 text-center bg-gray-900 rounded-xl border border-red-900/50 m-4">
-          <AlertTriangle className="w-12 h-12 text-red-500 mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Something went wrong</h2>
-          <p className="text-gray-400 mb-6 max-w-md">
-            An unexpected error occurred in this component. Our systems have logged the issue.
+        <div className="vg-error-panel mx-4 my-6 flex min-h-[50vh] flex-col items-center justify-center rounded-2xl border border-[#dfe5e6] bg-white p-8 text-center shadow-sm">
+          <AlertTriangle className="mb-4 h-10 w-10 text-[#aa735e]" aria-hidden="true" />
+          <h2 className="mb-2 text-xl font-bold tracking-[-.035em] text-[#26363c]">Something went wrong</h2>
+          <p className="mb-6 max-w-md text-sm leading-6 text-[#687b80]">
+            This section encountered an unexpected error. You can retry it or return to the workspace without changing your saved analysis data.
           </p>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap justify-center gap-3">
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg flex items-center gap-2 transition-colors"
+              className="vg-primary flex items-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />
               Try Again
@@ -45,13 +45,11 @@ export class ErrorBoundary extends Component<Props, State> {
             <button
               onClick={() => {
                 this.setState({ hasError: false, error: null });
-                if (window.history.length > 1) {
-                  window.history.back();
-                }
+                window.location.assign('/app');
               }}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors cursor-pointer"
+              className="vg-secondary"
             >
-              Go Back
+              Go to overview
             </button>
           </div>
         </div>
