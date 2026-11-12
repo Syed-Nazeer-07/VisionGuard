@@ -87,18 +87,17 @@ export default function Settings() {
 
   return <main className="vg-page">
     <header className="vg-page-header">
-      <div><h1>Settings</h1><p>Manage your account and workspace preferences</p></div>
+      <div><span className="vg-page-kicker">ACCOUNT / PREFERENCES</span><h1>Settings</h1><p>Manage your profile, workspace defaults and account security.</p></div>
     </header>
-    <div className="grid gap-5 lg:grid-cols-[245px_minmax(0,1fr)]">
+    <div className="vg-settings-layout grid gap-5 lg:grid-cols-[245px_minmax(0,1fr)]">
       <aside className="space-y-3">
-        <nav className="vg-panel space-y-1 p-2" aria-label="Settings sections">
+        <nav className="vg-panel vg-settings-navigation space-y-1 p-2" aria-label="Settings sections">
           {sectionButtons.map(item => {
             const Icon = item.icon;
             return <button key={item.id} type="button" onClick={() => {
               setSection(item.id);setFeedback(null);
-            }} aria-current={section===item.id?'page':undefined}
-              className={'flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors '+
-                (section===item.id?'bg-[#e9f1fb] text-[#1d4f8b]':'text-slate-600 hover:bg-slate-50')}>
+            }} aria-pressed={section === item.id}
+              className="vg-settings-tab flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors">
               <Icon size={18} className="shrink-0"/>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold">{item.label}</span>
@@ -107,10 +106,10 @@ export default function Settings() {
             </button>;
           })}
         </nav>
-        <section className="vg-panel space-y-2 p-4">
+        <section className="vg-panel vg-settings-account space-y-2 p-4">
           <p className="text-xs font-semibold text-slate-800">Account access</p>
           <p className="break-all text-xs text-slate-600">{user?.email || 'Not signed in'}</p>
-          <span className="inline-flex rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-[#2356a8]">
+          <span className="vg-metadata-chip inline-flex rounded-md px-2 py-1 text-[11px] font-semibold">
             {role || 'Viewer'}
           </span>
           <p className="text-[11px] leading-5 text-slate-500">Roles are assigned by an authorized administrator, not from this settings page.</p>
@@ -118,7 +117,11 @@ export default function Settings() {
       </aside>
       <section className="vg-panel h-fit overflow-hidden">
         <div className="vg-section-head">
-          <h2>{sectionButtons.find(item=>item.id===section)?.label}</h2>
+          <div>
+            <h2>{sectionButtons.find(item=>item.id===section)?.label}</h2>
+            <p className="vg-section-subtitle">{sectionButtons.find(item=>item.id===section)?.description}</p>
+          </div>
+          <span className="vg-metadata-chip">ACCOUNT SETTINGS</span>
         </div>
         <div className="space-y-5 p-5 sm:p-7">
           {section==='profile' && <>
@@ -154,7 +157,7 @@ export default function Settings() {
                 Original video files are retained on this device only when you choose that option in Live Analysis.
                 Backblaze B2 upload is a separate, explicit action.
               </p>
-              <Link to="/app/analyze" className="mt-3 inline-flex text-xs font-semibold text-[#2356a8] hover:underline">
+              <Link to="/app/analyze" className="mt-3 inline-flex text-xs font-semibold text-[#426b7d] hover:underline">
                 Open video storage controls
               </Link>
             </div>
@@ -173,7 +176,7 @@ export default function Settings() {
               <input id="settings-confirm-password" className="vg-field w-full" type="password"
                 autoComplete="new-password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/>
             </div>
-            <Link to="/forgot-password" className="text-xs font-semibold text-[#2356a8] hover:underline">
+            <Link to="/forgot-password" className="text-xs font-semibold text-[#426b7d] hover:underline">
               Use email password recovery instead
             </Link>
           </>}
@@ -183,7 +186,7 @@ export default function Settings() {
             {feedback.ok && <CheckCircle2 size={18} className="shrink-0"/>}
             <span>{feedback.text}</span>
           </div>}
-          <div className="flex justify-end border-t border-slate-100 pt-5">
+          <div className="vg-settings-save flex justify-end border-t border-slate-100 pt-5">
             <button type="button" onClick={() => void save()} disabled={saving || !user}
               className="vg-primary"><Save size={16}/>{saving?'Saving…':section==='security'?'Update password':'Save changes'}</button>
           </div>
