@@ -772,3 +772,118 @@
   text-decoration: none;
 }
 .vg-shell .vg-workspace-skip:focus { top: 13px; }
+
+/* Calm, bounded data collections inspired by modern SaaS workspaces.
+   A visible range + controllable page size keeps large histories scannable. */
+.vg-shell .vg-list-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 13px;
+  min-height: 64px;
+  padding: 12px 19px;
+  border-top: 1px solid #e7edef;
+  background: linear-gradient(180deg, #fcfdfd, #f8fafa);
+}
+.vg-shell .vg-list-pager-summary {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: #667b83;
+}
+.vg-shell .vg-list-pager-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.vg-shell .vg-list-size-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-right: 8px;
+  color: #687e85;
+  font-size: 11px;
+  font-weight: 620;
+}
+.vg-shell .vg-list-size-label select {
+  min-width: 62px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid #d3dfe1;
+  border-radius: 8px;
+  background: #fff;
+  color: #2b424a;
+  font-size: 12px;
+  font-weight: 680;
+  cursor: pointer;
+}
+.vg-shell .vg-list-page-count {
+  min-width: 48px;
+  text-align: center;
+  color: #47626e;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.vg-shell .vg-list-pager-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #d5e0e2;
+  border-radius: 9px;
+  background: white;
+  color: #35515c;
+  transition: background .16s, border-color .16s;
+}
+.vg-shell .vg-list-pager-actions button:not(:disabled):hover {
+  border-color: #8caab4;
+  background: #eaf2f3;
+}
+.vg-shell .vg-list-pager-actions button:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+}
+.vg-shell .vg-dashboard-hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+.vg-shell .vg-dashboard-alt-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 10px 15px;
+  border: 1px solid rgba(200, 222, 226, .3);
+  border-radius: 10px;
+  color: #eff7f7;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background .16s, border-color .16s;
+}
+.vg-shell .vg-dashboard-alt-action:hover {
+  background: rgba(223, 241, 244, .09);
+  border-color: rgba(220, 238, 241, .66);
+}
+.vg-shell .vg-dashboard-alt-action:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .vg-shell .vg-list-pager { align-items: stretch; padding: 14px 15px; }
+  .vg-shell .vg-list-pager-summary { width: 100%; }
+  .vg-shell .vg-list-pager-actions { justify-content: space-between; }
+  .vg-shell .vg-dashboard-hero-actions { width: 100%; }
+  .vg-shell .vg-dashboard-hero-actions a { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-shell .vg-list-pager-actions button,
+  .vg-shell .vg-dashboard-alt-action { transition: none; }
+}
