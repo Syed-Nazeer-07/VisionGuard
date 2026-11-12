@@ -625,17 +625,7 @@
   isolation: isolate;
 }
 .vg-shell .vg-analysis-details { min-width: 0; }
-/* Focus is a real toggle: keep telemetry + video, collapse storage controls. */
-.vg-shell .vg-analyze-focus { max-width: 1740px; }
-.vg-shell .vg-analyze-focus .vg-analysis-details { display: none; }
-.vg-shell .vg-analyze-focus .vg-analysis-player-card {
-  border-color: #243940;
-  box-shadow: 0 18px 52px rgba(20,41,49,.15);
-}
-.vg-shell .vg-analyze-focus .vg-analysis-header {
-  border-bottom-color: #d7e1e2;
-}
-.vg-shell .vg-analyze-focus .vg-analysis-telemetry-card { min-height: 117px; }
+/* Focus View theater styling is defined with the current player design below. */
 
 /* Accessible click targets, no pointer-events blocker over real buttons. */
 .vg-shell a[href] { cursor: pointer; }
@@ -1363,4 +1353,162 @@
   .vg-shell .vg-storage-switch,
   .vg-shell .vg-storage-switch::before,
   .vg-shell .vg-storage-manage > svg { transition: none; }
+}
+
+
+/* Functional Focus View: a true in-app theater, never a barely-visible width change.
+   Keep the existing video and tracking canvas mounted so streams, tracks and time survive. */
+.vg-shell .vg-focus-banner { display: none; }
+.vg-shell .vg-analyze-page.vg-analyze-focus {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  width: 100%;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 15px clamp(16px, 2.8vw, 46px) 26px;
+  background: #0d1920;
+  color: #eff8f8;
+  scrollbar-color: #4a646c #14232b;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-header {
+  position: sticky;
+  top: -15px;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  min-height: 57px;
+  margin-bottom: 10px;
+  padding: 11px 0 12px;
+  border-bottom: 1px solid #2f424b;
+  background: #0d1920;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-heading { display: none; }
+.vg-shell .vg-analyze-focus .vg-focus-banner {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #eef8f8;
+  font-size: 15px;
+  font-weight: 720;
+  letter-spacing: -.015em;
+}
+.vg-shell .vg-analyze-focus .vg-focus-banner-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 100%;
+  background: #71c7b1;
+}
+.vg-shell .vg-analyze-focus .vg-focus-banner small {
+  color: #9fb8bf;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-actions {
+  width: auto;
+  margin-left: auto;
+  justify-content: flex-end;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-actions > :not(.vg-analysis-focus-toggle) {
+  display: none;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-focus-toggle[aria-pressed="true"] {
+  display: inline-flex;
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 9px 15px;
+  border: 1px solid #658287;
+  border-radius: 10px;
+  background: #edf7f6;
+  color: #19343d;
+  font-size: 13px;
+  font-weight: 740;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-focus-toggle[aria-pressed="true"]:hover {
+  background: #fff;
+  border-color: #fff;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-player-card {
+  width: 100%;
+  border-color: #344851;
+  border-radius: 14px;
+  background: #101b22;
+  box-shadow: 0 15px 44px rgba(0, 0, 0, .24);
+}
+.vg-shell .vg-analyze-focus .vg-analysis-player-card .vg-player-frame:not(:fullscreen) {
+  width: 100%;
+  height: clamp(260px, calc(100dvh - 335px), 1100px);
+  max-height: 73dvh;
+  aspect-ratio: auto;
+  background: #060d13;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-stage-head {
+  min-height: 43px;
+  padding: 9px 17px;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-player-footer {
+  padding: 10px 16px;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-details {
+  display: none;
+}
+.vg-shell .vg-analyze-focus .vg-monitor {
+  border-color: #344951;
+  box-shadow: none;
+}
+.vg-shell .vg-analyze-focus .vg-monitor-heading {
+  padding: 10px 17px 7px;
+}
+.vg-shell .vg-analyze-focus .vg-monitor .vg-analysis-telemetry-card {
+  min-height: 97px;
+  padding: 12px 17px;
+}
+.vg-shell .vg-analyze-focus .vg-monitor .vg-telemetry-value {
+  margin-top: 6px;
+  font-size: clamp(26px, 2.8vw, 32px);
+}
+.vg-shell .vg-analyze-focus .vg-telemetry-detail {
+  margin-top: 5px;
+}
+.vg-shell .vg-analyze-focus .vg-player-frame:fullscreen {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  aspect-ratio: auto;
+}
+/* On smaller screens the video still leads, and Exit Focus never disappears. */
+@media (max-width: 760px) {
+  .vg-shell .vg-analyze-focus .vg-analysis-header {
+    flex-direction: row;
+    align-items: center;
+    top: -15px;
+  }
+  .vg-shell .vg-analyze-focus .vg-analysis-actions {
+    width: auto;
+    margin-left: auto;
+  }
+  .vg-shell .vg-analyze-focus .vg-focus-banner { font-size: 13px; }
+  .vg-shell .vg-analyze-focus .vg-focus-banner small { display: none; }
+  .vg-shell .vg-analyze-focus .vg-analysis-player-card .vg-player-frame:not(:fullscreen) {
+    height: clamp(260px, 53dvh, 660px);
+    max-height: 70dvh;
+  }
+}
+@media (max-width: 430px) {
+  .vg-shell .vg-analyze-page.vg-analyze-focus { padding-inline: 11px; }
+  .vg-shell .vg-analyze-focus .vg-analysis-focus-toggle[aria-pressed="true"] { padding-inline: 12px; }
+  .vg-shell .vg-analyze-focus .vg-focus-banner { gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-shell .vg-analyze-focus .vg-analysis-focus-toggle { transition: none; }
 }
