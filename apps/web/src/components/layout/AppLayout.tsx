@@ -9,6 +9,7 @@ import { ErrorBoundary } from '../ErrorBoundary';
 import { useAuthStore } from '../../store/auth';
 import { supabase } from '../../lib/supabase';
 import '../../styles/workspace.css';
+import '../../styles/workspace-theme.css';
 
 // Load the inference workspace only after requested, but preserve its state
 // once visited so playback and tab capture survive workspace navigation.
