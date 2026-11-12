@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { Link } from 'react-router-dom';
-import { Download, Film, Plus, X } from 'lucide-react';
+import { ArrowUpRight, Download, Film, Plus, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -37,25 +37,30 @@ function distribution(records: AnalysisRecord[]) {
     .sort((a,b) => b.count-a.count);
 }
 
-function RecentRuns({ records }: { records: AnalysisRecord[] }) {
+function RecentRuns({ records, loaded }: { records: AnalysisRecord[]; loaded: boolean }) {
   return <section className="vg-panel overflow-hidden">
     <div className="vg-section-head">
       <h2>Recent sessions</h2>
       <Link to="/app/videos">View history</Link>
     </div>
-    {!records.length ? <p className="vg-empty-row">No sessions on record.</p> :
+    {!loaded ? <p role="status" className="vg-empty-row">Loading saved sessions…</p> :
+      !records.length ? <div className="vg-empty-state">
+        <strong>Your session history starts here.</strong>
+        Analyze footage to build a searchable history of vehicle observations.
+        <Link to="/app/analyze">Start your first analysis</Link>
+      </div> :
     <div className="divide-y divide-slate-100">
       {records.slice(0, 7).map(run =>
-        <div key={run.id} className="flex items-center gap-4 px-5 py-3.5 text-sm">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+        <div key={run.id} className="vg-run-row flex items-center gap-4 px-5 py-3.5 text-sm">
+          <div className="vg-run-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
             <Film size={17}/>
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate font-medium text-slate-800">{run.sourceName}</div>
-            <div className="mt-1 text-xs text-slate-500">{niceDate(run.updatedAt)} · {run.sourceType === 'live-stream' ? 'Live source' : 'Video'}</div>
+            <div className="vg-run-name truncate">{run.sourceName}</div>
+            <div className="vg-run-meta mt-1">{niceDate(run.updatedAt)} · {run.sourceType === 'live-stream' ? 'Live source' : 'Video'}</div>
           </div>
           <div className="text-right">
-            <div className="font-semibold tabular-nums text-slate-900">{countRepeatedTracks(run)}</div>
+            <div className="vg-run-count tabular-nums">{countRepeatedTracks(run)}</div>
             <div className="text-[11px] text-slate-500">vehicles</div>
           </div>
         </div>)}
@@ -66,12 +71,27 @@ function RecentRuns({ records }: { records: AnalysisRecord[] }) {
 export function ActivityDashboard() {
   const { records, loaded, stats, error } = useRuns();
   const data = distribution(records);
+  const mostRecent = records.reduce((latest, run) => Math.max(latest, run.updatedAt), 0);
   return <main className="vg-page">
-    <header className="vg-page-header">
-      <div><h1>Overview</h1><p>Vehicle activity and analysis sessions</p></div>
+    <header className="vg-dashboard-hero">
+      <div>
+        <div className="vg-dashboard-kicker">VISIONGUARD / OPERATIONS OVERVIEW</div>
+        <h1>Every observation, in focus.</h1>
+        <p>Your traffic intelligence workspace. Revisit analyzed footage, review vehicle activity, and follow up on observations with context.</p>
+      </div>
+      <div className="vg-dashboard-hero-side">
+        <Link to="/app/analyze" className="vg-dashboard-action">
+          Start an analysis <ArrowUpRight size={17} aria-hidden="true"/>
+        </Link>
+        <span className="vg-dashboard-last-activity">
+          {!loaded ? 'Loading workspace…' : mostRecent > 0
+            ? 'Last analyzed · ' + niceDate(mostRecent)
+            : 'No analysis sessions saved yet'}
+        </span>
+      </div>
     </header>
     {error && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{error}</p>}
-    <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="vg-metric-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Stat label="Repeated vehicle tracks" number={stats.vehicles}
         note={stats.transientTrackCandidates + ' brief/noisy candidates excluded'}/>
       <Stat label="Analysis sessions" number={stats.runs} note="Videos and live sources"/>
@@ -81,14 +101,18 @@ export function ActivityDashboard() {
           (stats.reviewedFlags + stats.dismissedFlags) + ' handled'}/>
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
-      <RecentRuns records={records}/>
+      <RecentRuns records={records} loaded={loaded}/>
       <section className="vg-panel overflow-hidden">
         <div className="vg-section-head">
           <h2>Vehicle distribution</h2>
           <Link to="/app/analytics">Analytics</Link>
         </div>
         {!loaded ? <p className="vg-empty-row">Loading data…</p> :
-          !data.length ? <p className="vg-empty-row">No vehicle classifications available.</p> :
+          !data.length ? <div className="vg-empty-state">
+            <strong>Nothing to chart yet.</strong>
+            Detected vehicle classes will appear after you analyze a source.
+            <Link to="/app/analyze">Analyze footage</Link>
+          </div> :
           <div className="h-72 px-4 py-5">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data} layout="vertical" margin={{ left: 10, right: 12 }}>
@@ -96,7 +120,7 @@ export function ActivityDashboard() {
                 <XAxis type="number" allowDecimals={false} tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
                 <YAxis type="category" dataKey="name" width={90} tick={{fontSize:11,fill:'#475569'}} axisLine={false} tickLine={false}/>
                 <Tooltip cursor={{ fill: '#f5f8fb' }} />
-                <Bar dataKey="count" name="Vehicles" fill="#3866a4" radius={[0,4,4,0]}/>
+                <Bar dataKey="count" name="Vehicles" fill="#567e8e" radius={[0,5,5,0]}/>
               </BarChart>
             </ResponsiveContainer>
           </div>}
@@ -156,7 +180,7 @@ export function ActivityAnalytics() {
                 <XAxis dataKey="name" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
                 <YAxis allowDecimals={false} tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
                 <Tooltip cursor={{fill:'#f5f8fb'}}/>
-                <Bar dataKey="count" name="Vehicles" fill="#3866a4" radius={[4,4,0,0]}/>
+                <Bar dataKey="count" name="Vehicles" fill="#567e8e" radius={[5,5,0,0]}/>
               </BarChart>
             </ResponsiveContainer>
           </div> :
