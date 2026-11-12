@@ -72,7 +72,6 @@ if (-not (Test-VisionGuard)) {
     $cmd = 'title [VisionGuard] Web (Vite :3000) & cd /d "' + $ProjectRoot + '" & npm run dev'
     $process = Start-Process -FilePath "cmd.exe" -ArgumentList "/k $cmd" -WorkingDirectory $ProjectRoot -PassThru
     [PSCustomObject]@{
-        backend_pid = $null
         frontend_pid = $process.Id
         frontend_url = "http://localhost:3000"
         started_at = (Get-Date).ToString("o")
