@@ -1,1 +1,0 @@
-# VisionGuard API package

@@ -1,1 +1,0 @@
-# VisionGuard Backend Application

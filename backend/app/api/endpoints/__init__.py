@@ -1,1 +1,0 @@
-# VisionGuard Endpoints package
