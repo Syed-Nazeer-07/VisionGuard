@@ -167,7 +167,7 @@ export function AppLayout() {
         <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true"/>
         <span className="hidden text-xs font-semibold text-slate-700 sm:inline">Tab sharing</span>
         {!activeAnalyze && <Link to="/app/analyze"
-          className="rounded-md px-2 py-1 text-xs font-semibold text-[#2356a8] hover:bg-slate-100">View</Link>}
+          className="rounded-md px-2 py-1 text-xs font-semibold text-[#426b7d] hover:bg-slate-100">View</Link>}
         <button type="button" className="rounded-md px-2 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-50"
           onClick={() => window.dispatchEvent(new Event('visionguard:stop-tab-capture'))}>Stop</button>
       </div>}
