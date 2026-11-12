@@ -11,7 +11,7 @@ import { AnalysisLogPanel } from '../components/analysis/AnalysisLogPanel';
 import { computeVideoTransform, sourceTopLeftBoxToDisplay, sourcePointToDisplay } from '../pipeline/rendering/transform';
 import { drawBoundingBoxes } from '../pipeline/rendering/overlay';
 import type { TrackedObject, TrackState } from '../pipeline/types';
-import { loadArtifactFromStorage, findFrameAtMediaTime, type BackendArtifactPayload } from '../services/backendAnalysis';
+import { loadArtifactFromStorage, findFrameAtMediaTime, type LegacyAnalysisArtifact } from '../services/legacyAnalysisArtifacts';
 import type { Json } from '../types/supabase';
 
 function formatTime(seconds: number): string {
@@ -73,7 +73,7 @@ interface ReviewData {
   evidenceUrls: Record<string, { thumb: string; full: string }>;
   warnings: string[];
   identicalTo: VideoAsset | null;
-  artifact: BackendArtifactPayload | null;
+  artifact: LegacyAnalysisArtifact | null;
 }
 
 type Tab = 'timeline' | 'tracks' | 'evidence' | 'logs';
@@ -252,7 +252,7 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
       }
 
       // Load durable analysis artifact from storage
-      let artifact: BackendArtifactPayload | null = null;
+      let artifact: LegacyAnalysisArtifact | null = null;
       const meta = (typedAsset.metadata && typeof typedAsset.metadata === 'object' && !Array.isArray(typedAsset.metadata) ? typedAsset.metadata : {}) as Record<string, any>;
       let artifactPath = meta.artifact_storage_path;
       let artifactBucket = meta.artifact_bucket || 'videos';
@@ -362,7 +362,7 @@ export default function VideoReview({ videoId: propVideoId, onBack, showSidebar 
   // Replay persisted boxes + trajectories against the playhead. No inference is run here.
   const tracksRef = useRef<TrackRow[]>([]);
   tracksRef.current = tracks;
-  const artifactRef = useRef<BackendArtifactPayload | null>(null);
+  const artifactRef = useRef<LegacyAnalysisArtifact | null>(null);
   artifactRef.current = data?.artifact ?? null;
 
   // Keyboard shortcuts: Space for play/pause, Left/Right for frame stepping
