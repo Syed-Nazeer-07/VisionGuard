@@ -11,6 +11,7 @@
     "build:pages": "node scripts/ensure-native-build-binding.mjs && npm run build && node scripts/prepare-cloudflare-assets.mjs && node scripts/verify-pages-build.mjs",
     "test:deploy": "node --test scripts/verify-pages-build.test.mjs scripts/ensure-native-build-binding.test.mjs scripts/prepare-cloudflare-assets.test.mjs && node --test worker/index.test.mjs",
     "test:tracking-eval": "node --test scripts/evaluate-tracking.test.mjs",
-    "eval:tracking": "node scripts/evaluate-tracking.mjs"
+    "eval:tracking": "node scripts/evaluate-tracking.mjs",
+    "test:architecture": "node --test scripts/verify-browser-only.test.mjs"
   }
 }
