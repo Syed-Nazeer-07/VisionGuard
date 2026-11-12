@@ -356,3 +356,371 @@
     transition: none;
   }
 }
+
+
+
+/* ------------------------------------------------------------
+ * Workspace refinement: hierarchy, functional states and
+ * responsive density. Scoped; no inference-canvas overlays.
+ * ------------------------------------------------------------ */
+.vg-shell .vg-page-kicker {
+  display: block;
+  margin: 0 0 11px;
+  color: #728992;
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: .16em;
+  line-height: 1.4;
+}
+.vg-shell .vg-section-subtitle {
+  margin: 5px 0 0;
+  font-size: 11px;
+  font-weight: 450;
+  color: #859398;
+  line-height: 1.5;
+}
+.vg-shell .vg-metadata-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 4px 10px;
+  border: 1px solid #dce5e7;
+  border-radius: 7px;
+  background: #f2f6f6;
+  color: #4e6975;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .025em;
+  white-space: nowrap;
+}
+.vg-shell .vg-page-header { align-items: center; }
+.vg-shell .vg-page-header p { line-height: 1.6; }
+.vg-shell .vg-data-row { transition: background-color .16s ease; }
+.vg-shell .vg-data-row:hover { background: #f5f9f9; }
+.vg-shell .vg-empty-state { min-height: 155px; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; }
+.vg-shell .vg-empty-state > strong { font-size: 14px; }
+.vg-shell .vg-empty-state a { min-height: 30px; align-items: center; }
+.vg-shell .vg-page-header select { min-width: 158px; }
+
+/* Interactive date filters — actual time range state, not static chips. */
+.vg-shell .vg-range-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px;
+  border: 1px solid #dce5e6;
+  border-radius: 11px;
+  background: #eaf0f0;
+}
+.vg-shell .vg-range-option {
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #667980;
+  font-size: 12px;
+  font-weight: 670;
+  white-space: nowrap;
+  transition: background-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+.vg-shell .vg-range-option:hover { color: #22343c; background: rgba(255,255,255,.52); }
+.vg-shell .vg-range-option[aria-pressed="true"] {
+  color: #22353e;
+  background: white;
+  box-shadow: 0 1px 4px rgba(33,53,58,.12);
+}
+.vg-shell .vg-range-option:focus-visible,
+.vg-shell .vg-filter-pill:focus-visible,
+.vg-shell .vg-analysis-focus-toggle:focus-visible,
+.vg-shell .vg-settings-tab:focus-visible {
+  outline: 2px solid #7097a5;
+  outline-offset: 2px;
+}
+
+/* Search is intentionally a standard native input, with no expensive JS. */
+.vg-shell .vg-search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(100%,330px);
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #d3dfe2;
+  border-radius: 10px;
+  background: white;
+  color: #70858c;
+  transition: border-color .15s, box-shadow .15s;
+}
+.vg-shell .vg-search-field:focus-within {
+  border-color: #7e9ca8;
+  box-shadow: 0 0 0 3px rgba(95,139,153,.12);
+}
+.vg-shell .vg-search-field > input {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: #26383e;
+  font-size: 12.5px;
+}
+.vg-shell .vg-search-field > input:focus { outline: 0; }
+.vg-shell .vg-search-field > input::placeholder { color: #93a0a5; }
+.vg-shell .vg-search-field > input::-webkit-search-cancel-button { cursor: pointer; }
+
+/* Human-review filters: quiet until selected, unlike red alert cards. */
+.vg-shell .vg-incident-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  margin: -2px 0 22px;
+}
+.vg-shell .vg-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 7px 12px;
+  border: 1px solid #dce4e5;
+  border-radius: 9px;
+  background: white;
+  color: #64777e;
+  font-size: 12px;
+  font-weight: 650;
+  transition: background-color .15s, color .15s, border-color .15s;
+}
+.vg-shell .vg-filter-pill:hover { border-color: #aebfc4; background: #f5f9f8; }
+.vg-shell .vg-filter-pill[aria-pressed="true"] {
+  background: #233841;
+  border-color: #233841;
+  color: white;
+}
+.vg-shell .vg-filter-pill > b {
+  min-width: 22px;
+  height: 23px;
+  padding: 3px 6px;
+  text-align: center;
+  border-radius: 6px;
+  background: #edf2f3;
+  color: #586e77;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 730;
+}
+.vg-shell .vg-filter-pill[aria-pressed="true"] > b {
+  background: #3f5963;
+  color: #f3f7f7;
+}
+
+/* Settings: consistent active navigation, focus, and save surface. */
+.vg-shell .vg-settings-navigation { padding: 8px; }
+.vg-shell .vg-settings-tab { min-height: 61px; color: #677c84; }
+.vg-shell .vg-settings-tab:hover { background: #f3f7f7; color: #263b44; }
+.vg-shell .vg-settings-tab[aria-pressed="true"] {
+  color: #26434e;
+  background: #e9f1f2;
+  box-shadow: inset 3px 0 0 #7b9ba8;
+}
+.vg-shell .vg-settings-tab > svg { color: #78929b; }
+.vg-shell .vg-settings-account { background: #fefefe; }
+.vg-shell .vg-settings-save {
+  position: sticky;
+  bottom: 0;
+  background: white;
+  padding-top: 17px;
+  z-index: 2;
+}
+.vg-shell .vg-settings-save > button { min-width: 148px; }
+
+/* The actual video remains the hero. Status never covers live-frame pixels. */
+.vg-shell .vg-analyze-page {
+  max-width: 1560px;
+}
+.vg-shell .vg-analysis-header {
+  gap: 16px;
+  align-items: flex-end;
+}
+.vg-shell .vg-analysis-heading {
+  min-width: 240px;
+}
+.vg-shell .vg-analysis-actions {
+  align-items: center;
+}
+.vg-shell .vg-analysis-actions > button:not(:disabled),
+.vg-shell .vg-analysis-actions > a {
+  min-height: 41px;
+}
+.vg-shell .vg-analysis-actions > button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+.vg-shell .vg-analysis-focus-toggle {
+  display: inline-flex;
+  min-height: 41px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #ccd9db;
+  border-radius: 10px;
+  background: #eaf0f1;
+  color: #385767;
+  font-size: 12px;
+  font-weight: 690;
+  transition: background .15s, border-color .15s;
+}
+.vg-shell .vg-analysis-focus-toggle:hover { background: #dbe8eb; border-color: #a9c3c9; }
+.vg-shell .vg-analysis-focus-toggle[aria-pressed="true"] { background: #243941; color: #fff; border-color: #243941; }
+.vg-shell .vg-analysis-player-card {
+  border-color: #34434c;
+  background: #101a21;
+  box-shadow: 0 18px 48px rgba(21,36,41,.13);
+}
+.vg-shell .vg-analysis-stage-head {
+  min-height: 47px;
+  padding: 10px 17px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  background: #1d2931;
+  color: #c0d1d7;
+  border-bottom: 1px solid #33424b;
+}
+.vg-shell .vg-analysis-stage-head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: .12em;
+}
+.vg-shell .vg-analysis-engine-state {
+  color: #a8b9c0;
+  font-size: 11px !important;
+  font-weight: 620 !important;
+  letter-spacing: .02em !important;
+}
+.vg-shell .vg-analysis-engine-state i {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 100%;
+  background: #8c9fa7;
+}
+.vg-shell .vg-analysis-engine-state i[data-state="ready"] { background: #88c0a6; }
+.vg-shell .vg-analysis-engine-state i[data-state="loading"] { background: #dec391; }
+.vg-shell .vg-analysis-engine-state i[data-state="error"] { background: #d28d80; }
+.vg-shell .vg-analysis-player-card .vg-player-frame {
+  background: #091118;
+  isolation: isolate;
+}
+.vg-shell .vg-analysis-telemetry {
+  gap: 12px;
+}
+.vg-shell .vg-analysis-telemetry-card {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 133px;
+  padding: 20px 21px;
+  border-color: #d9e3e4;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 2px 14px rgba(32,49,55,.025);
+}
+.vg-shell .vg-analysis-telemetry-card::before {
+  position: absolute;
+  content: "";
+  left: 0;
+  top: 19px;
+  height: 30px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #8aadb7;
+  pointer-events: none;
+}
+.vg-shell .vg-analysis-telemetry-card:nth-child(2)::before { background: #b0c0c4; }
+.vg-shell .vg-analysis-telemetry-card:nth-child(3)::before { background: #8ea99e; }
+.vg-shell .vg-analysis-telemetry-card > div:nth-child(2) {
+  font-size: clamp(24px, 2.5vw, 32px);
+  letter-spacing: -.05em;
+  color: #283b43;
+}
+.vg-shell .vg-analysis-retain,
+.vg-shell .vg-analysis-cloud {
+  border: 1px solid #dce5e6;
+  border-radius: 13px;
+  box-shadow: 0 2px 11px rgba(25,45,51,.022);
+}
+.vg-shell .vg-analysis-retain { background: white; }
+.vg-shell .vg-analysis-details { min-width: 0; }
+/* Focus is a real toggle: keep telemetry + video, collapse storage controls. */
+.vg-shell .vg-analyze-focus { max-width: 1740px; }
+.vg-shell .vg-analyze-focus .vg-analysis-details { display: none; }
+.vg-shell .vg-analyze-focus .vg-analysis-player-card {
+  border-color: #243940;
+  box-shadow: 0 18px 52px rgba(20,41,49,.15);
+}
+.vg-shell .vg-analyze-focus .vg-analysis-header {
+  border-bottom-color: #d7e1e2;
+}
+.vg-shell .vg-analyze-focus .vg-analysis-telemetry-card { min-height: 117px; }
+
+/* Accessible click targets, no pointer-events blocker over real buttons. */
+.vg-shell a[href] { cursor: pointer; }
+.vg-shell a[href]:focus-visible,
+.vg-shell button:focus-visible,
+.vg-shell input:focus-visible,
+.vg-shell select:focus-visible {
+  outline: 2px solid #6490a0;
+  outline-offset: 2px;
+}
+.vg-shell .vg-player-frame canvas,
+.vg-shell .vg-dashboard-hero::after,
+.vg-shell .vg-analysis-telemetry-card::before {
+  pointer-events: none;
+}
+@media (max-width: 1120px) {
+  .vg-shell .vg-analysis-header { align-items: flex-start; }
+  .vg-shell .vg-analysis-actions { justify-content: flex-start; }
+}
+@media (max-width: 760px) {
+  .vg-shell .vg-page-header { align-items: flex-start; }
+  .vg-shell .vg-search-field { width: 100%; }
+  .vg-shell .vg-history-heading > div:first-child { width: 100%; }
+  .vg-shell .vg-range-control { width: 100%; }
+  .vg-shell .vg-range-option { flex: 1; padding-inline: 7px; }
+  .vg-shell .vg-analysis-actions { width: 100%; }
+  .vg-shell .vg-analysis-actions button, .vg-shell .vg-analysis-actions a { font-size: 11px; }
+  .vg-shell .vg-incident-filters { gap: 6px; }
+}
+@media (max-width: 470px) {
+  .vg-shell .vg-filter-pill { font-size: 11px; gap: 5px; padding: 7px 9px; }
+  .vg-shell .vg-filter-pill > b { min-width: 20px; }
+  .vg-shell .vg-section-head { padding: 15px; }
+  .vg-shell .vg-metadata-chip { font-size: 9px; }
+  .vg-shell .vg-analysis-telemetry-card { min-height: 116px; padding: 17px; }
+  .vg-shell .vg-analysis-stage-head { padding-inline: 12px; }
+  .vg-shell .vg-analysis-stage-head > span:first-child { font-size: 9px; }
+  .vg-shell .vg-analysis-heading { min-width: 0; }
+  .vg-shell .vg-settings-save > button { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vg-shell .vg-data-row,
+  .vg-shell .vg-filter-pill,
+  .vg-shell .vg-analysis-focus-toggle,
+  .vg-shell .vg-range-option,
+  .vg-shell .vg-settings-tab {
+    transition: none;
+  }
+}
