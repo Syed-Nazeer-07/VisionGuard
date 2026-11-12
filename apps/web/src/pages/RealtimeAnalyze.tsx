@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, Camera, ExternalLink, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, Upload, X } from 'lucide-react';
+import { Activity, AlertTriangle, Camera, ExternalLink, Film, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, ScanLine, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
@@ -90,6 +90,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const urlRef = useRef<string | null>(null);
@@ -1437,13 +1438,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   }, []);
 
   return (
-    <div className="vg-page space-y-5">
-      <header className="vg-page-header">
-        <div>
+    <div className={'vg-page vg-analyze-page space-y-5' + (focusMode ? ' vg-analyze-focus' : '')}>
+      <header className="vg-page-header vg-analysis-header">
+        <div className="vg-analysis-heading">
+          <span className="vg-page-kicker">VIDEO INTELLIGENCE / WORKSPACE</span>
           <h1>Live analysis</h1>
-          <p>Analyze video, camera or a YouTube tab — no link to paste</p>
+          <p>Inspect footage using on-device detection and visual tracking.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="vg-analysis-actions flex flex-wrap gap-2">
           <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
             onChange={event => {
               const file = event.target.files?.[0];
@@ -1484,7 +1486,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               Download QA trace ({qualityFramesRef.current.length})
             </button>}
           {url && !webcamActive && !tabCaptureActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"><X size={18} /></button>}
+            className="vg-secondary" title="Close current video"><X size={18} /></button>}
+          <button type="button" onClick={() => setFocusMode(value => !value)}
+            aria-pressed={focusMode} aria-controls="vg-analysis-details"
+            className={'vg-analysis-focus-toggle ' + (focusMode ? 'vg-analysis-focus-active' : '')}
+            title={focusMode ? 'Show storage and session tools' : 'Focus on the video and live telemetry'}>
+            {focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            {focusMode ? 'Exit focus' : 'Focus view'}
+          </button>
         </div>
       </header>
 
@@ -1522,7 +1531,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
       </div>}
 
-      <section className="vg-panel overflow-hidden">
+      <section className="vg-panel vg-analysis-player-card overflow-hidden" aria-label="Video analysis player">
+        <div className="vg-analysis-stage-head">
+          <span><ScanLine size={15} aria-hidden="true" /> ANALYSIS VIEWPORT</span>
+          <span className="vg-analysis-engine-state">
+            <i aria-hidden="true" data-state={detector} />
+            {detector === 'ready' ? 'Detector ready' :
+              detector === 'loading' ? 'Loading YOLO11s' :
+              detector === 'error' ? 'Detector unavailable' : 'Awaiting inference'}
+          </span>
+        </div>
         <div ref={playerRef} className="vg-player-frame relative aspect-video w-full overflow-hidden bg-[#080e20]">
           {url ? (
             <>
@@ -1661,7 +1679,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         )}
       </section>
 
-      {!webcamActive && !tabCaptureActive && !cloudPlaybackActive && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+      <div id="vg-analysis-details" className="vg-analysis-details space-y-4">
+      {!webcamActive && !tabCaptureActive && !cloudPlaybackActive && <label className="vg-analysis-retain flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
         <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
           disabled={!ownerId} className="h-4 w-4 accent-[#426b7d]" />
         <span className="flex-1"><strong>Keep this video on this device</strong>
@@ -1674,7 +1693,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         </span>
       </label>}
       {!webcamActive && !tabCaptureActive && currentFileRef.current && (
-        <div className="vg-panel p-4">
+        <div className="vg-panel vg-analysis-cloud p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-slate-900">
@@ -1734,13 +1753,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </div>}
         </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="vg-analysis-telemetry grid gap-3 sm:grid-cols-3" aria-label="Live analysis telemetry">
+        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center gap-2 text-xs font-medium text-slate-500"><Activity size={14} /> Vehicles in frame</div>
           <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{visibleCount}</div>
           <div className="text-xs text-slate-500">Stable tracks and high-confidence new vehicles</div>
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
           <div className="text-xs font-medium text-slate-500">YOLO11s inference</div>
           <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">
             {inferenceMs === null ? '—' : inferenceMs + ' ms'}
@@ -1748,7 +1767,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <div className="text-xs text-slate-500">{provider ? provider.toUpperCase() : 'Preparing'} · {analyzedFrames} sampled frames · {detectionCount ?? '—'} raw vehicles</div>
           {provider === 'wasm' && fallbackReason && <div className="mt-1 text-[11px] leading-4 text-amber-700" title={fallbackReason}>WebGPU unavailable; using slower CPU/WASM</div>}
         </div>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="vg-analysis-telemetry-card rounded-xl border border-slate-200 bg-white p-4">
           <div className="text-xs font-medium text-slate-500">Uncalibrated speed proxy · km/h*</div>
           <div className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{liveMaxSpeed === null ? '— km/h' : liveMaxSpeed === 0 ? '0 km/h' : '≈' + Math.round(liveMaxSpeed) + ' km/h'}</div>
           <div className="mt-1 text-xs leading-5 text-slate-500">Fastest visible optical estimate. *Not a measured road speed; camera/road calibration is required.</div>
@@ -1762,6 +1781,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         Speed values are uncalibrated visual estimates, not verified road speeds.
         {storage === 'saving' ? ' Saving locally…' : storage === 'saved' ? ' Local copy retained.' : ''}
       </p>
+      </div>
     </div>
   );
 }
