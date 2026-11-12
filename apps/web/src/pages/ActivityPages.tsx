@@ -349,6 +349,12 @@ export function ActivityVideoLibrary() {
   const [localError, setLocalError] = useState('');
   const [b2Loading, setB2Loading] = useState(false);
   const [b2Error, setB2Error] = useState('');
+  const [search, setSearch] = useState('');
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const visibleVideos = normalizedSearch ? b2Videos.filter(video =>
+    video.filename.toLocaleLowerCase().includes(normalizedSearch)) : b2Videos;
+  const visibleSessions = normalizedSearch ? records.filter(run =>
+    run.sourceName.toLocaleLowerCase().includes(normalizedSearch)) : records;
   useEffect(() => {
     if (!userId) { setLocalVideo(null); setLocalError(''); return; }
     let alive = true;
@@ -382,15 +388,20 @@ export function ActivityVideoLibrary() {
     })().catch(e => { if(alive) {setB2Loading(false);setB2Error(String(e));} });
     return () => { alive = false; };
   },[userId]);
-  return <main className="vg-page">
-    <header className="vg-page-header">
-      <div><h1>History</h1><p>Analyzed sessions and retained footage</p></div>
+  return <main className="vg-page vg-data-page">
+    <header className="vg-page-header vg-history-heading">
+      <div><span className="vg-page-kicker">LIBRARY / SAVED ACTIVITY</span><h1>History</h1><p>Sessions, original files and optional cloud backups—in one view.</p></div>
+      <div className="vg-search-field">
+        <Search size={17} aria-hidden="true" />
+        <input type="search" value={search} onChange={event => setSearch(event.target.value)}
+          placeholder="Search videos or sessions" aria-label="Search saved videos and sessions" />
+      </div>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     <div className="space-y-5">
       <section className="vg-panel overflow-hidden">
         <div className="vg-section-head">
-          <h2>On this device</h2>
+          <div><h2>On this device</h2><p className="vg-section-subtitle">Most recently retained original</p></div>
           <Link to="/app/analyze">Video analysis</Link>
         </div>
         {localError && <p role="alert" className="vg-empty-row text-amber-700">{localError}</p>}
@@ -412,15 +423,15 @@ export function ActivityVideoLibrary() {
       </section>
       <section className="vg-panel overflow-hidden">
         <div className="vg-section-head">
-          <h2>Video storage · Backblaze B2</h2>
+          <div><h2>Video storage · Backblaze B2</h2><p className="vg-section-subtitle">Originals uploaded with your permission</p></div>
           <Link to="/app/archive-videos">Manage storage</Link>
         </div>
         {b2Error && <p role="alert" className="p-4 text-sm text-amber-700">{b2Error}</p>}
         {b2Loading ? <p className="vg-empty-row">Loading video records…</p> :
-          !b2Videos.length ? <p className="vg-empty-row">No videos stored in B2.</p> :
+          !visibleVideos.length ? <div className="vg-empty-state"><strong>{normalizedSearch ? 'No matching cloud videos.' : 'No videos stored in B2.'}</strong>{normalizedSearch ? 'Try a different filename.' : 'Cloud backup is optional and requires an explicit upload.'}</div> :
           <div className="divide-y divide-slate-100">
-            {b2Videos.map(video =>
-              <div key={video.id} className="flex flex-wrap items-center gap-4 px-5 py-3.5">
+            {visibleVideos.map(video =>
+              <div key={video.id} className="vg-data-row flex flex-wrap items-center gap-4 px-5 py-3.5">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                   <Film size={17}/>
                 </div>
@@ -443,12 +454,12 @@ export function ActivityVideoLibrary() {
           </div>}
       </section>
       <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><h2>Analysis sessions</h2><span className="text-xs text-slate-500">{records.length} total</span></div>
+        <div className="vg-section-head"><div><h2>Analysis sessions</h2><p className="vg-section-subtitle">Saved observations, separate from original footage</p></div><span className="vg-metadata-chip">{visibleSessions.length} of {records.length}</span></div>
         {!loaded ? <p className="vg-empty-row">Loading session history…</p> :
-          !records.length ? <p className="vg-empty-row">No sessions on record.</p> :
+          !visibleSessions.length ? <div className="vg-empty-state"><strong>{normalizedSearch ? 'No matching sessions.' : 'No saved sessions yet.'}</strong>{normalizedSearch ? 'Try another search term.' : 'Your analysis history will appear after processing footage.'}<Link to="/app/analyze">Open Live Analysis</Link></div> :
           <div className="divide-y divide-slate-100">
-            {records.map(run =>
-              <div key={run.id} className="flex items-center gap-4 px-5 py-3.5 text-sm">
+            {visibleSessions.map(run =>
+              <div key={run.id} className="vg-data-row flex items-center gap-4 px-5 py-3.5 text-sm">
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-slate-800">{run.sourceName}</div>
                   <div className="mt-1 text-xs text-slate-500">{niceDate(run.createdAt)} · {run.sourceType==='live-stream'?'Live source':'Video'}</div>
