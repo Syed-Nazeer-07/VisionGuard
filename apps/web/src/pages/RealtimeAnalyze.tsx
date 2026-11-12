@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Activity, AlertTriangle, Camera, Cloud, Cpu, ExternalLink, Film, Gauge, HardDrive, Info, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, ScanLine, Upload, X } from 'lucide-react';
+import { Activity, AlertTriangle, Camera, ChevronDown, Cloud, Cpu, ExternalLink, Film, Gauge, HardDrive, Info, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, ScanLine, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
@@ -94,7 +94,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const urlRef = useRef<string | null>(null);
-  const loadStartRef = useRef(0);
   const restoreTimeRef = useRef(0);
   const uploadGenerationRef = useRef(0);
   const activeRef = useRef(active);
@@ -129,7 +128,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   const [url, setUrl] = useState('');
   const [filename, setFilename] = useState('');
-  const [openedSeconds, setOpenedSeconds] = useState<number | null>(null);
   const [readyVideo, setReadyVideo] = useState(false);
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
@@ -384,10 +382,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     const nextUrl = URL.createObjectURL(file);
     urlRef.current = nextUrl;
-    loadStartRef.current = performance.now();
     restoreTimeRef.current = savedPosition;
     setFilename(name);
-    setOpenedSeconds(null);
     setReadyVideo(false);
     setDuration(0);
     setPosition(0);
@@ -480,13 +476,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setFilename('Shared browser tab · live');
       setReadyVideo(false);
       setPlaying(false);
-      setOpenedSeconds(null);
-      setStreamHealth('connecting');
+        setStreamHealth('connecting');
       setStorage('not-saved');
       setDuration(0);
       setPosition(0);
-      loadStartRef.current = performance.now();
-      if (ownerId) {
+        if (ownerId) {
         activeRunRef.current = 'tab:' + crypto.randomUUID();
         activityLedger.begin(ownerId, activeRunRef.current, 'Shared browser tab', 'live-stream');
       } else activeRunRef.current = '';
@@ -563,13 +557,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setFilename('Browser camera · live');
       setReadyVideo(false);
       setPlaying(false);
-      setOpenedSeconds(null);
-      setStreamHealth('connecting');
+        setStreamHealth('connecting');
       setStorage('not-saved');
       setDuration(0);
       setPosition(0);
-      loadStartRef.current = performance.now();
-      if (ownerId) {
+        if (ownerId) {
         activeRunRef.current = 'camera:' + new Date().toISOString() + ':' + request;
         activityLedger.begin(ownerId, activeRunRef.current, 'Browser camera', 'live-stream');
       } else activeRunRef.current = '';
@@ -718,15 +710,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setUnavailableOriginal(null);
       setStorage('not-saved');
       setFilename(data.filename);
-      setOpenedSeconds(null);
-      setReadyVideo(false);
+        setReadyVideo(false);
       setPlaying(false);
       setDuration(0);
       setPosition(0);
       setAnalyzedFrames(0);
       setDetectionCount(null);
-      loadStartRef.current = performance.now();
-      setUrl(videoUrl);
+        setUrl(videoUrl);
       activeRunRef.current = 'b2:' + crypto.randomUUID();
       activityLedger.begin(ownerId, activeRunRef.current, data.filename, 'uploaded-video');
     })().catch(error => {
@@ -1557,7 +1547,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   setReadyVideo(true);
                   setError(previous => previous.startsWith('Sharing is approved, but no video frames')
                     ? '' : previous);
-                  setOpenedSeconds((performance.now() - loadStartRef.current) / 1000);
                   firstFrameResolveRef.current?.();
                   firstFrameResolveRef.current = null;
                   if (restoreTimeRef.current > 0) {
@@ -1738,7 +1727,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <span className="vg-storage-summary-meta">
             {!webcamActive && !tabCaptureActive && !cloudPlaybackActive &&
               <span className="vg-storage-mini-status">{saveVideo ? 'Local retention on' : 'Local retention off'}</span>}
-            <span className="vg-storage-manage">Manage <span aria-hidden="true">⌄</span></span>
+            {cloudError && <span className="vg-storage-mini-status vg-storage-mini-error" role="alert">Cloud upload issue</span>}
+            <span className="vg-storage-manage">Manage <ChevronDown size={16} aria-hidden="true"/></span>
           </span>
         </summary>
         <div className="vg-storage-content">
