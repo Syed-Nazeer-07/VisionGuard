@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, BarChart3, Clock3, FileKey, FileText, FolderSearch,
   LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ArrowUpRight,
   Settings, UserCog, Users, X
 } from 'lucide-react';
-import RealtimeAnalyze from '../../pages/RealtimeAnalyze';
+// Load the inference workspace only after it is requested; keep it mounted
+// thereafter so tab sharing and playback survive navigation.
+const RealtimeAnalyze = lazy(() => import('../../pages/RealtimeAnalyze'));
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useAuthStore } from '../../store/auth';
 import { supabase } from '../../lib/supabase';
@@ -42,12 +44,14 @@ export function AppLayout() {
   const [tabSharing, setTabSharing] = useState(false);
   const currentRole = role || 'Viewer';
   const activeAnalyze = location.pathname === '/app/analyze';
+  const [analysisMounted, setAnalysisMounted] = useState(activeAnalyze);
   const page = NAV.find(item => item.to === location.pathname);
   const title = page?.label || (location.pathname.includes('settings') ? 'Settings' : 'Workspace');
   const displayName = (user?.user_metadata?.full_name as string | undefined) || user?.email || 'Member';
   const initial = displayName.trim().slice(0, 1).toUpperCase() || 'U';
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+  useEffect(() => { if (activeAnalyze) setAnalysisMounted(true); }, [activeAnalyze]);
   useEffect(() => {
     const onStatus = (event: Event) => {
       const detail = (event as CustomEvent<{active: boolean}>).detail;
@@ -174,7 +178,11 @@ export function AppLayout() {
             {/* Remount on account change so video, capture permissions, workers,
                 and in-memory track IDs never carry into another user's session.
                 The old component's cleanup does not delete retained files. */}
-            <RealtimeAnalyze key={user?.id ?? 'signed-out'} active={activeAnalyze}/>
+            {analysisMounted && <Suspense fallback={activeAnalyze
+              ? <div role="status" className="vg-page py-8 text-sm text-slate-600">Preparing the analysis workspace…</div>
+              : null}>
+              <RealtimeAnalyze key={user?.id ?? 'signed-out'} active={activeAnalyze}/>
+            </Suspense>}
           </div>
           {!activeAnalyze && <div className={MODERN_PATHS.has(location.pathname) ? '' : 'p-4 sm:p-6'}>
             <Outlet/>
