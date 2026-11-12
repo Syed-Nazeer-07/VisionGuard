@@ -5,8 +5,7 @@ import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { Link } from 'react-router-dom';
 import { ArrowUpRight, Download, Film, Plus, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import type { jsPDF } from 'jspdf';
 import { useAuthStore } from '../store/auth';
 import { activityLedger, countRepeatedTracks, isRepeatedVehicleTrack, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
 import { csvCell } from '../services/csvExport';
@@ -219,9 +218,13 @@ function exportCSV(records: AnalysisRecord[]) {
   link.href=url;link.download='VisionGuard-vehicle-report.csv';link.click();
   setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
-function exportPDF(records: AnalysisRecord[]) {
+async function exportPDF(records: AnalysisRecord[]) {
+  // Avoid loading PDF dependencies for everyday dashboard navigation.
+  const [{ jsPDF: PdfDocument }, { default: autoTable }] = await Promise.all([
+    import('jspdf'), import('jspdf-autotable')
+  ]);
   const data = summarizeActivity(records);
-  const pdf = new jsPDF();
+  const pdf = new PdfDocument();
   pdf.setFont('helvetica','bold');pdf.setFontSize(18);pdf.text('VisionGuard | Traffic activity',14,20);
   pdf.setFont('helvetica','normal');pdf.setFontSize(10);
   pdf.text('Exported '+new Date().toLocaleString(),14,29);
@@ -234,7 +237,7 @@ function exportPDF(records: AnalysisRecord[]) {
   ]));
   autoTable(pdf,{
     startY:54,head:[['Video/stream','Track','Class','Confidence','Est. km/h']],
-    body:rows,theme:'striped',styles:{fontSize:8},headStyles:{fillColor:[67,56,202]},
+    body:rows,theme:'striped',styles:{fontSize:8},headStyles:{fillColor:[41,68,79]},
   });
   const flags = records.flatMap(run => run.violations.map(flag => [
     run.sourceName.slice(0,25),
@@ -250,7 +253,7 @@ function exportPDF(records: AnalysisRecord[]) {
       startY: previousTableEnd + 12,
       head:[['Session','Track','Review reason','Status','Evidence / note']],
       body:flags, theme:'striped', styles:{fontSize:7},
-      headStyles:{fillColor:[36,67,112]},
+      headStyles:{fillColor:[70,100,112]},
       columnStyles:{4:{cellWidth:60}}
     });
   }
@@ -273,13 +276,28 @@ function exportIncidentsCSV(records: AnalysisRecord[]) {
 export function ActivityReports() {
   const { records, loaded, error } = useRuns();
   const [selected, setSelected] = useState('all');
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const filtered = selected === 'all' ? records : records.filter(r=>r.id===selected);
   const totals = summarizeActivity(filtered);
+  const downloadPdf = async () => {
+    if (pdfBusy || !loaded || !filtered.length) return;
+    setPdfBusy(true);
+    setExportError(null);
+    try {
+      await exportPDF(filtered);
+    } catch {
+      setExportError('Could not create the PDF. Please try again.');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
   return <main className="vg-page">
     <header className="vg-page-header">
       <div><h1>Reports</h1><p>Export tracked activity by session</p></div>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
+    {exportError && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{exportError}</p>}
     <section className="vg-panel overflow-hidden">
       <div className="vg-section-head"><h2>Export options</h2></div>
       <div className="p-5 sm:p-6">
@@ -296,8 +314,8 @@ export function ActivityReports() {
               (totals.reviewedFlags + totals.dismissedFlags) + ' handled'}/>
         </div>
         <div className="mt-6 flex flex-wrap gap-2">
-          <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportPDF(filtered)}
-            className="vg-primary"><Download size={15}/> Download PDF</button>
+          <button type="button" disabled={pdfBusy || !loaded || !filtered.length} onClick={() => void downloadPdf()}
+            className="vg-primary" aria-busy={pdfBusy}><Download size={15}/>{pdfBusy ? 'Preparing PDF…' : 'Download PDF'}</button>
           <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportCSV(filtered)}
             className="vg-secondary"><Download size={15}/> Vehicle CSV</button>
           <button type="button" disabled={!loaded || !filtered.some(r=>r.violations.length)}
