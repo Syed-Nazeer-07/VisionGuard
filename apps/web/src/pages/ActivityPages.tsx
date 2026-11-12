@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { Link } from 'react-router-dom';
-import { ArrowUpRight, Download, Film, Plus, X } from 'lucide-react';
+import { ArrowUpRight, Download, Film, Plus, Search, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { jsPDF } from 'jspdf';
 import { useAuthStore } from '../store/auth';
@@ -148,29 +148,30 @@ export function ActivityAnalytics() {
   }, [range, records, asOf]);
   const counts = useMemo(() => summarizeActivity(filtered), [filtered]);
   const byClass = distribution(filtered);
-  return <main className="vg-page">
+  return <main className="vg-page vg-data-page">
     <header className="vg-page-header">
-      <div><h1>Analytics</h1><p>Vehicle classifications and detection volume</p></div>
-      <select aria-label="Time range" value={range} onChange={e=>{
-        setAsOf(Date.now());
-        setRange(e.target.value as typeof range);
-      }}
-        className="vg-field">
-        <option value="all">All time</option>
-        <option value="today">Last 24 hours</option>
-        <option value="week">Last 7 days</option>
-        <option value="month">Last 30 days</option>
-      </select>
+      <div><span className="vg-page-kicker">DATA EXPLORER / OBSERVATIONS</span><h1>Analytics</h1><p>Understand vehicle classes, activity volume and session history.</p></div>
+      <div role="group" aria-label="Analytics time range" className="vg-range-control">
+        {([
+          ['all', 'All time'], ['today', '24 hours'], ['week', '7 days'], ['month', '30 days'],
+        ] as const).map(([value, label]) =>
+          <button key={value} type="button" aria-pressed={range === value}
+            className="vg-range-option"
+            onClick={() => { setAsOf(Date.now()); setRange(value); }}>
+            {label}
+          </button>
+        )}
+      </div>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
-    <div className="mb-5 grid gap-3 sm:grid-cols-3">
+    <div className="vg-metric-grid mb-5 grid gap-3 sm:grid-cols-3">
       <Stat label="Repeated tracks" number={counts.vehicles} note="Observed on multiple frames"/>
       <Stat label="Peak simultaneous tracks" number={counts.maximumVisible} note="Maximum detected in one frame"/>
       <Stat label="Inference frames" number={counts.analyzedFrames} note="Completed observations"/>
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
       <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><h2>Classification breakdown</h2></div>
+        <div className="vg-section-head"><div><h2>Classification breakdown</h2><p className="vg-section-subtitle">Observed classes across recorded sessions</p></div><span className="vg-metadata-chip">{byClass.length} classes</span></div>
         {loaded && byClass.length ?
           <div className="h-72 p-5">
             <ResponsiveContainer width="100%" height="100%">
@@ -186,18 +187,21 @@ export function ActivityAnalytics() {
           <p className="vg-empty-row">{loaded ? 'No classification data for this period.' : 'Loading data…'}</p>}
       </section>
       <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><h2>Sessions in range</h2></div>
+        <div className="vg-section-head"><div><h2>Sessions in range</h2><p className="vg-section-subtitle">Sorted by most recent analysis activity</p></div><span className="vg-metadata-chip">{filtered.length} sessions</span></div>
         {filtered.length ?
-          <div className="divide-y divide-slate-100">
-            {filtered.slice(0,12).map(run =>
-              <div key={run.id} className="flex items-center justify-between gap-3 px-5 py-3.5 text-sm">
+          <div className="vg-data-rows divide-y divide-slate-100">
+            {[...filtered].sort((a, b) => b.updatedAt - a.updatedAt).slice(0,12).map(run =>
+              <div key={run.id} className="vg-data-row flex items-center justify-between gap-3 px-5 py-3.5 text-sm">
                 <div className="min-w-0">
-                  <p className="truncate font-medium text-slate-800">{run.sourceName}</p>
-                  <p className="mt-1 text-xs text-slate-500">{niceDate(run.createdAt)}</p>
+                  <p className="truncate font-semibold text-slate-800">{run.sourceName}</p>
+                  <p className="mt-1 text-xs text-slate-500">{niceDate(run.updatedAt)}</p>
                 </div>
-                <span className="shrink-0 font-semibold tabular-nums text-slate-800">{countRepeatedTracks(run)}</span>
+                <div className="text-right">
+                  <span className="block shrink-0 font-semibold tabular-nums text-slate-800">{countRepeatedTracks(run)}</span>
+                  <span className="text-[10px] text-slate-500">repeated tracks</span>
+                </div>
               </div>)}
-          </div> : <p className="vg-empty-row">No sessions in the selected period.</p>}
+          </div> : <div className="vg-empty-state"><strong>No sessions in this period.</strong>Choose a wider time range or analyze new footage.<Link to="/app/analyze">Start an analysis</Link></div>}
       </section>
     </div>
     <p className="vg-footnote">Repeated track IDs exclude brief detections, but ID switches may still count one vehicle twice. No physical speed is calibrated.</p>
