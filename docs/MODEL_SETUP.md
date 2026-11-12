@@ -26,16 +26,16 @@ Cloudflare production build also uses a version-matched public jsDelivr
 ONNX Runtime WASM asset to avoid Cloudflare's 25 MiB per-file limit.
 That CDN is a runtime dependency and must be reachable for inference.
 
-## Optional local Python backend
+## Model export tools (build-time only)
 
-The separate FastAPI backend uses its configured ONNX model path; its
-sample configuration references `yolo11n.onnx`, not the frontend's
-larger `yolo11s.onnx`. The repository retains the manual
-`.github/workflows/export-onnx-model.yml` export workflow and Python
-validation scripts for the nano variant.
+The manual `.github/workflows/export-onnx-model.yml` workflow can export a
+licensed YOLO11n/s/m ONNX model and validate it using Python. These are
+**optional developer tools**, not a Python analysis server or runtime
+requirement. Never assume a nano or medium model is interchangeable with
+the browser YOLO11s tensor contract.
 
-Do not substitute an exported model file without checking the compatible
-detector postprocessing, class order and input/output tensor shapes.
+Before using another export, verify the detector postprocessing, class
+order and exact input/output tensor shapes.
 
 ## Validation
 
