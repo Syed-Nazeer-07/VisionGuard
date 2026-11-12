@@ -1474,7 +1474,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </button>}
           <a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer"
             title="Optional: browse YouTube in a separate tab. Open a video, then select Analyze tab."
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold text-slate-500 transition-colors hover:text-[#2356a8]">
+            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold text-slate-500 transition-colors hover:text-[#426b7d]">
             Open YouTube <ExternalLink size={13}/>
           </a>
           {qualityEnabled && !!currentFileRef.current && !!qualityFramesRef.current.length &&
@@ -1498,7 +1498,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const enabled = event.target.checked;
             setKeepTabConnected(enabled);
             if (ownerId) localStorage.setItem('visionguard:keep-tab-on-navigation:' + ownerId, enabled ? 'yes' : 'no');
-          }} className="h-4 w-4 accent-[#2356a8]"/>
+          }} className="h-4 w-4 accent-[#426b7d]"/>
           Keep sharing on other VisionGuard pages
         </label>
       </div>}
@@ -1625,7 +1625,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
-              <Film size={42} className="text-indigo-300" />
+              <Film size={42} className="text-[#b9d4dd]" />
               <div className="text-lg font-semibold">Select an analysis source</div>
               <p className="max-w-md text-sm text-slate-300">Choose video, camera, or tab above.</p>
               <p className="max-w-md text-xs leading-5 text-slate-400">YouTube: play it in another tab → Analyze tab → Share that tab.</p>
@@ -1663,7 +1663,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
       {!webcamActive && !tabCaptureActive && !cloudPlaybackActive && <label className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
         <input type="checkbox" checked={saveVideo} onChange={event => changeSaveVideo(event.target.checked)}
-          disabled={!ownerId} className="h-4 w-4 accent-indigo-600" />
+          disabled={!ownerId} className="h-4 w-4 accent-[#426b7d]" />
         <span className="flex-1"><strong>Keep this video on this device</strong>
           <span className="block text-xs text-slate-500">
             Optional. Off means no original video is retained; analysis history remains.
@@ -1695,7 +1695,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             </div>
             {!cloudUpload && !cloudUnavailable && cloudAvailability === 'configured' && (
               <button type="button" onClick={() => void saveCurrentVideoToB2()} disabled={cloudStarting}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                className="rounded-lg bg-[#355a6b] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {cloudStarting ? 'Preparing B2 upload…' : 'Save video to B2'}
               </button>
             )}
@@ -1711,11 +1711,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   <span className="font-semibold tabular-nums">{cloudUpload.progress}%</span>}
               </div>
               {cloudUpload.status !== 'failed' && <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full bg-indigo-600 transition-[width]"
+                <div className="h-full rounded-full bg-[#355a6b] transition-[width]"
                   style={{ width: Math.max(0, Math.min(100, cloudUpload.progress)) + '%' }}/>
               </div>}
               {cloudUpload.status === 'uploaded' && <a href="/app/archive-videos"
-                className="inline-block text-xs font-semibold text-indigo-600 hover:underline">View cloud video archive</a>}
+                className="inline-block text-xs font-semibold text-[#426b7d] hover:underline">View cloud video archive</a>}
             </div>
           )}
           {cloudError && <div role="alert" className="mt-3 space-y-2">
@@ -1723,7 +1723,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             {!saveVideo || storage === 'error' ? (
               <button type="button" disabled={storage === 'saving'}
                 onClick={() => changeSaveVideo(true)}
-                className="inline-flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 disabled:opacity-50">
+                className="inline-flex items-center gap-2 rounded-lg border border-[#cbdde1] bg-[#edf4f4] px-3 py-2 text-xs font-semibold text-[#325869] hover:bg-[#dcebed] disabled:opacity-50">
                 <Film size={14}/> Keep this original on my device
               </button>
             ) : storage === 'saving' ?
