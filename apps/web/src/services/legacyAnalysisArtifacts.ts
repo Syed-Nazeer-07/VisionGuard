@@ -109,27 +109,17 @@ export function findFrameAtMediaTime(
   return bestCandidate;
 }
 
-async function decodeArtifact(blob: Blob): Promise<LegacyAnalysisArtifact> {
-  let text: string;
-  if (blob.type.includes('gzip') || blob.type.includes('octet-stream')) {
-    if (typeof DecompressionStream === 'undefined') {
-      throw new Error('This browser cannot decompress a legacy gzip analysis artifact.');
-    }
-    text = await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-  } else {
-    // Existing Supabase Storage objects sometimes have no correct MIME type.
-    // Inspect gzip magic bytes instead of trusting the content-type alone.
-    const magic = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
-    const compressed = magic.length === 2 && magic[0] === 0x1f && magic[1] === 0x8b;
-    if (compressed) {
-      if (typeof DecompressionStream === 'undefined') {
-        throw new Error('This browser cannot decompress a legacy gzip analysis artifact.');
-      }
-      text = await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
-    } else {
-      text = await blob.text();
-    }
+export async function decodeArtifact(blob: Blob): Promise<LegacyAnalysisArtifact> {
+  // Storage providers sometimes serve JSON as application/octet-stream and
+  // gzipped JSON as text/plain. Inspect the data, not the MIME declaration.
+  const magic = new Uint8Array(await blob.slice(0, 2).arrayBuffer());
+  const compressed = magic.length === 2 && magic[0] === 0x1f && magic[1] === 0x8b;
+  if (compressed && typeof DecompressionStream === 'undefined') {
+    throw new Error('This browser cannot decompress a legacy gzip analysis artifact.');
   }
+  const text = compressed
+    ? await new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text()
+    : await blob.text();
   const value: unknown = JSON.parse(text);
   if (!value || typeof value !== 'object' ||
     !Array.isArray((value as LegacyAnalysisArtifact).frames)) {
