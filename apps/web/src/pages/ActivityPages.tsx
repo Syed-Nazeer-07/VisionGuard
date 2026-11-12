@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { Link } from 'react-router-dom';
+import { PaginatedRows } from '../components/ui/PaginatedRows';
 import { ArrowUpRight, Download, Film, Plus, Search, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { jsPDF } from 'jspdf';
@@ -187,10 +188,10 @@ export function ActivityAnalytics() {
           <p className="vg-empty-row">{loaded ? 'No classification data for this period.' : 'Loading data…'}</p>}
       </section>
       <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><div><h2>Sessions in range</h2><p className="vg-section-subtitle">Sorted by most recent analysis activity</p></div><span className="vg-metadata-chip">{filtered.length} sessions</span></div>
+        <div className="vg-section-head"><div><h2>Sessions in range</h2><p className="vg-section-subtitle">Most recent first · Browse your full history</p></div><span className="vg-metadata-chip">{filtered.length} sessions</span></div>
         {filtered.length ?
-          <div className="vg-data-rows divide-y divide-slate-100">
-            {[...filtered].sort((a, b) => b.updatedAt - a.updatedAt).slice(0,12).map(run =>
+          <PaginatedRows items={[...filtered].sort((a, b) => b.updatedAt - a.updatedAt)}
+            itemLabel="sessions" resetKey={range} className="vg-data-rows divide-y divide-slate-100" renderRow={run =>
               <div key={run.id} className="vg-data-row flex items-center justify-between gap-3 px-5 py-3.5 text-sm">
                 <div className="min-w-0">
                   <p className="truncate font-semibold text-slate-800">{run.sourceName}</p>
@@ -200,8 +201,7 @@ export function ActivityAnalytics() {
                   <span className="block shrink-0 font-semibold tabular-nums text-slate-800">{countRepeatedTracks(run)}</span>
                   <span className="text-[10px] text-slate-500">repeated tracks</span>
                 </div>
-              </div>)}
-          </div> : <div className="vg-empty-state"><strong>No sessions in this period.</strong>Choose a wider time range or analyze new footage.<Link to="/app/analyze">Start an analysis</Link></div>}
+              </div>}/> : <div className="vg-empty-state"><strong>No sessions in this period.</strong>Choose a wider time range or analyze new footage.<Link to="/app/analyze">Start an analysis</Link></div>}
       </section>
     </div>
     <p className="vg-footnote">Repeated track IDs exclude brief detections, but ID switches may still count one vehicle twice. No physical speed is calibrated.</p>
@@ -428,14 +428,13 @@ export function ActivityVideoLibrary() {
       </section>
       <section className="vg-panel overflow-hidden">
         <div className="vg-section-head">
-          <div><h2>Video storage · Backblaze B2</h2><p className="vg-section-subtitle">Originals uploaded with your permission</p></div>
+          <div><h2>Video storage · Backblaze B2</h2><p className="vg-section-subtitle">Originals uploaded with your permission · {visibleVideos.length} shown</p></div>
           <Link to="/app/archive-videos">Manage storage</Link>
         </div>
         {b2Error && <p role="alert" className="p-4 text-sm text-amber-700">{b2Error}</p>}
         {b2Loading ? <p className="vg-empty-row">Loading video records…</p> :
           !visibleVideos.length ? <div className="vg-empty-state"><strong>{normalizedSearch ? 'No matching cloud videos.' : 'No videos stored in B2.'}</strong>{normalizedSearch ? 'Try a different filename.' : 'Cloud backup is optional and requires an explicit upload.'}</div> :
-          <div className="divide-y divide-slate-100">
-            {visibleVideos.map(video =>
+          <PaginatedRows items={visibleVideos} itemLabel="cloud videos" resetKey={normalizedSearch} renderRow={video =>
               <div key={video.id} className="vg-data-row flex flex-wrap items-center gap-4 px-5 py-3.5">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                   <Film size={17}/>
@@ -455,15 +454,13 @@ export function ActivityVideoLibrary() {
                 </span>
                 <Link to={'/app/archive-videos?video='+encodeURIComponent(video.id)}
                   className="text-xs font-semibold text-[#426b7d] hover:underline">Details</Link>
-              </div>)}
-          </div>}
+              </div>}/>}
       </section>
       <section className="vg-panel overflow-hidden">
         <div className="vg-section-head"><div><h2>Analysis sessions</h2><p className="vg-section-subtitle">Saved observations, separate from original footage</p></div><span className="vg-metadata-chip">{visibleSessions.length} of {records.length}</span></div>
         {!loaded ? <p className="vg-empty-row">Loading session history…</p> :
           !visibleSessions.length ? <div className="vg-empty-state"><strong>{normalizedSearch ? 'No matching sessions.' : 'No saved sessions yet.'}</strong>{normalizedSearch ? 'Try another search term.' : 'Your analysis history will appear after processing footage.'}<Link to="/app/analyze">Open Live Analysis</Link></div> :
-          <div className="divide-y divide-slate-100">
-            {visibleSessions.map(run =>
+          <PaginatedRows items={visibleSessions} itemLabel="analysis sessions" resetKey={normalizedSearch} renderRow={run =>
               <div key={run.id} className="vg-data-row flex items-center gap-4 px-5 py-3.5 text-sm">
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-slate-800">{run.sourceName}</div>
@@ -473,8 +470,7 @@ export function ActivityVideoLibrary() {
                   <div className="font-semibold tabular-nums text-slate-800">{countRepeatedTracks(run)}</div>
                   <div className="text-[11px] text-slate-500">vehicles</div>
                 </div>
-              </div>)}
-          </div>}
+              </div>}/>}
       </section>
     </div>
     <p className="vg-footnote">Analysis records are retained separately from source video files. Saving a session does not upload its footage.</p>
@@ -697,11 +693,10 @@ export function ActivityIncidents() {
         !visibleAutomatic.length ?
           <p className="vg-empty-row">{automatic.length ? 'No detections match this filter.' :
             'No automatic incidents recorded yet.'}</p> :
-        <div className="divide-y divide-slate-100">
-          {visibleAutomatic.map(({ run: item, event }) =>
+        <PaginatedRows items={visibleAutomatic} itemLabel="automatic detections" resetKey={statusFilter}
+          renderRow={({ run: item, event }) =>
             <IncidentRow key={item.id + ':' + event.id} run={item} event={event}
-              onReview={changeReview}/>)}
-        </div>}
+              onReview={changeReview}/>}/>}
     </section>
 
     {!!manual.length && <section className="vg-panel mt-4 overflow-hidden">
@@ -709,12 +704,11 @@ export function ActivityIncidents() {
         <h2>Manual incidents</h2>
         <span className="text-xs tabular-nums text-slate-500">{manual.length}</span>
       </div>
-      <div className="divide-y divide-slate-100">
-        {visibleManual.length ? visibleManual.map(({ run: item, event }) =>
+      {visibleManual.length ? <PaginatedRows items={visibleManual} itemLabel="manual incidents"
+        resetKey={statusFilter} renderRow={({ run: item, event }) =>
           <IncidentRow key={item.id + ':' + event.id} run={item} event={event}
-            onReview={changeReview}/>) :
-          <p className="vg-empty-row">No manual incidents match this filter.</p>}
-      </div>
+            onReview={changeReview}/>}/> :
+        <p className="vg-empty-row">No manual incidents match this filter.</p>}
     </section>}
     <p className="vg-footnote">Reviewed means checked by a person—not a verified traffic offence.
       Review decisions are saved with the incident and included in exported reports.</p>
