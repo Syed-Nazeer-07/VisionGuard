@@ -622,6 +622,55 @@
   color: #212125;
 }
 
+
+/* Legacy administrative screens share the same visual language without
+   changing permission checks, role/status semantics or table behavior. */
+.vg-shell .vg-admin-page {
+  max-width: 1510px;
+  margin-inline: auto;
+  padding: clamp(20px, 2.4vw, 38px);
+}
+.vg-shell .vg-admin-page h1 {
+  color: #202329;
+  font-size: clamp(28px, 2.5vw, 36px);
+  font-weight: 760;
+  letter-spacing: -.04em;
+}
+.vg-shell .vg-admin-page h2 {
+  color: #282b30;
+  letter-spacing: -.018em;
+}
+.vg-shell .vg-admin-page :is(input, select, textarea) {
+  accent-color: #d16643;
+}
+.vg-shell .vg-admin-page :is(input, select, textarea):focus {
+  border-color: #cf7657;
+}
+.vg-shell .vg-admin-page button.bg-blue-600,
+.vg-shell .vg-admin-page button.bg-slate-900,
+.vg-shell .vg-admin-page a.bg-blue-600 {
+  border-color: #26272b;
+  background: #26272b;
+  color: white;
+}
+.vg-shell .vg-admin-page button.bg-blue-600:not(:disabled):hover,
+.vg-shell .vg-admin-page button.bg-slate-900:not(:disabled):hover,
+.vg-shell .vg-admin-page a.bg-blue-600:hover {
+  background: #3a3a3f;
+  border-color: #3a3a3f;
+}
+.vg-shell .vg-admin-page .bg-indigo-50 { background: #fff4ec; }
+.vg-shell .vg-admin-page .bg-indigo-100 { background: #fae6da; }
+.vg-shell .vg-admin-page .border-indigo-200 { border-color: #efc8b7; }
+.vg-shell .vg-admin-page .text-indigo-600,
+.vg-shell .vg-admin-page .text-indigo-700 { color: #a74229; }
+.vg-shell .vg-admin-page .text-indigo-800 { color: #8f391f; }
+.vg-shell .vg-admin-page a.text-blue-600,
+.vg-shell .vg-admin-page button.text-blue-600 { color: #b74d31; }
+@media (max-width: 760px) {
+  .vg-shell .vg-admin-page { padding: 18px 15px 32px; }
+}
+
 /* Touch targets and responsive rhythm. */
 @media (max-width: 900px) {
   .vg-shell .vg-monitor .vg-analysis-telemetry-card:last-child {
