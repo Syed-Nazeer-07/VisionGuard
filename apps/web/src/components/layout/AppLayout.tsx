@@ -5,13 +5,14 @@ import {
   LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ArrowUpRight,
   Settings, UserCog, Users, X
 } from 'lucide-react';
-// Load the inference workspace only after it is requested; keep it mounted
-// thereafter so tab sharing and playback survive navigation.
-const RealtimeAnalyze = lazy(() => import('../../pages/RealtimeAnalyze'));
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useAuthStore } from '../../store/auth';
 import { supabase } from '../../lib/supabase';
 import '../../styles/workspace.css';
+
+// Load the inference workspace only after requested, but preserve its state
+// once visited so playback and tab capture survive workspace navigation.
+const RealtimeAnalyze = lazy(() => import('../../pages/RealtimeAnalyze'));
 
 const EVERYONE = ['Viewer', 'Operator', 'Supervisor', 'Admin'];
 const PRIMARY_NAV = [
@@ -130,6 +131,7 @@ export function AppLayout() {
 
       <div className="vg-side-footer shrink-0 border-t p-3">
         <Link to="/app/settings" onClick={() => setMobileOpen(false)}
+          aria-current={location.pathname === '/app/settings' ? 'page' : undefined}
           title={collapsed ? 'Settings' : undefined}
           className={'vg-side-nav-item vg-side-settings mb-2 flex h-10 items-center gap-3 rounded-lg px-3 ' +
             (collapsed ? 'justify-center' : '')}>
