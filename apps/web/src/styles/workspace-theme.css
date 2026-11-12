@@ -12,7 +12,7 @@
   --vg-ink: #1b2025;
   --vg-muted: #646a70;
   --vg-line: #e5e4df;
-  --vg-accent: #cf5635;
+  --vg-accent: #b94c30;
   --vg-accent-hover: #b9472a;
   --vg-accent-soft: #fff0e9;
   --vg-sidebar: #191b20;
@@ -445,6 +445,13 @@
   background: #fff6ef;
 }
 .vg-shell .vg-list-page-count { color: #3c3d42; }
+
+.vg-shell .vg-footnote {
+  padding-top: 16px;
+  color: #6e7075;
+  font-size: 12px;
+  line-height: 1.65;
+}
 
 /* Settings, report surfaces and upload panels. */
 .vg-shell .vg-settings-tab {
