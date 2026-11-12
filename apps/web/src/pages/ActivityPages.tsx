@@ -602,30 +602,35 @@ export function ActivityIncidents() {
   };
 
   return <main className="vg-page">
-    <header className="vg-page-header">
+    <header className="vg-page-header vg-incidents-header">
       <div>
+        <span className="vg-page-kicker">OBSERVATIONS / HUMAN REVIEW</span>
         <h1>Incidents</h1>
-        <p>Automatic observations · review required</p>
+        <p>Review potential events and decide what needs follow-up.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {incidents.length > 0 && <select aria-label="Filter incidents by review status"
-          value={statusFilter}
-          onChange={event => setStatusFilter(event.target.value as typeof statusFilter)}
-          className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-xs font-medium text-slate-700">
-          <option value="all">All ({incidents.length})</option>
-          <option value="pending_review">Needs review ({pendingCount})</option>
-          <option value="approved">Reviewed ({reviewedCount})</option>
-          <option value="rejected">Dismissed ({dismissedCount})</option>
-        </select>}
         <button type="button"
           aria-controls="manual-incident-form" aria-expanded={manualOpen}
           onClick={() => { setManualOpen(value => !value); setFeedback(''); }}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50">
+          className="vg-secondary inline-flex items-center gap-1.5 text-xs">
           {manualOpen ? <X size={15}/> : <Plus size={15}/>}
           {manualOpen ? 'Close' : 'Add incident'}
         </button>
       </div>
     </header>
+    <div className="vg-incident-filters" role="group" aria-label="Filter incidents by review status">
+      {([
+        ['all', 'All observations', incidents.length],
+        ['pending_review', 'Needs review', pendingCount],
+        ['approved', 'Reviewed', reviewedCount],
+        ['rejected', 'Dismissed', dismissedCount],
+      ] as const).map(([value, label, count]) =>
+        <button key={value} type="button" className="vg-filter-pill"
+          aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)}>
+          <span>{label}</span><b>{count}</b>
+        </button>
+      )}
+    </div>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     {feedback && <p role="status" className="mb-4 text-xs text-slate-600">{feedback}</p>}
 
