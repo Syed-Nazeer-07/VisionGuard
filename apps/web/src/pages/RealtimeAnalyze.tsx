@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useAnalysisFocus } from '../components/analysis/useAnalysisFocus';
 import { Activity, AlertTriangle, Camera, ChevronDown, Cloud, Cpu, ExternalLink, Film, Gauge, HardDrive, Info, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, ScanLine, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../services/localAnalysisStorage';
@@ -90,7 +91,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
+  const { focusMode, setFocusMode } = useAnalysisFocus(active);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const urlRef = useRef<string | null>(null);
@@ -145,25 +146,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudPlaybackLoading, setCloudPlaybackLoading] = useState(false);
   const [unavailableOriginal, setUnavailableOriginal] = useState<string | null>(null);
   const [error, setError] = useState('');
-
-  // The player is retained across routes for reliable capture and tracking.
-  // Theater mode must never cover another route when analysis is hidden.
-  useEffect(() => {
-    if (!active) setFocusMode(false);
-  }, [active]);
-
-  // Focus View is an in-app theater mode (not the browser Fullscreen API).
-  // Esc always restores the normal workspace without interrupting playback.
-  useEffect(() => {
-    if (!focusMode) return;
-    const exitOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || document.fullscreenElement) return;
-      event.preventDefault();
-      setFocusMode(false);
-    };
-    window.addEventListener('keydown', exitOnEscape);
-    return () => window.removeEventListener('keydown', exitOnEscape);
-  }, [focusMode]);
 
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
