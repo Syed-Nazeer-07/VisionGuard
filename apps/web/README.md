@@ -1,6 +1,8 @@
 # VisionGuard web workspace
 
-This is the React, TypeScript and Vite frontend of [VisionGuard](../../README.md).
+This is the React, TypeScript and Vite browser application for [VisionGuard](../../README.md).
+Vehicle inference runs entirely in the browser; Supabase functions handle
+optional secure cloud operations. There is no Python analysis server.
 
 Run commands from the repository root:
 
@@ -11,6 +13,7 @@ npm run build
 npm run build:pages
 npm run test -w web
 npm run test:deploy
+npm run test:architecture
 ```
 
 Or from this folder: `npm run dev`.
