@@ -25,7 +25,7 @@
 
 ---
 
-VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime Web, then combines detections with optical tracking to maintain vehicle boxes and IDs across video frames. The same saved analysis records feed the overview, history, analytics, review flags and reports. A separate **Python/FastAPI backend is optional**, not a requirement for browser live analysis.
+VisionGuard runs **YOLO11s object detection in your browser** using ONNX Runtime Web, then combines detections with optical tracking to maintain vehicle boxes and IDs across video frames. The same saved analysis records feed the overview, history, analytics, review flags and reports. The active analysis engine runs **entirely in the browser**; no local Python/FastAPI server is part of the application.
 
 > **v1 core workflow · release candidate.** The code passes automated checks, but real-world detector accuracy, browser-tab capture, OAuth, Backblaze B2, device performance and hosted deployment require end-to-end acceptance testing. **Estimated speed is not a calibrated or legally verified measurement.**
 
@@ -125,7 +125,7 @@ vehicle-detection accuracy or every optional integration.**
 VisionGuard includes a production build guard and support for hosting its
 YOLO11s model at a public HTTPS URL when ONNX weights exceed Cloudflare's
 25 MiB static-file limit. This lets the browser workflow run on Cloudflare Workers static assets
-or Pages without a sleeping Python backend.
+or Pages with no persistent AI processing server.
 
 **[Cloudflare deployment guide](docs/CLOUDFLARE_PAGES.md)** covers
 the exact build settings, Hugging Face model hosting, the matching ONNX
@@ -141,7 +141,7 @@ npm ci
 npm run dev
 ~~~
 
-Review or commit any local modifications before pulling if Git reports a conflict. The Python processing backend, when needed, is documented separately in [backend/README.md](backend/README.md).
+Review or commit any local modifications before pulling if Git reports a conflict. A local Node.js development server is sufficient; no Python runtime is needed to use the browser analysis workspace.
 
 ## Data and privacy
 
@@ -219,7 +219,7 @@ React / TypeScript / Vite (browser)
        └── Overview · History · Analytics · Incidents · Reports
 
 Original video: optional local retention or explicit Backblaze B2 upload
-Optional Python service: FastAPI analysis backend (separate workflow)
+Historical artifact review: read-only support for previously stored gzip/JSON results
 ~~~
 
 Track IDs refer to individual **analysis sessions**, not licence plates. Dashboard and analytics totals now count only IDs observed repeatedly (at least two observations spanning 0.18 seconds at adequate detection confidence). Short-lived candidates remain available in raw exports. **ID switches after occlusion can still count one physical vehicle more than once**; no cross-session re-identification is claimed.
@@ -234,8 +234,8 @@ the source-video frames, run the
 precision, recall, identity switches and lingering boxes after scene exits.
 
 The trace includes **no video bytes**, and synthetic tests do not establish
-real-world detector performance. The historical Python YOLO11n benchmark
-does **not** measure the browser YOLO11s system.
+real-world detector performance. An older YOLO11n server benchmark was retired
+with the unused Python code and is not a measurement of browser YOLO11s performance.
 
 
 ### Cross-device incident history
@@ -270,14 +270,15 @@ npm run build
 npm run test -w web
 ~~~
 
-Optional Python backend tests (with backend dependencies installed):
+Architecture and browser tracking regression tests:
 
 ~~~powershell
-cd backend
-python -m pytest
+npm run test:architecture
+npm run test:tracking-eval
+npm run test:deploy
 ~~~
 
-[GitHub Actions CI](.github/workflows/ci.yml) runs frontend lint, TypeScript/build checks, unit tests and deterministic backend checks. **A successful build does not verify that model weights exist or that detections are accurate on real footage.** WebGPU/WASM performance is hardware-dependent, particularly on Windows on ARM.
+[GitHub Actions CI](.github/workflows/ci.yml) runs frontend lint, TypeScript/build checks, unit tests, browser navigation smoke tests and an architecture guard. **A successful build does not verify that model weights exist or that detections are accurate on real footage.** WebGPU/WASM performance is hardware-dependent, particularly on Windows on ARM.
 
 ## Release status
 
@@ -298,14 +299,18 @@ See the [release acceptance checklist](docs/RELEASE_CHECKLIST.md), including the
 
 ## Repository guide
 
+See [Architecture](docs/ARCHITECTURE.md) for the complete runtime map, data boundaries, compatibility rules, and package ownership.
+
+**Browser-first rule:** Do not reintroduce `localhost:8000`, a second analysis engine or FastAPI job polling into `apps/web`. Historical analysis artifacts are read-only and do not require a Python server.
+
 | Location | Purpose |
 | --- | --- |
-| [`apps/web/`](apps/web/) | React UI, tracking pipeline, browser worker and application tests |
-| [`backend/`](backend/) | Optional FastAPI analysis service and evaluation utilities |
+| [`apps/web/`](apps/web/) | Vite/React application, ONNX worker, tracking, sessions, auth UI and tests |
+| [`worker/`](worker/) | Cloudflare Worker entrypoint and request tests |
 | [`supabase/migrations/`](supabase/migrations/) | Versioned database schema and access-control policies |
 | [`supabase/functions/`](supabase/functions/) | Authenticated server-side operations and video signing |
 | [`docs/`](docs/) | Model setup, [Cloudflare deployment](docs/CLOUDFLARE_PAGES.md), live analysis, authentication and release validation |
-| [`scripts/`](scripts/) | Development, model-validation and optional backend helpers |
+| [`scripts/`](scripts/) | Model export/validation, build checks, deployment smoke tests and tooling |
 
 ---
 
