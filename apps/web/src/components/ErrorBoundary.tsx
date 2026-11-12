@@ -32,7 +32,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <AlertTriangle className="mb-4 h-10 w-10 text-[#aa735e]" aria-hidden="true" />
           <h2 className="mb-2 text-xl font-bold tracking-[-.035em] text-[#26363c]">Something went wrong</h2>
           <p className="mb-6 max-w-md text-sm leading-6 text-[#687b80]">
-            This section encountered an unexpected error. You can retry it or return to the workspace without changing your saved analysis data.
+            This section encountered an unexpected error. Try again, or return to the workspace.
           </p>
           <div className="flex flex-wrap justify-center gap-3">
             <button
