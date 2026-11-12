@@ -752,3 +752,23 @@
 }
 .vg-shell .vg-report-empty > a:hover { text-decoration: underline; }
 .vg-shell .vg-report-actions > button { min-height: 42px; }
+
+
+/* Keyboard users can skip the sidebar without touching video controls. */
+.vg-shell .vg-workspace-skip {
+  position: fixed;
+  z-index: 100;
+  top: -100px;
+  left: 16px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 10px 15px;
+  border-radius: 9px;
+  background: #e7f1f2;
+  color: #20343d;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+}
+.vg-shell .vg-workspace-skip:focus { top: 13px; }
