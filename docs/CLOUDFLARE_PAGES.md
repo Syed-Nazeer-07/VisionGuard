@@ -53,8 +53,9 @@ Cloudflare references:
 ---
 
 VisionGuard's React/Vite frontend and YOLO11s browser inference can run on
-Cloudflare Workers static assets or Pages. This does **not** host the optional Python/FastAPI backend,
-which is unnecessary for the core browser analysis flow.
+Cloudflare Workers static assets or Pages. Video inference runs in the
+browser. Authentication, metadata synchronization and secure B2 signing
+are handled separately by Supabase Auth, PostgreSQL and Edge Functions.
 
 **Current status:** Repository deployment configuration is prepared. A
 Cloudflare account owner must still connect the repository and configure the
