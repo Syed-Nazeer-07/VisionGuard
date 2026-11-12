@@ -96,12 +96,14 @@ npm run test:deploy
 npm run test:tracking-eval
 ```
 
-Run the optional backend test suite in its Python environment:
+Enforce that no local analysis server was reintroduced:
 
 ```powershell
-cd backend
-python -m pytest
+npm run test:architecture
 ```
+
+The historical Python processing service was retired. Optional Python
+scripts under `scripts/` remain only for model export and validation.
 
 **Release naming:** core v1 release candidate until the unautomated
 acceptance tests above pass. Passing CI alone is not enough to represent
