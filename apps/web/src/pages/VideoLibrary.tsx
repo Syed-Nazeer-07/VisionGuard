@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase'
 import type { VideoAsset } from '../services/db'
 import { canReanalyzeStoredVideo, fallbackVideoNumbers, formatBytes, videoDisplayName } from '../lib/videoAssets'
 import { deleteVideoWithArtifacts } from '../services/videoStorage'
-import { getActiveBackendJob } from '../services/backendAnalysis'
 import { Film, Search, Play, Trash2, Clock, Upload, RefreshCw, Eye, RotateCcw, Loader2 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -196,7 +195,6 @@ export function VideoLibrary() {
                   const name = videoDisplayName(video, fallbackNumbers)
                   const meta = (video.metadata && typeof video.metadata === 'object' && !Array.isArray(video.metadata) ? video.metadata : {}) as Record<string, any>
                   const videoRuns = runsByVideo[video.id] || []
-                  const activeJob = getActiveBackendJob()
 
                   const canReplay = canReanalyzeStoredVideo(video)
                   // Analysis metadata and original video bytes are separate.
@@ -208,11 +206,11 @@ export function VideoLibrary() {
                         r.metrics.total_frames || r.metrics.incidents_saved || r.metrics.tracked_objects)
                     ))
 
-                  // Check if currently active or queued in background
-                  const isJobActiveLocally = Boolean(activeJob && activeJob.videoId === video.id && (activeJob.status === 'running' || activeJob.status === 'queued'))
+                  // Legacy FastAPI job state is no longer used. Show a recent
+                  // pending status only when an analysis artifact is absent.
                   const uploadAgeMs = video.uploaded_at ? Date.now() - new Date(video.uploaded_at).getTime() : Infinity
                   const isFreshProcessing = ((video.processing_status as string) === 'processing' || (video.processing_status as string) === 'queued') && uploadAgeMs < 5 * 60 * 1000
-                  const isActivelyAnalyzing = isJobActiveLocally || (!hasCompletedArtifact && isFreshProcessing)
+                  const isActivelyAnalyzing = !hasCompletedArtifact && isFreshProcessing
 
                   // Check if processing explicitly failed or artifact is missing
                   const isFailed = !isActivelyAnalyzing && !hasCompletedArtifact && (
