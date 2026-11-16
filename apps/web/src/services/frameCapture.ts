@@ -28,9 +28,13 @@ export async function captureInferenceBitmap(
   const targetHeight = Math.max(1, Math.round(height * ratio));
 
   try {
-    return await factory(video, {
+    const bitmap = await factory(video, {
       resizeWidth: targetWidth, resizeHeight: targetHeight, resizeQuality: 'medium',
     });
+    // A few browsers silently ignore resizeWidth/resizeHeight. Do not transfer
+    // a multi-megapixel frame to the worker if the requested size was ignored.
+    if (bitmap.width === targetWidth && bitmap.height === targetHeight) return bitmap;
+    bitmap.close();
   } catch (error) {
     // Do not retry security/tainting/decoding failures as a resize mismatch.
     if (!resizeUnsupported(error)) throw error;
