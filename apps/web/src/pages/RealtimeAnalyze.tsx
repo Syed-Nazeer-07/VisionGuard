@@ -15,6 +15,7 @@ import { isB2UploadConfigured, storageProviderFor, uploadStorageProvider } from 
 import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
+import { captureInferenceBitmap } from '../services/frameCapture';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
@@ -1229,12 +1230,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       const generation = generationRef.current;
       const requestId = ++messageIdRef.current;
       inFlightIdRef.current = requestId;
-      const ratio = Math.min(1, MAX_CAPTURE_WIDTH / Math.max(video.videoWidth, video.videoHeight));
-      const resizeWidth = Math.max(1, Math.round(video.videoWidth * ratio));
-      const resizeHeight = Math.max(1, Math.round(video.videoHeight * ratio));
-      void createImageBitmap(video, {
-        resizeWidth, resizeHeight, resizeQuality: 'medium'
-      }).then(bitmap => {
+      void captureInferenceBitmap(video, MAX_CAPTURE_WIDTH).then(bitmap => {
         if (stopped || generation !== generationRef.current || video.seeking ||
             !activeRef.current || video.paused || workerRef.current !== worker) {
           bitmap.close();
