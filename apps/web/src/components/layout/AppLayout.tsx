@@ -10,6 +10,7 @@ import { useAuthStore } from '../../store/auth';
 import { supabase } from '../../lib/supabase';
 import '../../styles/workspace.css';
 import '../../styles/workspace-theme.css';
+import '../../styles/workspace-responsive.css';
 
 // Load the inference workspace only after requested, but preserve its state
 // once visited so playback and tab capture survive workspace navigation.
@@ -43,6 +44,8 @@ export function AppLayout() {
   const { user, role } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // A collapsed desktop rail must always expand when opened as a mobile drawer.
+  const compactSidebar = collapsed && !mobileOpen;
   const [tabSharing, setTabSharing] = useState(false);
   const currentRole = role || 'Viewer';
   const activeAnalyze = location.pathname === '/app/analyze';
@@ -53,6 +56,14 @@ export function AppLayout() {
   const initial = displayName.trim().slice(0, 1).toUpperCase() || 'U';
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileOpen]);
   useEffect(() => { if (activeAnalyze) setAnalysisMounted(true); }, [activeAnalyze]);
   useEffect(() => {
     const onStatus = (event: Event) => {
@@ -72,57 +83,57 @@ export function AppLayout() {
     const visible = items.filter(item => item.roles.includes(currentRole));
     if (!visible.length) return null;
     return <section className="mb-5 vg-side-group">
-      {!collapsed && <div className="vg-side-group-label mb-2 px-3 uppercase">{label}</div>}
+      {!compactSidebar && <div className="vg-side-group-label mb-2 px-3 uppercase">{label}</div>}
       <div className="space-y-1">
         {visible.map(item => {
           const active = location.pathname === item.to;
           const Icon = item.icon;
-          return <Link key={item.to} to={item.to} title={collapsed ? item.label : undefined}
+          return <Link key={item.to} to={item.to} title={compactSidebar ? item.label : undefined}
             aria-current={active ? 'page' : undefined}
             onClick={() => setMobileOpen(false)}
-            className={'vg-side-nav-item px-3 ' + (collapsed ? 'justify-center ' : '')}>
+            className={'vg-side-nav-item px-3 ' + (compactSidebar ? 'justify-center ' : '')}>
             <Icon size={18} strokeWidth={active ? 2.15 : 1.8} className="shrink-0"/>
-            {!collapsed && <span className="truncate">{item.label}</span>}
+            {!compactSidebar && <span className="truncate">{item.label}</span>}
           </Link>;
         })}
       </div>
     </section>;
   };
 
-  return <div className="vg-shell flex h-screen overflow-hidden">
+  return <div className="vg-shell flex h-dvh overflow-hidden">
     <a href="#main-content" className="vg-workspace-skip">Skip to workspace content</a>
     {mobileOpen && <button type="button" aria-label="Close navigation"
-      className="fixed inset-0 z-30 bg-slate-950/35 md:hidden"
+      className="fixed inset-0 z-30 bg-slate-950/50 lg:hidden"
       onClick={() => setMobileOpen(false)} />}
-    <aside
-      className={'vg-side-bar fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col border-r transition-[width,transform] duration-200 md:relative md:translate-x-0 ' +
-        (collapsed ? 'md:w-[78px] ' : 'md:w-[248px] ') +
+    <aside id="vg-workspace-navigation" aria-label="Workspace navigation"
+      className={'vg-side-bar fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col border-r transition-[width,transform] duration-200 lg:relative lg:translate-x-0 ' +
+        (compactSidebar ? 'lg:w-[78px] ' : 'lg:w-[248px] ') +
         (mobileOpen ? 'translate-x-0' : '-translate-x-full')}>
       <div className="vg-side-head flex h-[72px] shrink-0 items-center justify-between border-b px-4">
         <Link to="/app" onClick={() => setMobileOpen(false)}
-          className={'vg-side-logo flex min-w-0 items-center gap-2.5 ' + (collapsed ? 'mx-auto' : '')}>
+          className={'vg-side-logo flex min-w-0 items-center gap-2.5 ' + (compactSidebar ? 'mx-auto' : '')}>
           <img src="/brand-mark.svg?v=20261111" alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-[10px]" />
-          {!collapsed && <span className="truncate text-[16px] font-bold tracking-[-.045em]">Vision<span className="font-medium">Guard</span><span className="vg-brand-dot">.</span></span>}
+          {!compactSidebar && <span className="truncate text-[16px] font-bold tracking-[-.045em]">Vision<span className="font-medium">Guard</span><span className="vg-brand-dot">.</span></span>}
         </Link>
-        <button type="button" aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="vg-side-icon-button hidden rounded-lg p-1.5 md:inline-flex"
+        <button type="button" aria-label={compactSidebar ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={compactSidebar ? 'Expand sidebar' : 'Collapse sidebar'}
+          className="vg-side-icon-button hidden rounded-lg p-1.5 lg:inline-flex"
           onClick={() => setCollapsed(value => !value)}>
-          {collapsed ? <PanelLeftOpen size={17}/> : <PanelLeftClose size={17}/>}
+          {compactSidebar ? <PanelLeftOpen size={17}/> : <PanelLeftClose size={17}/>}
         </button>
         <button type="button" aria-label="Close menu"
-          className="vg-side-icon-button rounded-lg p-1.5 md:hidden"
+          className="vg-side-icon-button rounded-lg p-1.5 lg:hidden"
           onClick={() => setMobileOpen(false)}><X size={18}/></button>
       </div>
 
       <div className="px-3 pt-5">
-        {!collapsed && <p className="vg-side-launch-caption mb-2.5 pl-2 uppercase">QUICK ACTION</p>}
-        <Link to="/app/analyze" title={collapsed ? 'Start a new analysis' : undefined}
+        {!compactSidebar && <p className="vg-side-launch-caption mb-2.5 pl-2 uppercase">QUICK ACTION</p>}
+        <Link to="/app/analyze" title={compactSidebar ? 'Start a new analysis' : undefined}
           onClick={() => setMobileOpen(false)}
-          className={'vg-side-launch-link px-3 ' + (collapsed ? '!justify-center' : '')}>
+          className={'vg-side-launch-link px-3 ' + (compactSidebar ? '!justify-center' : '')}>
           <Activity size={17} aria-hidden="true"/>
-          {!collapsed && <span>Start analysis</span>}
-          {!collapsed && <ArrowUpRight size={16} aria-hidden="true"/>}
+          {!compactSidebar && <span>Start analysis</span>}
+          {!compactSidebar && <ArrowUpRight size={16} aria-hidden="true"/>}
         </Link>
       </div>
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-6" aria-label="Workspace navigation">
@@ -134,16 +145,16 @@ export function AppLayout() {
       <div className="vg-side-footer shrink-0 border-t p-3">
         <Link to="/app/settings" onClick={() => setMobileOpen(false)}
           aria-current={location.pathname === '/app/settings' ? 'page' : undefined}
-          title={collapsed ? 'Settings' : undefined}
+          title={compactSidebar ? 'Settings' : undefined}
           className={'vg-side-nav-item vg-side-settings mb-2 flex h-10 items-center gap-3 rounded-lg px-3 ' +
-            (collapsed ? 'justify-center' : '')}>
+            (compactSidebar ? 'justify-center' : '')}>
           <Settings size={18} strokeWidth={1.8} className="shrink-0"/>
-          {!collapsed && <span>Settings</span>}
+          {!compactSidebar && <span>Settings</span>}
         </Link>
         <div className={'vg-side-account flex items-center gap-2.5 rounded-lg p-2 ' +
-          (collapsed ? 'flex-col' : '')}>
+          (compactSidebar ? 'flex-col' : '')}>
           <div className="vg-side-avatar h-8 w-8 shrink-0 rounded-full text-xs">{initial}</div>
-          {!collapsed && <div className="min-w-0 flex-1">
+          {!compactSidebar && <div className="min-w-0 flex-1">
             <div className="vg-side-account-name truncate text-xs font-semibold" title={displayName}>{displayName}</div>
             <div className="vg-side-account-role mt-0.5 text-[11px]">{currentRole}</div>
           </div>}
@@ -158,9 +169,10 @@ export function AppLayout() {
     <div className="flex min-w-0 flex-1 flex-col">
       {/* Minimal mobile navigation only. Desktop pages already carry their
           own titles; repeating a global toolbar wastes vertical space. */}
-      <div className="vg-mobile-bar flex h-12 shrink-0 items-center gap-3 border-b px-3 md:hidden">
+      <div className="vg-mobile-bar flex h-12 shrink-0 items-center gap-3 border-b px-3 lg:hidden">
         <button type="button" aria-label="Open navigation"
           className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+          aria-expanded={mobileOpen} aria-controls="vg-workspace-navigation"
           onClick={() => setMobileOpen(true)}><Menu size={20}/></button>
         <span className="truncate text-sm font-semibold text-[#263950]">{title}</span>
       </div>
