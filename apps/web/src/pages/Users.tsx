@@ -257,12 +257,12 @@ export function Users() {
   }
 
   return (
-    <div className="space-y-6 max-w-[1700px] mx-auto pb-12">
+    <div className="vg-users-page space-y-6 max-w-[1700px] mx-auto pb-12">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="vg-admin-heading flex items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">User Management</h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
               Role-Based Access Control
@@ -273,7 +273,7 @@ export function Users() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="vg-admin-actions flex items-center gap-3">
           <button
             onClick={() => { setDrawerView('permissions'); setIsDrawerOpen(true); }}
             className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
@@ -333,7 +333,7 @@ export function Users() {
       {/* Filter Toolbar */}
       <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
         <div className="flex flex-wrap items-center gap-2.5 flex-1">
-          <div className="relative min-w-[240px] max-w-sm flex-1">
+          <div className="vg-user-search relative min-w-0 basis-full sm:basis-[240px] max-w-sm flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input 
               type="text" 
