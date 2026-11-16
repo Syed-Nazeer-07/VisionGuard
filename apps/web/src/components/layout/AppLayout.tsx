@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, BarChart3, Clock3, FileKey, FileText, FolderSearch,
@@ -44,6 +44,12 @@ export function AppLayout() {
   const { user, role } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [smallViewport, setSmallViewport] = useState(
+    () => window.matchMedia?.('(max-width: 1023px)').matches ?? false
+  );
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   // A collapsed desktop rail must always expand when opened as a mobile drawer.
   const compactSidebar = collapsed && !mobileOpen;
   const [tabSharing, setTabSharing] = useState(false);
@@ -57,13 +63,44 @@ export function AppLayout() {
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
   useEffect(() => {
-    if (!mobileOpen) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMobileOpen(false);
+    const media = window.matchMedia?.('(max-width: 1023px)');
+    if (!media) return;
+    const update = () => {
+      setSmallViewport(media.matches);
+      if (!media.matches) setMobileOpen(false);
     };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [mobileOpen]);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (!mobileOpen || !smallViewport) return;
+    closeButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileOpen(false);
+      } else if (event.key === 'Tab') {
+        const elements = Array.from(sidebarRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        ) ?? []).filter(element => element.getClientRects().length > 0);
+        if (!elements.length) return;
+        const first = elements[0], last = elements[elements.length - 1];
+        if (event.shiftKey && (document.activeElement === first || !sidebarRef.current?.contains(document.activeElement))) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || !sidebarRef.current?.contains(document.activeElement))) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      menuButtonRef.current?.focus();
+    };
+  }, [mobileOpen, smallViewport]);
   useEffect(() => { if (activeAnalyze) setAnalysisMounted(true); }, [activeAnalyze]);
   useEffect(() => {
     const onStatus = (event: Event) => {
@@ -105,7 +142,11 @@ export function AppLayout() {
     {mobileOpen && <button type="button" aria-label="Close navigation"
       className="fixed inset-0 z-30 bg-slate-950/50 lg:hidden"
       onClick={() => setMobileOpen(false)} />}
-    <aside id="vg-workspace-navigation" aria-label="Workspace navigation"
+    <aside ref={sidebarRef} id="vg-workspace-navigation" aria-label="Workspace navigation"
+      role={mobileOpen && smallViewport ? 'dialog' : undefined}
+      aria-modal={mobileOpen && smallViewport ? true : undefined}
+      aria-hidden={smallViewport && !mobileOpen ? true : undefined}
+      inert={smallViewport && !mobileOpen}
       className={'vg-side-bar fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col border-r transition-[width,transform] duration-200 lg:relative lg:translate-x-0 ' +
         (compactSidebar ? 'lg:w-[78px] ' : 'lg:w-[248px] ') +
         (mobileOpen ? 'translate-x-0' : '-translate-x-full')}>
@@ -121,7 +162,7 @@ export function AppLayout() {
           onClick={() => setCollapsed(value => !value)}>
           {compactSidebar ? <PanelLeftOpen size={17}/> : <PanelLeftClose size={17}/>}
         </button>
-        <button type="button" aria-label="Close menu"
+        <button ref={closeButtonRef} type="button" aria-label="Close menu"
           className="vg-side-icon-button rounded-lg p-1.5 lg:hidden"
           onClick={() => setMobileOpen(false)}><X size={18}/></button>
       </div>
@@ -166,11 +207,11 @@ export function AppLayout() {
       </div>
     </aside>
 
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-w-0 flex-1 flex-col" inert={smallViewport && mobileOpen}>
       {/* Minimal mobile navigation only. Desktop pages already carry their
           own titles; repeating a global toolbar wastes vertical space. */}
       <div className="vg-mobile-bar flex h-12 shrink-0 items-center gap-3 border-b px-3 lg:hidden">
-        <button type="button" aria-label="Open navigation"
+        <button ref={menuButtonRef} type="button" aria-label="Open navigation"
           className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
           aria-expanded={mobileOpen} aria-controls="vg-workspace-navigation"
           onClick={() => setMobileOpen(true)}><Menu size={20}/></button>

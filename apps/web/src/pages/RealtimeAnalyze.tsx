@@ -15,6 +15,8 @@ import { isB2UploadConfigured, storageProviderFor, uploadStorageProvider } from 
 import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
+import { captureInferenceBitmap } from '../services/frameCapture';
+import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
@@ -1141,7 +1143,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           !video.videoWidth || !video.videoHeight || video.paused || video.seeking ||
           video.ended || video.readyState < 2 || !Number.isFinite(mediaTime)) return;
 
-      // Optical tracking uses tiny grayscale thumbnails (~320x180), keeping
+      // Optical tracking uses compact grayscale thumbnails (~448px wide), keeping
       // moving boxes aligned while YOLO11s/WASM is taking ~1s per inference.
       if (mediaTime - lastOpticalSampleRef.current >= OPTICAL_INTERVAL) {
         lastOpticalSampleRef.current = mediaTime;
@@ -1229,12 +1231,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       const generation = generationRef.current;
       const requestId = ++messageIdRef.current;
       inFlightIdRef.current = requestId;
-      const ratio = Math.min(1, MAX_CAPTURE_WIDTH / Math.max(video.videoWidth, video.videoHeight));
-      const resizeWidth = Math.max(1, Math.round(video.videoWidth * ratio));
-      const resizeHeight = Math.max(1, Math.round(video.videoHeight * ratio));
-      void createImageBitmap(video, {
-        resizeWidth, resizeHeight, resizeQuality: 'medium'
-      }).then(bitmap => {
+      void captureInferenceBitmap(video, MAX_CAPTURE_WIDTH).then(bitmap => {
         if (stopped || generation !== generationRef.current || video.seeking ||
             !activeRef.current || video.paused || workerRef.current !== worker) {
           bitmap.close();
@@ -1293,13 +1290,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   // Paint each display frame using optical positions from the most recent
   // decoded video frame; hide boxes immediately when tracking loses them.
   useEffect(() => {
+    // Keep live capture mounted across routes, but don't paint invisible video.
+    if (!active) return;
     let animation = 0;
+    let lastPaint = 0;
     let lastUI = 0;
     let lastSaved = 0;
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
     const render = (time: number) => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (video && canvas && activeRef.current) {
+      const paintInterval = analysisPaintIntervalMs(window.innerWidth, coarsePointer);
+      if (video && canvas && activeRef.current && !document.hidden &&
+          shouldPaintAnalysisFrame(time, lastPaint, paintInterval)) {
+        lastPaint = time;
         const width = canvas.clientWidth;
         const height = canvas.clientHeight;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1426,7 +1430,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     };
     animation = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animation);
-  }, []);
+  }, [active]);
 
   return (
     <div className={'vg-page vg-analyze-page space-y-5' + (focusMode ? ' vg-analyze-focus' : '')}>

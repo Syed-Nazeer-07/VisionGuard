@@ -20,6 +20,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 BASE = "http://127.0.0.1:3000"
 BREAKPOINTS = [(1440, 900), (1024, 768), (768, 900), (390, 844)]
+GEOMETRY_VIEWPORTS = [(320, 720), (375, 812), (768, 1024), (1440, 900), (2560, 1440)]
 
 
 def wait_for_server(timeout: int = 55) -> None:
@@ -122,6 +123,61 @@ def check_anchor_scroll(driver):
     )
 
 
+
+def check_responsive_geometry(driver, width: int, height: int):
+    """CDP emulation avoids Chrome headless's minimum outer-window width."""
+    driver.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {
+        "width": width,
+        "height": height,
+        "deviceScaleFactor": 1,
+        "mobile": width <= 768,
+    })
+    navigate_home(driver)
+    layout = driver.execute_script(
+        """const selectors=['.vgn-nav','.vgn-hero-content','.vgn-hero-content h1',
+                            '.vgn-hero-actions','.vgn-hero-demo'];
+           const clipped=selectors.flatMap(selector => {
+             const el=document.querySelector(selector);
+             if(!el)return [selector+': missing'];
+             const r=el.getBoundingClientRect();
+             return (r.left < -2 || r.right > innerWidth+2)
+                 ? [selector+': ['+r.left.toFixed(1)+','+r.right.toFixed(1)+']']
+                 : [];
+           });
+           return { viewport: innerWidth, document: document.documentElement.scrollWidth,
+                    clipped };"""
+    )
+    assert layout["viewport"] == width, ("Viewport emulation failed:", layout)
+    assert layout["document"] <= width + 2, ("Landing horizontal overflow:", layout)
+    assert not layout["clipped"], ("Landing elements clipped:", layout)
+
+    if width <= 1020:
+        menu = driver.find_element(By.CSS_SELECTOR, ".vgn-menu-button")
+        assert menu.is_displayed(), ("Mobile navigation button missing:", width)
+        menu.click()
+        assert menu.get_attribute("aria-expanded") == "true"
+        assert driver.find_element(By.CSS_SELECTOR, ".vgn-mobile-navigation").is_displayed()
+        menu.click()
+        assert menu.get_attribute("aria-expanded") == "false"
+
+    for route in ("/login", "/register"):
+        driver.get(BASE + route)
+        WebDriverWait(driver, 15).until(
+            lambda d: bool(d.find_elements(By.CSS_SELECTOR, ".vg-auth-form"))
+        )
+        layout = driver.execute_script(
+            """return {viewport:innerWidth,document:document.documentElement.scrollWidth,
+                       formRight:document.querySelector('.vg-auth-form').getBoundingClientRect().right};"""
+        )
+        assert layout["document"] <= width + 2, (
+            "Authentication horizontal overflow:", route, layout
+        )
+        assert layout["formRight"] <= width + 2, (
+            "Authentication form exceeds viewport:", route, layout
+        )
+
+
+
 def main():
     chrome = shutil.which("google-chrome") or shutil.which("google-chrome-stable") or shutil.which("chromium")
     if not chrome:
@@ -162,7 +218,12 @@ def main():
             check_click_target(driver, '.vgn-cta-actions a[href="/login"]', "/login")
             check_anchor_scroll(driver)
 
-        print("PASS: real Chrome link hit-testing and native navigation at all breakpoints", flush=True)
+        for width, height in GEOMETRY_VIEWPORTS:
+            print(f"Checking responsive page geometry at {width}x{height}", flush=True)
+            check_responsive_geometry(driver, width, height)
+        driver.execute_cdp_cmd("Emulation.clearDeviceMetricsOverride", {})
+
+        print("PASS: Chrome navigation + phone/tablet/desktop/ultrawide geometry", flush=True)
     finally:
         if driver:
             driver.quit()
