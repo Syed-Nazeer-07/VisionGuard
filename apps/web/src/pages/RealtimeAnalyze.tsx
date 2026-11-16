@@ -1613,7 +1613,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 }}
               />
               <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
-              <div className="pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
+              <div className="vg-analysis-live-badges pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-semibold text-white">
                   {tabCaptureActive ? (
                     streamHealth === 'playing' ? 'TAB LIVE' :
