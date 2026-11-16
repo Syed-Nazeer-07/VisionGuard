@@ -128,12 +128,12 @@ export function Config() {
   ] as const
 
   return (
-    <div className="space-y-6 max-w-[1500px] mx-auto pb-12">
+    <div className="vg-config-page space-y-6 max-w-[1500px] mx-auto pb-12">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-2 border-b border-slate-200">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="vg-admin-heading flex items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">System Configuration</h1>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
               System Settings & Rules
@@ -144,7 +144,7 @@ export function Config() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="vg-admin-actions flex items-center gap-3">
           {saveSuccess && (
             <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 animate-in fade-in">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Saved to System Database
@@ -208,7 +208,7 @@ export function Config() {
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden flex flex-col min-h-[500px]">
+        <div className="min-w-0 flex-1 bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden flex flex-col min-h-[500px]">
           
           {/* Header Bar */}
           <div className="p-5 border-b border-slate-100 bg-slate-50/50">
