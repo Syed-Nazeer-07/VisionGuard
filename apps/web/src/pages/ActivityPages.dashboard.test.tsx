@@ -12,8 +12,7 @@ describe('browser-first operations overview', () => {
 
   it('puts a clear analysis action above the real-data metrics', () => {
     const html = render();
-    expect(html).toContain('Every observation, in focus.');
-    expect(html).toContain('VISIONGUARD / OPERATIONS OVERVIEW');
+    expect(html).toContain('<h1>Overview</h1>');
     expect(html).toContain('href="/app/analyze"');
     expect(html).toContain('Start an analysis');
     expect(html).toContain('Repeated vehicle tracks');

@@ -19,7 +19,6 @@
 .vg-shell .vg-main-scroll { overscroll-behavior-y: contain; }
 .vg-shell .vg-page-header > *,
 .vg-shell .vg-section-head > *,
-.vg-shell .vg-dashboard-hero > *,
 .vg-shell .vg-analysis-header > *,
 .vg-shell .vg-storage-summary > * {
   min-width: 0;
@@ -29,9 +28,6 @@
 .vg-shell .vg-storage-summary-copy,
 .vg-shell .vg-admin-page h1 {
   overflow-wrap: anywhere;
-}
-.vg-shell :is(.vg-stat, .vg-analysis-telemetry-card) {
-  min-width: 0;
 }
 .vg-shell :is(input, select, textarea) { max-width: 100%; }
 .vg-shell .vg-data-page .recharts-responsive-container { min-width: 0; }
@@ -52,7 +48,6 @@
     padding-left: clamp(38px, 3vw, 64px);
     padding-right: clamp(38px, 3vw, 64px);
   }
-  .vg-shell .vg-dashboard-hero { gap: clamp(30px, 4vw, 88px); }
 }
 
 /* Portrait tablets and compact landscape windows should get the full content
@@ -64,6 +59,7 @@
     box-shadow: 16px 0 36px rgba(0, 0, 0, .18);
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+  .vg-shell .vg-side-bar[aria-hidden="true"] { box-shadow: none; }
   .vg-shell .vg-side-head { min-height: 72px; }
   .vg-shell .vg-mobile-bar {
     min-height: 50px;
@@ -82,7 +78,6 @@
     width: 100%;
     padding: 24px clamp(18px, 3.4vw, 32px) 44px;
   }
-  .vg-shell .vg-dashboard-hero { gap: 22px; }
   .vg-shell .vg-page-header { align-items: flex-start; }
   .vg-shell .vg-analysis-actions { max-width: 100%; }
   .vg-shell .vg-admin-page > * { min-width: 0; }
@@ -108,20 +103,6 @@
   }
   .vg-shell .vg-section-head h2 { line-height: 1.35; }
   .vg-shell .vg-section-subtitle { line-height: 1.55; }
-  .vg-shell .vg-dashboard-hero {
-    padding: 23px 19px;
-    border-radius: 14px;
-    gap: 20px;
-  }
-  .vg-shell .vg-dashboard-hero h1 { font-size: clamp(28px, 8.3vw, 36px); }
-  .vg-shell .vg-dashboard-hero p { font-size: 13px; }
-  .vg-shell .vg-dashboard-hero-side { width: 100%; }
-  .vg-shell .vg-dashboard-hero-actions {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    width: 100%;
-  }
-  .vg-shell .vg-dashboard-hero-actions a { width: 100%; }
   .vg-shell .vg-stat { padding: 18px 17px; min-height: 120px; }
   .vg-shell .vg-stat-foot { overflow-wrap: anywhere; }
   .vg-shell .vg-run-row,
@@ -196,7 +177,6 @@
     line-height: 1.2;
     padding: 5px 7px;
   }
-  .vg-shell .vg-monitor-heading { flex-wrap: wrap; gap: 8px; }
   .vg-shell .vg-storage-summary-meta { padding-left: 0; gap: 8px; }
   .vg-shell .vg-storage-summary-copy > span { overflow-wrap: anywhere; }
   .vg-shell .vg-storage-summary-lead { align-items: flex-start; }

@@ -16,8 +16,7 @@ export function AuthCardLayout({
         </Link>
         <section className="vg-auth-recovery-card rounded-2xl border border-[#dce3e1] bg-white p-6 sm:p-9">
           <div className="mb-7">
-            <span className="vg-auth-recovery-kicker">ACCOUNT SECURITY / VISIONGUARD</span>
-            <h1 className="mt-4 text-[28px] font-semibold tracking-[-.055em] text-[#263136]">{title}</h1>
+            <h1 className="mt-0 text-[28px] font-semibold tracking-[-.055em] text-[#263136]">{title}</h1>
             <p className="mt-2 text-sm leading-7 text-[#69777d]">{subtitle}</p>
           </div>
           {children}

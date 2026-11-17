@@ -1,0 +1,428 @@
+{
+  "format": "visionguard-tracking-eval/v1",
+  "source": "road",
+  "annotationStatus": "independently hand-labeled smoke evaluation",
+  "region": "source box center y >= 200; far horizon excluded",
+  "frames": [
+    {
+      "time": 7.68,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "road-1",
+          "className": "car",
+          "box": {
+            "x": 428.5,
+            "y": 371.5,
+            "w": 53,
+            "h": 39
+          }
+        },
+        {
+          "id": "road-2",
+          "className": "truck",
+          "box": {
+            "x": 492.0,
+            "y": 236.0,
+            "w": 40,
+            "h": 50
+          }
+        },
+        {
+          "id": "road-3",
+          "className": "car",
+          "box": {
+            "x": 525.0,
+            "y": 255.5,
+            "w": 22,
+            "h": 15
+          }
+        },
+        {
+          "id": "road-4",
+          "className": "car",
+          "box": {
+            "x": 670.5,
+            "y": 241.0,
+            "w": 21,
+            "h": 18
+          }
+        },
+        {
+          "id": "road-5",
+          "className": "car",
+          "box": {
+            "x": 712.5,
+            "y": 267.5,
+            "w": 27,
+            "h": 23
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": [
+        {
+          "id": 1,
+          "className": "car",
+          "confidence": 0.7664772272109985,
+          "isPredicted": false,
+          "box": {
+            "x": 707.1389160156249,
+            "y": 256.8989868164066,
+            "w": 42.81427001953125,
+            "h": 34.9659423828125
+          }
+        },
+        {
+          "id": 2,
+          "className": "car",
+          "confidence": 0.7414116859436035,
+          "isPredicted": false,
+          "box": {
+            "x": 444.5350516183039,
+            "y": 360.74617222377213,
+            "w": 33.9102783203125,
+            "h": 23.9188232421875
+          }
+        }
+      ]
+    },
+    {
+      "time": 7.8,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "road-1",
+          "className": "car",
+          "box": {
+            "x": 425.5,
+            "y": 378.0,
+            "w": 53,
+            "h": 40
+          }
+        },
+        {
+          "id": "road-2",
+          "className": "truck",
+          "box": {
+            "x": 492.0,
+            "y": 236.5,
+            "w": 40,
+            "h": 51
+          }
+        },
+        {
+          "id": "road-3",
+          "className": "car",
+          "box": {
+            "x": 523.5,
+            "y": 256.5,
+            "w": 23,
+            "h": 15
+          }
+        },
+        {
+          "id": "road-4",
+          "className": "car",
+          "box": {
+            "x": 669.5,
+            "y": 239.5,
+            "w": 21,
+            "h": 17
+          }
+        },
+        {
+          "id": "road-5",
+          "className": "car",
+          "box": {
+            "x": 710.0,
+            "y": 266.0,
+            "w": 26,
+            "h": 22
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": [
+        {
+          "id": 1,
+          "className": "car",
+          "confidence": 0.7664772272109985,
+          "isPredicted": false,
+          "box": {
+            "x": 704.281773158482,
+            "y": 256.8989868164066,
+            "w": 42.81427001953125,
+            "h": 34.9659423828125
+          }
+        },
+        {
+          "id": 2,
+          "className": "car",
+          "confidence": 0.7414116859436035,
+          "isPredicted": false,
+          "box": {
+            "x": 441.67790876116106,
+            "y": 366.46045793805786,
+            "w": 33.9102783203125,
+            "h": 23.9188232421875
+          }
+        }
+      ]
+    },
+    {
+      "time": 7.92,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "road-1",
+          "className": "car",
+          "box": {
+            "x": 421.0,
+            "y": 385.0,
+            "w": 56,
+            "h": 40
+          }
+        },
+        {
+          "id": "road-2",
+          "className": "truck",
+          "box": {
+            "x": 491.0,
+            "y": 238.5,
+            "w": 40,
+            "h": 51
+          }
+        },
+        {
+          "id": "road-3",
+          "className": "car",
+          "box": {
+            "x": 521.5,
+            "y": 258.0,
+            "w": 23,
+            "h": 16
+          }
+        },
+        {
+          "id": "road-4",
+          "className": "car",
+          "box": {
+            "x": 668.5,
+            "y": 238.0,
+            "w": 21,
+            "h": 18
+          }
+        },
+        {
+          "id": "road-5",
+          "className": "car",
+          "box": {
+            "x": 706.5,
+            "y": 265.5,
+            "w": 25,
+            "h": 23
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": [
+        {
+          "id": 1,
+          "className": "car",
+          "confidence": 0.7664772272109985,
+          "isPredicted": false,
+          "box": {
+            "x": 701.4246303013391,
+            "y": 256.8989868164066,
+            "w": 42.81427001953125,
+            "h": 34.9659423828125
+          }
+        },
+        {
+          "id": 2,
+          "className": "car",
+          "confidence": 0.7414116859436035,
+          "isPredicted": false,
+          "box": {
+            "x": 438.82076590401823,
+            "y": 372.1747436523436,
+            "w": 33.9102783203125,
+            "h": 23.9188232421875
+          }
+        }
+      ]
+    },
+    {
+      "time": 8.04,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "road-1",
+          "className": "car",
+          "box": {
+            "x": 415.0,
+            "y": 392.5,
+            "w": 56,
+            "h": 39
+          }
+        },
+        {
+          "id": "road-2",
+          "className": "truck",
+          "box": {
+            "x": 491.0,
+            "y": 239.0,
+            "w": 40,
+            "h": 52
+          }
+        },
+        {
+          "id": "road-3",
+          "className": "car",
+          "box": {
+            "x": 520.0,
+            "y": 259.5,
+            "w": 24,
+            "h": 17
+          }
+        },
+        {
+          "id": "road-4",
+          "className": "car",
+          "box": {
+            "x": 667.5,
+            "y": 237.5,
+            "w": 21,
+            "h": 17
+          }
+        },
+        {
+          "id": "road-5",
+          "className": "car",
+          "box": {
+            "x": 704.0,
+            "y": 264.0,
+            "w": 26,
+            "h": 22
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": [
+        {
+          "id": 1,
+          "className": "car",
+          "confidence": 0.7664772272109985,
+          "isPredicted": false,
+          "box": {
+            "x": 698.5674874441962,
+            "y": 256.8989868164066,
+            "w": 42.81427001953125,
+            "h": 34.9659423828125
+          }
+        },
+        {
+          "id": 2,
+          "className": "car",
+          "confidence": 0.7414116859436035,
+          "isPredicted": false,
+          "box": {
+            "x": 435.9636230468754,
+            "y": 380.74617222377213,
+            "w": 33.9102783203125,
+            "h": 23.9188232421875
+          }
+        }
+      ]
+    },
+    {
+      "time": 8.16,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "road-1",
+          "className": "car",
+          "box": {
+            "x": 410.0,
+            "y": 400.0,
+            "w": 58,
+            "h": 42
+          }
+        },
+        {
+          "id": "road-2",
+          "className": "truck",
+          "box": {
+            "x": 490.5,
+            "y": 240.5,
+            "w": 41,
+            "h": 53
+          }
+        },
+        {
+          "id": "road-3",
+          "className": "car",
+          "box": {
+            "x": 518.0,
+            "y": 260.5,
+            "w": 24,
+            "h": 17
+          }
+        },
+        {
+          "id": "road-4",
+          "className": "car",
+          "box": {
+            "x": 666.5,
+            "y": 236.5,
+            "w": 21,
+            "h": 17
+          }
+        },
+        {
+          "id": "road-5",
+          "className": "car",
+          "box": {
+            "x": 701.5,
+            "y": 263.0,
+            "w": 27,
+            "h": 22
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": [
+        {
+          "id": 1,
+          "className": "car",
+          "confidence": 0.7664772272109985,
+          "isPredicted": false,
+          "box": {
+            "x": 695.7103445870533,
+            "y": 256.8989868164066,
+            "w": 42.81427001953125,
+            "h": 34.9659423828125
+          }
+        },
+        {
+          "id": 2,
+          "className": "car",
+          "confidence": 0.7414116859436035,
+          "isPredicted": false,
+          "box": {
+            "x": 433.10648018973257,
+            "y": 389.3176007952007,
+            "w": 33.9102783203125,
+            "h": 23.9188232421875
+          }
+        }
+      ]
+    }
+  ]
+}

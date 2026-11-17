@@ -1,3 +1,4 @@
+import { Modal } from '../components/ui/Modal';
 import { useState, useEffect, useMemo } from 'react'
 import { 
   Search, Download, ShieldCheck, 
@@ -234,7 +235,7 @@ export function AuditLogs() {
         </div>
 
         {/* Table Content */}
-        <div className="overflow-x-auto min-h-[320px]">
+        <div className="overflow-x-auto" role="region" aria-label="Audit log table" tabIndex={0}>
           {loading ? (
             <div className="h-64 flex flex-col items-center justify-center text-slate-400">
               <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
@@ -343,26 +344,20 @@ export function AuditLogs() {
 
       {/* Inspect Event Modal */}
       {inspectedLog && (
-        <div 
-          className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-2xs flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => setInspectedLog(null)}
-        >
-          <div 
-            className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-xl w-full p-5 space-y-4 max-h-[90vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}
-          >
+        <Modal labelledBy="audit-event-title" onDismiss={() => setInspectedLog(null)}>
+          <div className="p-5 space-y-4">
             <div className="flex items-start justify-between pb-3 border-b border-slate-100">
               <div>
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <h2 id="audit-event-title" className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <FileText className="w-4 h-4 text-blue-600" />
-                  <span>Audit Event Detail</span>
-                </h3>
+                  <span>Audit event</span>
+                </h2>
                 <span className="text-[11px] font-mono text-slate-400 mt-0.5 block">
                   Event ID: #{inspectedLog.id}
                 </span>
               </div>
               <button 
-                onClick={() => setInspectedLog(null)}
+                onClick={() => setInspectedLog(null)} aria-label="Close audit event"
                 className="text-slate-400 hover:text-slate-800 p-1"
               >
                 <X className="w-4 h-4" />
@@ -417,7 +412,7 @@ export function AuditLogs() {
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
     </div>

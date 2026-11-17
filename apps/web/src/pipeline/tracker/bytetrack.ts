@@ -130,6 +130,7 @@ export class ByteTracker {
         prob: t.prob,
         classId: t.classId,
         className: t.className,
+        classScores: useDetectedBox ? t.lastBox.classScores : undefined,
         trackId: t.trackId,
         state: t.state,
         frameCount: t.frameCount,

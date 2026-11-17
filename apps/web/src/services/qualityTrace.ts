@@ -6,6 +6,7 @@ export type QualityFrame = {
   time: number;
   width: number;
   height: number;
+  overlayAgeMs?: number | null;
   // Deliberately null until a human labels the same frame.
   // The evaluator REJECTS unannotated exports to prevent false accuracy.
   groundTruth: null;
@@ -24,6 +25,7 @@ export function appendQualityFrame(
   width: number,
   height: number,
   tracks: readonly LiveTrack[],
+  overlayAgeMs?: number | null,
 ): boolean {
   if (frames.length >= QA_MAX_FRAMES ||
       ![time, width, height].every(Number.isFinite) ||
@@ -32,7 +34,7 @@ export function appendQualityFrame(
   if (previous && time - previous.time < QA_MIN_FRAME_INTERVAL_SEC) return false;
   if (previous && time <= previous.time) return false;
   frames.push({
-    time, width, height, groundTruth: null, exitedIds: null,
+    time, width, height, overlayAgeMs, groundTruth: null, exitedIds: null,
     predictions: tracks.filter(t =>
       [t.x, t.y, t.w, t.h, t.confidence].every(Number.isFinite) &&
       t.w > 0 && t.h > 0 && t.className.trim() !== ''

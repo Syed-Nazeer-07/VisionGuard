@@ -1,4 +1,5 @@
 import type { BoundingBox } from '../types';
+import { getIOU } from './matching';
 import type { LiveTrack } from './liveProjection';
 
 /**
@@ -33,7 +34,8 @@ export class TwoWheelerAssociator {
       for (let i = 0; i < this.observations.length; i++) {
         if (matched.has(i)) continue;
         const observation = this.observations[i];
-        if (observation.box.classId !== box.classId) continue;
+        const classChanged = observation.box.classId !== box.classId;
+        if (classChanged && getIOU(observation.box, box) < .65) continue;
         const dt = mediaTime - observation.seenAt;
         if (dt < 0 || dt > 2.3) continue;
         const distance = Math.hypot(box.x - observation.box.x, box.y - observation.box.y);
@@ -41,7 +43,7 @@ export class TwoWheelerAssociator {
         const ratio = Math.max(box.w / observation.box.w, observation.box.w / box.w,
           box.h / observation.box.h, observation.box.h / box.h);
         if (ratio > 2.5 || distance > radius) continue;
-        const normalized = distance / radius + (ratio - 1) * .3;
+        const normalized = distance / radius + (ratio - 1) * .3 + (classChanged ? .12 : 0);
         if (normalized < bestScore) {
           bestScore = normalized;
           bestIndex = i;

@@ -1,6 +1,6 @@
 /**
  * Cloudflare Workers static assets max out at 25 MiB per file.
- * Vite eagerly emits ONNX Runtime Web's ~29.5 MiB JSEP WASM even when runtime
+ * Vite eagerly emits ONNX Runtime Web's oversized JSEP or Asyncify WASM even when runtime
  * paths are overridden. Exclude ONLY that duplicate binary from production,
  * after checking that its exact-version CDN is configured in generated JS.
  */
@@ -8,7 +8,7 @@ import { existsSync, readFileSync, readdirSync, statSync, rmSync } from 'node:fs
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const JSEP_NAME = /^ort-wasm-simd-threaded\.jsep(?:-[A-Za-z0-9_-]+)?\.wasm$/;
+const EXTERNAL_ORT_WASM = /^ort-wasm-simd-threaded\.(?:jsep|asyncify)(?:-[A-Za-z0-9_-]+)?\.wasm$/;
 
 export function prepareCloudflareAssets(rootDir = process.cwd()) {
   const web = path.join(rootDir, 'apps/web');
@@ -33,13 +33,13 @@ export function prepareCloudflareAssets(rootDir = process.cwd()) {
   }
   const removed = [];
   for (const file of assets) {
-    if (!JSEP_NAME.test(file)) continue;
+    if (!EXTERNAL_ORT_WASM.test(file)) continue;
     const target = path.join(assetDir, file);
     removed.push({ file, bytes: statSync(target).size });
     rmSync(target);
   }
   if (removed.length === 0) {
-    throw new Error('Expected emitted JSEP WASM not found. Verify Vite asset loading before release.');
+    throw new Error('Expected emitted ONNX Runtime WebGPU WASM not found. Verify Vite asset loading before release.');
   }
   return removed;
 }

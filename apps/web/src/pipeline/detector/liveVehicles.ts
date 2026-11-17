@@ -8,6 +8,41 @@ const ANCHORS = 8400;
 const MOTORCYCLE_CONFIDENCE = 0.28;
 const BICYCLE_CONFIDENCE = 0.33;
 
+export const YOLO_INPUT_SIZE = 640;
+export const YOLO_INPUT_SHAPE = [1, 3, YOLO_INPUT_SIZE, YOLO_INPUT_SIZE] as const;
+export const YOLO_OUTPUT_SHAPE = [1, 4 + NUM_CLASSES, ANCHORS] as const;
+
+type TensorMetadata = {
+  isTensor: boolean;
+  type?: string;
+  shape?: readonly (number | string)[];
+};
+
+export function matchesYoloTensor(metadata: TensorMetadata, expected: readonly number[]): boolean {
+  const shape = metadata.shape;
+  return metadata.isTensor && metadata.type === 'float32' &&
+    shape?.length === expected.length && expected.every((size, index) => shape[index] === size);
+}
+
+export function trafficLetterbox(sourceWidth: number, sourceHeight: number) {
+  if (![sourceWidth, sourceHeight].every(value => Number.isFinite(value) && value > 0)) {
+    throw new Error('Expected positive source video dimensions.');
+  }
+  const ratio = YOLO_INPUT_SIZE / Math.max(sourceWidth, sourceHeight);
+  const width = Math.max(1, Math.round(sourceWidth * ratio));
+  const height = Math.max(1, Math.round(sourceHeight * ratio));
+  return {
+    width, height, sourceWidth, sourceHeight,
+    scaleX: width / sourceWidth, scaleY: height / sourceHeight,
+    left: Math.floor((YOLO_INPUT_SIZE - width) / 2),
+    top: Math.floor((YOLO_INPUT_SIZE - height) / 2)
+  };
+}
+
+function isTwoWheeler(classId: number) {
+  return classId === 1 || classId === 3;
+}
+
 function groupOf(classId: number): number {
   return classId === 2 || classId === 5 || classId === 7 ? 2 : classId;
 }
@@ -33,17 +68,12 @@ function overlap(box: BoundingBox, other: BoundingBox) {
  */
 export function decodeTrafficVehicles(
   data: Float32Array,
-  originalWidth: number,
-  originalHeight: number,
-  ratio: number,
-  padW: number,
-  padH: number,
-  minimumConfidence = 0.43,
+  transform: ReturnType<typeof trafficLetterbox>,
 ): BoundingBox[] {
-  if (data.length !== 84 * ANCHORS || ratio <= 0 ||
-      originalWidth <= 0 || originalHeight <= 0) {
-    throw new Error('Expected YOLO11 COCO output [1,84,8400] and valid letterbox metadata.');
+  if (data.length !== YOLO_OUTPUT_SHAPE[1] * ANCHORS) {
+    throw new Error('Expected YOLO11 COCO output [1,84,8400].');
   }
+  const { sourceWidth, sourceHeight, scaleX, scaleY, left, top } = transform;
   const candidates: BoundingBox[] = [];
   for (let i = 0; i < ANCHORS; i++) {
     let bestClass = -1;
@@ -63,7 +93,7 @@ export function decodeTrafficVehicles(
     }
     if (bestClass < 0) continue;
     const required = bestClass === 3 ? MOTORCYCLE_CONFIDENCE :
-      bestClass === 1 ? BICYCLE_CONFIDENCE : minimumConfidence;
+      bestClass === 1 ? BICYCLE_CONFIDENCE : 0.43;
     if (best < required) continue;
     // Don't turn pedestrians into motorcycles. Permit ambiguity with a rider
     // only when the two-wheeler score closely competes with the person score.
@@ -81,19 +111,19 @@ export function decodeTrafficVehicles(
     if (![centerX, centerY, width, height].every(Number.isFinite)) continue;
     if (width <= 0 || height <= 0) continue;
     // Undo the EXACT letterbox transform and clip to the physical video image.
-    const x1 = Math.max(0, (centerX - width / 2 - padW) / ratio);
-    const y1 = Math.max(0, (centerY - height / 2 - padH) / ratio);
-    const x2 = Math.min(originalWidth, (centerX + width / 2 - padW) / ratio);
-    const y2 = Math.min(originalHeight, (centerY + height / 2 - padH) / ratio);
+    const x1 = Math.max(0, (centerX - width / 2 - left) / scaleX);
+    const y1 = Math.max(0, (centerY - height / 2 - top) / scaleY);
+    const x2 = Math.min(sourceWidth, (centerX + width / 2 - left) / scaleX);
+    const y2 = Math.min(sourceHeight, (centerY + height / 2 - top) / scaleY);
     const w = x2 - x1;
     const h = y2 - y1;
-    const isTwoWheeler = bestClass === 1 || bestClass === 3;
-    const minimumSize = isTwoWheeler ? 5 : 9;
-    if (w < minimumSize || h < minimumSize || w > originalWidth * 0.93 ||
-        h > originalHeight * 0.93) continue;
+    const smallVehicle = isTwoWheeler(bestClass);
+    const minimumSize = smallVehicle ? 5 : 9;
+    if (w < minimumSize || h < minimumSize || w > sourceWidth * 0.93 ||
+        h > sourceHeight * 0.93) continue;
     const aspect = w / h;
-    if (aspect < (isTwoWheeler ? 0.12 : 0.18) ||
-        aspect > (isTwoWheeler ? 9 : 7)) continue;
+    if (aspect < (smallVehicle ? 0.12 : 0.18) ||
+        aspect > (smallVehicle ? 9 : 7)) continue;
 
     candidates.push({
       x: (x1 + x2) / 2, y: (y1 + y2) / 2,
@@ -119,9 +149,13 @@ export function decodeTrafficVehicles(
   const selected: BoundingBox[] = [];
   for (const candidate of [...candidatePool].sort((a, b) => b.prob - a.prob)) {
     if (selected.some(existing => {
-      if (groupOf(existing.classId) !== groupOf(candidate.classId)) return false;
+      const sameGroup = groupOf(existing.classId) === groupOf(candidate.classId);
+      const competingTwoWheelers = isTwoWheeler(existing.classId) && isTwoWheeler(candidate.classId);
+      if (!sameGroup && !competingTwoWheelers) return false;
       const o = overlap(candidate, existing);
-      return o.iou >= 0.43 || o.containment >= 0.82;
+      // Distinct bicycles and motorcycles often overlap in traffic. Suppress
+      // cross-class duplicates only when the two geometries closely agree.
+      return sameGroup ? o.iou >= 0.43 || o.containment >= 0.82 : o.iou >= 0.72;
     })) continue;
     selected.push(candidate);
     if (selected.length >= 80) break;

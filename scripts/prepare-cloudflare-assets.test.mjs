@@ -45,3 +45,13 @@ test('rejects production assets lacking the external CDN URL', () => {
   writeFileSync(path.join(root, 'apps/web/dist/assets/localTrafficWorker-TEST.js'), 'offline only');
   assert.throws(() => prepareCloudflareAssets(root), /lacks same-version/);
 });
+
+test('excludes the WebGPU Asyncify binary emitted by newer ORT builds', () => {
+  const root = fixture();
+  const assets = path.join(root, 'apps/web/dist/assets');
+  writeFileSync(path.join(assets, 'ort-wasm-simd-threaded.asyncify-aB12.wasm'), 'wasm');
+  writeFileSync(path.join(assets, 'ort-wasm-simd-threaded-cpu.wasm'), 'cpu wasm');
+  const result = prepareCloudflareAssets(root);
+  assert.equal(result.length, 2);
+  assert.equal(existsSync(path.join(assets, 'ort-wasm-simd-threaded-cpu.wasm')), true);
+});

@@ -1,8 +1,10 @@
-import { env, InferenceSession, Tensor } from 'onnxruntime-web';
-import { decodeTrafficVehicles } from '../pipeline/detector/liveVehicles';
+import { env, InferenceSession, Tensor } from 'onnxruntime-web/webgpu';
+import {
+  decodeTrafficVehicles, matchesYoloTensor, trafficLetterbox,
+  YOLO_INPUT_SHAPE, YOLO_INPUT_SIZE, YOLO_OUTPUT_SHAPE
+} from '../pipeline/detector/liveVehicles';
 import { ByteTracker } from '../pipeline/tracker/bytetrack';
 import { calculateMotion, type LiveTrack } from '../pipeline/tracker/liveProjection';
-import { getIOU } from '../pipeline/tracker/matching';
 import { TwoWheelerAssociator } from '../pipeline/tracker/twoWheelerAssociator';
 import { ortWasmAssetsPath } from '../services/ortWasmPaths';
 import { disposeInferenceResources } from '../services/inferenceResources';
@@ -30,7 +32,7 @@ const observations = new Map<number, {
   x: number; y: number; h: number; time: number; vx: number; vy: number
 }>();
 
-const SIZE = 640;
+const SIZE = YOLO_INPUT_SIZE;
 let canvas: OffscreenCanvas | null = null;
 let context: OffscreenCanvasRenderingContext2D | null = null;
 let floatBuffer: Float32Array | null = null;
@@ -44,15 +46,34 @@ async function initialize(path: string) {
   }
   await verifyOnnxModelUrl(path);
   let gpuError = '';
-  if ('gpu' in navigator) {
+  type Adapter = typeof env.webgpu.adapter & { info?: { isFallbackAdapter?: boolean } };
+  const gpu = (navigator as Navigator & {
+    gpu?: { requestAdapter: () => Promise<Adapter | null> }
+  }).gpu;
+  if (gpu) {
     try {
-      session = await InferenceSession.create(path, { executionProviders: ['webgpu'] });
-      executionProvider = 'webgpu';
-    } catch (e) { gpuError = errorText(e); }
+      const adapter = await gpu.requestAdapter();
+      if (!adapter || adapter.info?.isFallbackAdapter) {
+        gpuError = adapter ? 'The browser reported a software adapter.' : 'No hardware adapter was available.';
+      } else {
+        env.webgpu.adapter = adapter;
+        session = await InferenceSession.create(path, { executionProviders: ['webgpu'] });
+        executionProvider = 'webgpu';
+      }
+    } catch (error) { gpuError = errorText(error); }
   }
   if (!session) {
     session = await InferenceSession.create(path, { executionProviders: ['wasm'] });
     executionProvider = 'wasm';
+  }
+  const [input] = session.inputMetadata;
+  const [output] = session.outputMetadata;
+  if (session.inputMetadata.length !== 1 || session.outputMetadata.length !== 1 ||
+      !matchesYoloTensor(input, YOLO_INPUT_SHAPE) || !matchesYoloTensor(output, YOLO_OUTPUT_SHAPE)) {
+    const incompatible = session;
+    session = null;
+    await incompatible.release();
+    throw new Error('Incompatible model. Supply a float32 YOLO11 COCO ONNX export with input [1,3,640,640] and output [1,84,8400].');
   }
   self.postMessage({ type: 'ready', provider: executionProvider, fallbackReason: gpuError });
 }
@@ -64,14 +85,11 @@ function preprocess(bitmap: ImageBitmap, sourceWidth: number, sourceHeight: numb
     floatBuffer = new Float32Array(3 * SIZE * SIZE);
   }
   if (!context || !floatBuffer) throw new Error('Unable to initialize inference canvas');
-  const scale = Math.min(SIZE / sourceWidth, SIZE / sourceHeight);
-  const sw = Math.max(1, Math.round(sourceWidth * scale));
-  const sh = Math.max(1, Math.round(sourceHeight * scale));
-  const left = Math.floor((SIZE - sw) / 2);
-  const top = Math.floor((SIZE - sh) / 2);
+  const transform = trafficLetterbox(sourceWidth, sourceHeight);
+  const { left, top, width, height } = transform;
   context.fillStyle = 'rgb(114,114,114)';
   context.fillRect(0, 0, SIZE, SIZE);
-  context.drawImage(bitmap, left, top, sw, sh);
+  context.drawImage(bitmap, left, top, width, height);
   const rgba = context.getImageData(0, 0, SIZE, SIZE).data;
   const area = SIZE * SIZE;
   const dest = floatBuffer;
@@ -84,8 +102,7 @@ function preprocess(bitmap: ImageBitmap, sourceWidth: number, sourceHeight: numb
   // Derived from actual rounded letterbox dimensions, not the ImageBitmap
   // dimensions (which may have been scaled down for transfer efficiency).
   return {
-    tensor: new Tensor('float32', dest, [1, 3, SIZE, SIZE]),
-    ratio: sw / sourceWidth, padW: left, padH: top
+    tensor: new Tensor('float32', dest, YOLO_INPUT_SHAPE), transform
   };
 }
 
@@ -112,11 +129,12 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
       });
       return;
     }
-    const boxes = decodeTrafficVehicles(
-      output[session.outputNames[0]].data as Float32Array,
-      message.sourceWidth, message.sourceHeight,
-      processed.ratio, processed.padW, processed.padH
-    );
+    const result = output[session.outputNames[0]];
+    if (!matchesYoloTensor({ isTensor: true, type: result.type, shape: result.dims }, YOLO_OUTPUT_SHAPE) ||
+        !(result.data instanceof Float32Array)) {
+      throw new Error('The detector returned an incompatible output tensor.');
+    }
+    const boxes = decodeTrafficVehicles(result.data, processed.transform);
     // Let motorcycle/bicycle detections bypass the car tracker's .45/.60
     // confidence gates. A separate, conservative two-wheeler tracker runs
     // only on class 1 and class 3, leaving all other vehicle paths unchanged.
@@ -126,8 +144,7 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
     // for 2-hit confirmation. Display high-confidence NEW detections directly;
     // continue assigning stable IDs once matching succeeds.
     const observedTracks = tracker.update(fourWheelBoxes)
-      .filter(track => track.timeSinceUpdate === 0 &&
-        (track.state === 'Confirmed' || (track.hitCount ?? 0) >= 2 || track.prob >= 0.54));
+      .filter(track => track.observationType === 'detection');
     const tracks: LiveTrack[] = observedTracks.map(track => {
       const previous = observations.get(track.trackId);
       const velocity = calculateMotion(previous, track, message.mediaTime);
@@ -135,14 +152,10 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
         x: track.x, y: track.y, h: track.h, time: message.mediaTime,
         vx: velocity.vx, vy: velocity.vy
       });
-      const box = fourWheelBoxes.reduce((best, candidate) => {
-        const overlap = getIOU(track, candidate);
-        return overlap > best.overlap ? { box: candidate, overlap } : best;
-      }, { box: undefined as (typeof fourWheelBoxes)[number] | undefined, overlap: 0 });
       return {
         id: track.trackId,
         className: track.className,
-        classScores: box.overlap > .35 ? box.box?.classScores : undefined,
+        classScores: track.classScores,
         confidence: track.prob,
         x: track.x, y: track.y, w: track.w, h: track.h,
         vx: velocity.vx, vy: velocity.vy,

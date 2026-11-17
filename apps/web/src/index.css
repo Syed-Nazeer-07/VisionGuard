@@ -1,19 +1,25 @@
 @import "tailwindcss";
 
 :root {
-  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --vg-font: Inter, "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --vg-page-bg: #f4f5f0;
+  --vg-text: #172b28;
+  --vg-focus: #276958;
+  --vg-action: #235d51;
+  --vg-action-hover: #16493d;
+  font-family: var(--vg-font);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  color: #172433;
-  background: #f6f8fa;
+  color: var(--vg-text);
+  background: var(--vg-page-bg);
 }
 html { scroll-behavior: smooth; }
 body { margin: 0; min-width: 320px; }
 button, [role="button"], input[type="button"], input[type="submit"], input[type="reset"] { cursor: pointer; }
 button:disabled, input:disabled { cursor: not-allowed; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
-:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+:focus-visible { outline: 2px solid var(--vg-focus); outline-offset: 3px; }
 ::selection { background: #cfe2ff; color: #122238; }
 
 /* Quiet, reusable surfaces for the operations workspace. */

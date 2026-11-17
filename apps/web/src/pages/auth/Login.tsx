@@ -6,6 +6,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { supabase, supabaseConfig } from '../../lib/supabase';
 import { checkGoogleProvider } from '../../services/googleAuthAvailability';
 import { useAuthStore } from '../../store/auth';
+import { workspaceReturn } from '../../components/auth/workspaceReturn';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff, Mail, Lock, User, Building, AlertTriangle, CheckCircle2 } from 'lucide-react';
@@ -14,7 +15,6 @@ import './AuthTheme.css';
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  rememberMe: z.boolean().optional(),
 });
 
 const registerSchema = z.object({
@@ -34,16 +34,22 @@ type RegisterForm = z.infer<typeof registerSchema>;
 export function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const mode = location.pathname === '/register' ? 'register' : 'login';
   
   const session = useAuthStore(state => state.session);
   const initialized = useAuthStore(state => state.initialized);
+  const returnPath = workspaceReturn(location.state?.from);
 
   useEffect(() => {
     if (initialized && session) {
-      navigate('/app', { replace: true });
+      let oauthReturn = null;
+      try {
+        oauthReturn = JSON.parse(sessionStorage.getItem('visionguard:oauth-return') ?? 'null');
+        sessionStorage.removeItem('visionguard:oauth-return');
+      } catch { /* A valid sign-in can proceed without storage. */ }
+      navigate(returnPath === '/app' ? workspaceReturn(oauthReturn) : returnPath, { replace: true });
     }
-  }, [initialized, session, navigate]);
+  }, [initialized, session, navigate, returnPath]);
 
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -57,18 +63,12 @@ export function Login() {
     if (query.has('error')) {
       const message = query.get('error_description') || 'Google sign-in was not completed.';
       setError(message.replace(/\+/g, ' ').slice(0, 250));
-      navigate(location.pathname, { replace: true });
+      navigate(location.pathname, { replace: true, state: location.state });
     }
-  }, [location.pathname, location.search, navigate]);
+  }, [location.pathname, location.search, location.state, navigate]);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  // Keep the visible form synchronized with navigation in both directions.
-  // Browser Back from /register to /login must not leave the sign-up form up.
-  useEffect(() => {
-    setMode(location.pathname === '/register' ? 'register' : 'login');
-  }, [location.pathname]);
 
   const {
     register: registerLogin,
@@ -103,11 +103,7 @@ export function Login() {
 
       setIsLoading(false);
 
-      if (error) {
-        setError(error.message);
-      } else {
-        navigate('/app', { replace: true });
-      }
+      if (error) setError(error.message);
     } catch (err: any) {
       setIsLoading(false);
       setError(err?.message || 'Authentication failed');
@@ -130,6 +126,9 @@ export function Login() {
       if (status === 'disabled') {
         throw new Error('Google sign-in is disabled in this Supabase project. Enable the Google provider under Supabase Authentication → Providers, then configure your Google OAuth Client ID, Client Secret and redirect URLs.');
       }
+      try {
+        sessionStorage.setItem('visionguard:oauth-return', JSON.stringify(location.state?.from ?? null));
+      } catch { /* OAuth still works when local storage is unavailable. */ }
       // Supabase handles OAuth state and session persistence. Fixed callback.
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -139,6 +138,7 @@ export function Login() {
       // When Supabase starts a redirect, the browser leaves this page.
       // Do not show a misleading "connected" success before it returns.
     } catch (reason) {
+      try { sessionStorage.removeItem('visionguard:oauth-return'); } catch { /* storage unavailable */ }
       setError(reason instanceof Error ? reason.message : 'Could not start Google sign-in.');
       setIsGoogleLoading(false);
     }
@@ -188,9 +188,8 @@ export function Login() {
   const switchMode = (newMode: 'login' | 'register') => {
     setError(null);
     setSuccessMsg(null);
-    setMode(newMode);
-    if (newMode === 'login') navigate('/login', { replace: true });
-    if (newMode === 'register') navigate('/register', { replace: true });
+    if (newMode === 'login') navigate('/login', { replace: true, state: location.state });
+    if (newMode === 'register') navigate('/register', { replace: true, state: location.state });
   };
 
   return (
@@ -221,31 +220,19 @@ export function Login() {
             <img src="/brand-mark.svg?v=20261111" alt="" width={36} height={36} className="w-9 h-9 rounded-lg" />
             <span className="text-xl font-bold text-white tracking-tight">VisionGuard</span>
           </Link>
-          <div className="vg-auth-secure inline-flex items-center gap-2 px-3 py-2 rounded-full backdrop-blur-md text-[10px] font-semibold tracking-[0.13em]">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#d9e1e2]"></span>
-            <span>SECURE ACCESS</span>
-          </div>
         </div>
 
         {/* Center Editorial Content */}
         <div className="relative z-10 my-auto py-8">
           <div className="max-w-[480px]">
-            <div className="vg-auth-kicker inline-flex items-center px-3 py-2 mb-7 rounded text-[10px] font-semibold tracking-[0.17em] uppercase">
-              VISIONGUARD / YOUR WORKSPACE
-            </div>
-            <h1 className="vg-auth-headline text-4xl xl:text-[52px] font-semibold text-white leading-[1.11] mb-5 tracking-[-0.055em]">
-              A clearer view starts here.
-            </h1>
+            <p className="vg-auth-headline text-4xl xl:text-[52px] font-semibold text-white leading-[1.11] mb-5 tracking-[-0.055em]">
+              Traffic analysis in your browser.
+            </p>
             <p className="text-[15px] text-[#bec7ca] leading-[1.8] mb-8">
               Analyze traffic footage, follow the movement, and return to the insights that matter—all from one workspace.
             </p>
           </div>
           
-          <div className="vg-auth-tags mt-8 flex flex-wrap gap-2.5 text-xs text-[#e6e9e7]">
-            <span className="rounded-md border border-white/15 bg-slate-950/40 px-3 py-2">Video analysis</span>
-            <span className="rounded-md border border-white/15 bg-slate-950/40 px-3 py-2">Vehicle tracking</span>
-            <span className="rounded-md border border-white/15 bg-slate-950/40 px-3 py-2">Activity reports</span>
-          </div>
         </div>
 
         {/* Bottom Security / Copyright */}
@@ -272,7 +259,7 @@ export function Login() {
           <div className="mb-8">
             <div className="vg-auth-tabs flex space-x-9 border-b mb-7 relative">
               <button
-                onClick={() => switchMode('login')}
+                onClick={() => switchMode('login')} aria-pressed={mode === 'login'}
                 className={cn(
                   "pb-3.5 text-[15px] font-semibold relative transition-colors cursor-pointer outline-none",
                   mode === 'login' ? "text-gray-900" : "text-gray-400 hover:text-gray-600"
@@ -290,7 +277,7 @@ export function Login() {
               </button>
               
               <button
-                onClick={() => switchMode('register')}
+                onClick={() => switchMode('register')} aria-pressed={mode === 'register'}
                 className={cn(
                   "pb-3.5 text-[15px] font-semibold relative transition-colors cursor-pointer outline-none",
                   mode === 'register' ? "text-gray-900" : "text-gray-400 hover:text-gray-600"
@@ -316,9 +303,9 @@ export function Login() {
                 exit={{ opacity: 0, y: -5 }}
                 transition={{ duration: 0.2 }}
               >
-                <h2 className="text-[28px] font-semibold text-[#242d32] mb-2 tracking-[-.045em]">
+                <h1 className="text-[28px] font-semibold text-[#242d32] mb-2 tracking-[-.045em]">
                   {mode === 'login' ? 'Sign in to VisionGuard' : 'Create your account'}
-                </h2>
+                </h1>
                 <p className="text-[#6a767b] text-[14px] leading-[1.7]">
                   {mode === 'login' 
                     ? 'Access your workspace, analysis history, and reports.' 
@@ -337,7 +324,7 @@ export function Login() {
                 exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                 className="overflow-hidden"
               >
-                <div className="p-3.5 bg-red-50 border border-red-100 text-red-600 rounded-lg text-[14px] font-medium flex items-start shadow-sm">
+                <div role="alert" className="p-3.5 bg-red-50 border border-red-100 text-red-600 rounded-lg text-[14px] font-medium flex items-start shadow-sm">
                   <AlertTriangle className="w-5 h-5 mr-2 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -378,7 +365,7 @@ export function Login() {
                   className="space-y-3.5"
                 >
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Email</label>
+                    <label htmlFor="login-email" className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Email</label>
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Mail className="h-[18px] w-[18px] text-gray-400 group-focus-within:text-gray-900 transition-colors" />
@@ -386,6 +373,7 @@ export function Login() {
                       <input
                         type="email"
                         placeholder="you@example.com"
+                        id="login-email" autoComplete="email" aria-invalid={!!loginErrors.email}
                         {...registerLogin('email')}
                         className={cn(
                           "w-full pl-10 pr-4 py-3 bg-white border rounded-lg outline-none transition-all text-[14px] text-gray-900 placeholder:text-gray-400 shadow-sm",
@@ -393,11 +381,11 @@ export function Login() {
                         )}
                       />
                     </div>
-                    {loginErrors.email && <p className="mt-1 text-[13px] text-red-500 font-medium">{loginErrors.email.message}</p>}
+                    {loginErrors.email && <p role="alert" className="mt-1 text-[13px] text-red-500 font-medium">{loginErrors.email.message}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Password</label>
+                    <label htmlFor="login-password" className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Password</label>
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Lock className="h-[18px] w-[18px] text-gray-400 group-focus-within:text-gray-900 transition-colors" />
@@ -405,6 +393,7 @@ export function Login() {
                       <input
                         type={showPassword ? "text" : "password"}
                         placeholder="••••••••"
+                        id="login-password" autoComplete="current-password" aria-invalid={!!loginErrors.password}
                         {...registerLogin('password')}
                         className={cn(
                           "w-full pl-10 pr-10 py-3 bg-white border rounded-lg outline-none transition-all text-[14px] text-gray-900 placeholder:text-gray-400 shadow-sm",
@@ -414,23 +403,16 @@ export function Login() {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer outline-none rounded p-0.5"
                       >
                         {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                       </button>
                     </div>
-                    {loginErrors.password && <p className="mt-1 text-[13px] text-red-500 font-medium">{loginErrors.password.message}</p>}
+                    {loginErrors.password && <p role="alert" className="mt-1 text-[13px] text-red-500 font-medium">{loginErrors.password.message}</p>}
                   </div>
 
-                  <div className="flex justify-between items-center pt-1 pb-2">
-                    <label className="flex items-center space-x-2 cursor-pointer group">
-                      <input 
-                        type="checkbox" 
-                        {...registerLogin('rememberMe')}
-                        className="w-3.5 h-3.5 rounded border-gray-300 text-gray-900 focus:ring-gray-900 focus:ring-offset-1 cursor-pointer transition-colors" 
-                      />
-                      <span className="text-[13px] font-medium text-gray-600 group-hover:text-gray-900 transition-colors">Remember me</span>
-                    </label>
+                  <div className="flex justify-end items-center pt-1 pb-2">
                     <Link to="/forgot-password" className="text-[13px] font-medium text-gray-500 hover:text-gray-900 transition-colors">
                       Forgot password?
                     </Link>
@@ -463,7 +445,7 @@ export function Login() {
                 >
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
-                      <label className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Full Name</label>
+                      <label htmlFor="signup-fullName" className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Full Name</label>
                       <div className="relative group">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                           <User className="h-[18px] w-[18px] text-gray-400 group-focus-within:text-gray-900 transition-colors" />
@@ -471,17 +453,18 @@ export function Login() {
                         <input
                           type="text"
                           placeholder="Sarah Jenkins"
-                          {...registerSignup('fullName')}
+                          id="signup-fullName" autoComplete="name" aria-invalid={!!signupErrors.fullName}
+                        {...registerSignup('fullName')}
                           className={cn(
                             "w-full pl-10 pr-3 py-3 bg-white border rounded-lg outline-none transition-all text-[14px] text-gray-900 placeholder:text-gray-400 shadow-sm",
                             signupErrors.fullName ? "border-red-300 focus:border-red-500 focus:ring-1 focus:ring-red-500" : "border-gray-200 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 hover:border-gray-300"
                           )}
                         />
                       </div>
-                      {signupErrors.fullName && <p className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.fullName.message}</p>}
+                      {signupErrors.fullName && <p role="alert" className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.fullName.message}</p>}
                     </div>
                     <div>
-                      <label className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Organization</label>
+                      <label htmlFor="signup-organization" className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Organization</label>
                       <div className="relative group">
                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                           <Building className="h-[18px] w-[18px] text-gray-400 group-focus-within:text-gray-900 transition-colors" />
@@ -489,19 +472,20 @@ export function Login() {
                         <input
                           type="text"
                           placeholder="Dept. of Transport"
-                          {...registerSignup('organization')}
+                          id="signup-organization" autoComplete="organization" aria-invalid={!!signupErrors.organization}
+                        {...registerSignup('organization')}
                           className={cn(
                             "w-full pl-10 pr-3 py-3 bg-white border rounded-lg outline-none transition-all text-[14px] text-gray-900 placeholder:text-gray-400 shadow-sm",
                             signupErrors.organization ? "border-red-300 focus:border-red-500 focus:ring-1 focus:ring-red-500" : "border-gray-200 focus:border-gray-900 focus:ring-1 focus:ring-gray-900 hover:border-gray-300"
                           )}
                         />
                       </div>
-                      {signupErrors.organization && <p className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.organization.message}</p>}
+                      {signupErrors.organization && <p role="alert" className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.organization.message}</p>}
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Email</label>
+                    <label htmlFor="signup-email" className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Email</label>
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Mail className="h-[18px] w-[18px] text-gray-400 group-focus-within:text-gray-900 transition-colors" />
@@ -509,6 +493,7 @@ export function Login() {
                       <input
                         type="email"
                         placeholder="you@example.com"
+                        id="signup-email" autoComplete="email" aria-invalid={!!signupErrors.email}
                         {...registerSignup('email')}
                         className={cn(
                           "w-full pl-10 pr-4 py-3 bg-white border rounded-lg outline-none transition-all text-[14px] text-gray-900 placeholder:text-gray-400 shadow-sm",
@@ -516,11 +501,11 @@ export function Login() {
                         )}
                       />
                     </div>
-                    {signupErrors.email && <p className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.email.message}</p>}
+                    {signupErrors.email && <p role="alert" className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.email.message}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Password</label>
+                    <label htmlFor="signup-password" className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Password</label>
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Lock className="h-[18px] w-[18px] text-gray-400 group-focus-within:text-gray-900 transition-colors" />
@@ -528,6 +513,7 @@ export function Login() {
                       <input
                         type={showPassword ? "text" : "password"}
                         placeholder="••••••••"
+                        id="signup-password" autoComplete="new-password" aria-invalid={!!signupErrors.password}
                         {...registerSignup('password')}
                         className={cn(
                           "w-full pl-10 pr-10 py-3 bg-white border rounded-lg outline-none transition-all text-[14px] text-gray-900 placeholder:text-gray-400 shadow-sm",
@@ -537,16 +523,17 @@ export function Login() {
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer outline-none rounded p-0.5"
                       >
                         {showPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                       </button>
                     </div>
-                    {signupErrors.password && <p className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.password.message}</p>}
+                    {signupErrors.password && <p role="alert" className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.password.message}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Confirm Password</label>
+                    <label htmlFor="signup-confirmPassword" className="block text-[12px] font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">Confirm Password</label>
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                         <Lock className="h-[18px] w-[18px] text-gray-400 group-focus-within:text-gray-900 transition-colors" />
@@ -554,6 +541,7 @@ export function Login() {
                       <input
                         type={showConfirmPassword ? "text" : "password"}
                         placeholder="••••••••"
+                        id="signup-confirmPassword" autoComplete="new-password" aria-invalid={!!signupErrors.confirmPassword}
                         {...registerSignup('confirmPassword')}
                         className={cn(
                           "w-full pl-10 pr-10 py-3 bg-white border rounded-lg outline-none transition-all text-[14px] text-gray-900 placeholder:text-gray-400 shadow-sm",
@@ -563,12 +551,13 @@ export function Login() {
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
                         className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer outline-none rounded p-0.5"
                       >
                         {showConfirmPassword ? <EyeOff className="w-[18px] h-[18px]" /> : <Eye className="w-[18px] h-[18px]" />}
                       </button>
                     </div>
-                    {signupErrors.confirmPassword && <p className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.confirmPassword.message}</p>}
+                    {signupErrors.confirmPassword && <p role="alert" className="mt-1 text-[13px] text-red-500 font-medium">{signupErrors.confirmPassword.message}</p>}
                   </div>
 
                   <button

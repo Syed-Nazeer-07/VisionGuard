@@ -70,14 +70,16 @@ export function ensureCloudflareBuildBinding() {
     throw new Error('Native binding install failed. ' +
       String(result.error ?? ('npm exit code ' + result.status)));
   }
-  for (const [name, version] of binaries) {
-    try { webRequire(name); }
-    catch (error) {
-      throw new Error('Installed ' + name + ' cannot be loaded: ' +
-        (error instanceof Error ? error.message : String(error)));
-    }
-    console.log('[build] Binding verified:', name, version);
+  // npm may hoist the workspace install into a directory Node already
+  // cached as missing. Verify in a fresh Node process after npm has finished.
+  const verified = spawnSync(process.execPath, [
+    '-e', 'for (const name of process.argv.slice(1)) require(name)',
+    ...binaries.map(([name]) => name)
+  ], { cwd: path.join(root, 'apps/web'), stdio: 'inherit' });
+  if (verified.error || verified.status !== 0) {
+    throw new Error('Installed native bindings could not be loaded.');
   }
+  for (const [name, version] of binaries) console.log('[build] Binding verified:', name, version);
 }
 if (process.argv[1] &&
     import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

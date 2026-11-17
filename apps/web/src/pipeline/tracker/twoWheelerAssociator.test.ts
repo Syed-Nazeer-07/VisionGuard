@@ -38,3 +38,11 @@ describe('two-wheeler tracker independent from four-wheel filters', () => {
     expect(tracker.update([{ ...vehicle(3, .99), classId: 0, className: 'person' }], 2)).toEqual([]);
   });
 });
+
+it('keeps the same identity when overlapping two-wheel observations change class', () => {
+  const tracker = new TwoWheelerAssociator();
+  const [initial] = tracker.update([vehicle(1, .82)], 1);
+  const [nearby, separate] = tracker.update([vehicle(3, .88, 102), vehicle(3, .72, 130)], 1.2);
+  expect(nearby.id).toBe(initial.id);
+  expect(separate.id).not.toBe(initial.id);
+});

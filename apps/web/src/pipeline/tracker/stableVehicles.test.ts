@@ -232,3 +232,13 @@ describe('persistent crowded vehicle tracking', () => {
   });
 
 });
+
+it('rejects prediction-only samples and extreme optical jumps instead of emitting a capped speed', () => {
+  const start = updateScreenSpeed({ points: [], smoothedKmh: null }, car(100), 0);
+  const predicted = updateScreenSpeed(start.history, { ...car(130), isPredicted: true }, .65);
+  expect(predicted.history).toBe(start.history);
+  expect(predicted.kmh).toBeNull();
+  const extreme = updateScreenSpeed(start.history, car(1800), .65);
+  expect(extreme.kmh).toBeNull();
+  expect(extreme.history.points).toHaveLength(1);
+});

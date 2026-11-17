@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { LiveTelemetry } from '../components/analysis/LiveTelemetry';
 import { useAnalysisFocus } from '../components/analysis/useAnalysisFocus';
-import { Activity, AlertTriangle, Camera, ChevronDown, Cloud, Cpu, ExternalLink, Film, Gauge, HardDrive, Info, Maximize2, Minimize2, MonitorPlay, Play, RefreshCw, ScanLine, Upload, X } from 'lucide-react';
+import { AlertTriangle, Camera, ChevronDown, Cloud, ExternalLink, Film, HardDrive, Info, Maximize2, Minimize2, MonitorPlay, Pause, Play, RefreshCw, ScanLine, SlidersHorizontal, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
-import { placeLiveLabel } from '../pipeline/rendering/liveLabelPlacement';
-import { vehicleOverlayLabels } from '../pipeline/rendering/vehicleOverlayLabels';
-import { displayedVideoMediaTime } from '../pipeline/worker/frameSync';
+import { paintLiveOverlay, type LiveLabelAnchor } from '../pipeline/rendering/liveOverlay';
+import { displayedVideoMediaTime, matchesFrameRequest, shouldStopAfterInferenceErrors } from '../pipeline/worker/frameSync';
 import { canReanalyzeStoredVideo } from '../lib/videoAssets';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { isB2UploadConfigured, storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
@@ -104,10 +104,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   const workerRef = useRef<Worker | null>(null);
   const readyRef = useRef(false);
+  const initTimeoutRef = useRef<number | null>(null);
   const busyRef = useRef(false);
   const inFlightIdRef = useRef<number | null>(null);
   const inFlightTimeoutRef = useRef<number | null>(null);
   const messageIdRef = useRef(0);
+  const inferenceErrorsRef = useRef(0);
   const generationRef = useRef(0);
   const lastCapturedTimeRef = useRef(-Infinity);
   const latestRef = useRef<Observation | null>(null);
@@ -123,11 +125,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const persistenceQueueRef = useRef<Promise<void>>(Promise.resolve());
   const firstFrameResolveRef = useRef<(() => void) | null>(null);
   const paintCountRef = useRef(0);
+  const classCountsKeyRef = useRef('');
   // One anchor/label format per persistent vehicle ID. No per-frame
   // candidate reshuffling, disappearing speed text or floating labels.
-  const labelAnchorsRef = useRef(new Map<number, {
-    slot: number; variant: number; lastSeenMs: number;
-  }>());
+  const labelAnchorsRef = useRef(new Map<number, LiveLabelAnchor>());
+  const [showBoxes, setShowBoxes] = useState(true);
+  const [showLabels, setShowLabels] = useState(true);
+  const [showTelemetry, setShowTelemetry] = useState(true);
+  const [visibleClasses, setVisibleClasses] = useState<Record<string, number>>({});
+  const completionTimesRef = useRef<number[]>([]);
+  const [performanceStats, setPerformanceStats] = useState<{
+    playbackFps: number | null; inferenceFps: number | null; overlayAgeMs: number | null;
+  }>({ playbackFps: null, inferenceFps: null, overlayAgeMs: null });
 
   const [url, setUrl] = useState('');
   const [filename, setFilename] = useState('');
@@ -212,7 +221,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     lastOpticalSampleRef.current = -Infinity;
     lastEstimateSaveAtRef.current = -Infinity;
     lastCapturedTimeRef.current = -Infinity;
+    paintCountRef.current = 0;
+    classCountsKeyRef.current = '';
     setVisibleCount(0);
+    setVisibleClasses({});
+    completionTimesRef.current = [];
+    setPerformanceStats({ playbackFps: null, inferenceFps: null, overlayAgeMs: null });
+    setLiveMaxSpeed(null);
+    setDetectionCount(null);
     // Do not release an in-flight request here. It must finish or time out;
     // otherwise two GPU sessions could infer concurrently on different frames.
     workerRef.current?.postMessage({ type: 'reset' });
@@ -220,6 +236,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   const startDetector = useCallback(() => {
     if (workerRef.current) return;
+    inferenceErrorsRef.current = 0;
+    captureErrorRef.current = false;
     setDetector('loading');
     setError('');
     let worker: Worker;
@@ -232,6 +250,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
     workerRef.current = worker;
     const initTimeout = window.setTimeout(() => {
+      initTimeoutRef.current = null;
       if (readyRef.current || workerRef.current !== worker) return;
       worker.terminate();
       workerRef.current = null;
@@ -239,6 +258,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setDetector('error');
       setError('YOLO11s initialization timed out. Video playback remains available; retry detector.');
     }, 45_000);
+    initTimeoutRef.current = initTimeout;
 
     worker.onmessage = (event: MessageEvent<WorkerEvent>) => {
       if (workerRef.current !== worker) return;
@@ -261,13 +281,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         setError('YOLO11s could not start: ' + message.message);
         return;
       }
-      if (!('requestId' in message)) return;
-      if (message.requestId === inFlightIdRef.current) clearInFlight();
+      if (!('requestId' in message) || !matchesFrameRequest(inFlightIdRef.current, message.requestId)) return;
+      clearInFlight();
       if (message.generation !== generationRef.current) return;
       if (message.type === 'result') {
+        inferenceErrorsRef.current = 0;
+        setError(previous => previous.startsWith('Frame inference error:') ? '' : previous);
         const video = videoRef.current;
         if (!video || video.seeking || !activeRef.current) return;
         // Results belong to the exact original media time, not wall-clock time.
+        const completions = completionTimesRef.current;
+        completions.push(performance.now());
+        if (completions.length > 20) completions.shift();
         setInferenceMs(Math.round(message.inferenceMs));
         setDetectionCount(message.detectionCount);
         setAnalyzedFrames(count => count + 1);
@@ -327,8 +352,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           detectorToStableIdRef.current
         );
         nextStableIdRef.current = merged.nextId;
+        const assignments = detectorToStableIdRef.current;
         for (const [sourceId, stableId] of merged.sourceAssignments) {
-          detectorToStableIdRef.current.set(sourceId, stableId);
+          assignments.delete(sourceId);
+          assignments.set(sourceId, stableId);
+        }
+        // Worker IDs only recover recent matches. Do not keep every ID for
+        // the lifetime of an open-ended traffic capture.
+        for (const sourceId of assignments.keys()) {
+          if (assignments.size <= 2048) break;
+          assignments.delete(sourceId);
         }
         // Real detector-corrected positions also refresh optical speed.
         // Do not derive speed from a prediction-only bridge.
@@ -342,7 +375,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           };
           const estimate = updateScreenSpeed(previousSpeed, track, latestTime);
           speedHistoryRef.current.set(track.id, estimate.history);
-          return { ...track, speedKmh: estimate.kmh ?? track.speedKmh, speedIsEstimate: true };
+          return { ...track, speedKmh: estimate.kmh, speedIsEstimate: true };
         });
         flowTracksRef.current = enriched;
         latestRef.current = { time: latestTime, tracks: enriched };
@@ -350,9 +383,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (account && activeRunRef.current) {
           // Predicted-only bridges are not confirmed vehicle observations.
           activityLedger.observe(account, activeRunRef.current, latestTime,
-            enriched.filter(track => !track.isPredicted));
+            enriched.filter(track => !track.isPredicted && updatedIds.has(track.id)));
         }
       } else if (message.type === 'error') {
+        inferenceErrorsRef.current += 1;
+        if (shouldStopAfterInferenceErrors(inferenceErrorsRef.current)) {
+          worker.terminate();
+          workerRef.current = null;
+          readyRef.current = false;
+          latestRef.current = null;
+          flowTracksRef.current = [];
+          setDetector('error');
+        }
         setError('Frame inference error: ' + message.message);
       }
     };
@@ -379,7 +421,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       const restored = activityLedger.snapshot(accountForRestore).records
         .find(run => run.id === restoredRunId);
       nextStableIdRef.current = restored
-        ? Math.max(0, ...Object.keys(restored.vehicles).map(Number).filter(Number.isFinite)) + 1
+        ? Object.values(restored.vehicles).reduce((latest, track) => Math.max(latest, track.id), 0) + 1
         : 1;
     } else nextStableIdRef.current = 1;
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -513,6 +555,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         };
       }
     } catch (error) {
+      if (request !== uploadGenerationRef.current || !activeRef.current) return;
       if (error instanceof DOMException && error.name === 'NotAllowedError') {
         setError('Tab sharing was cancelled. Choose the video tab when you are ready.');
       } else {
@@ -580,6 +623,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         };
       }
     } catch (error) {
+      if (request !== uploadGenerationRef.current || !activeRef.current) return;
       setError('Could not open camera: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setCameraStarting(false);
@@ -741,6 +785,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   useEffect(() => () => {
     uploadGenerationRef.current += 1;
     clearInFlight();
+    if (initTimeoutRef.current !== null) clearTimeout(initTimeoutRef.current);
+    initTimeoutRef.current = null;
     workerRef.current?.terminate();
     workerRef.current = null;
     readyRef.current = false;
@@ -755,6 +801,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       urlRef.current = null;
     }
   }, [clearInFlight]);
+
+  useEffect(() => {
+    if (url || !workerRef.current) return;
+    if (initTimeoutRef.current !== null) clearTimeout(initTimeoutRef.current);
+    initTimeoutRef.current = null;
+    clearInFlight();
+    workerRef.current.terminate();
+    workerRef.current = null;
+    readyRef.current = false;
+    setDetector('idle');
+    setProvider('');
+    setFallbackReason('');
+    setAnalyzedFrames(0);
+    setInferenceMs(null);
+  }, [url, clearInFlight]);
 
   const acceptFile = async (file: File) => {
     if (!/\.(mp4|m4v|webm|mov|mkv)$/i.test(file.name) && !file.type.startsWith('video/')) {
@@ -876,18 +937,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   const reopenSavedVideo = async () => {
     if (!ownerId) return;
+    const request = ++uploadGenerationRef.current;
     try {
       const [saved, savedPosition] = await Promise.all([
         localAnalysisStorage.loadVideo(ownerId),
         localAnalysisStorage.loadPosition(ownerId),
       ]);
+      if (request !== uploadGenerationRef.current || !activeRef.current) return;
       if (!saved) {
         setError('The previous file cannot be reopened automatically. Choose the original again; with local retention enabled, VisionGuard now stores a real file copy instead of an expiring file permission.');
         return;
       }
       await activityLedger.load(ownerId);
+      if (request !== uploadGenerationRef.current || !activeRef.current) return;
       videoRef.current?.pause();
-      uploadGenerationRef.current += 1;
       stopWebcam();
       setStreamHealth('idle');
       const file = saved.file instanceof File
@@ -897,6 +960,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         localStorage.getItem('visionguard:video-run:' + ownerId) || undefined);
       setStorage('saved');
     } catch (error) {
+      if (request !== uploadGenerationRef.current || !activeRef.current) return;
       setError(error instanceof ExpiredLocalVideoPermissionError ? error.message :
         'Cannot reopen saved video. Choose the original file again: ' +
           (error instanceof Error ? error.message : String(error)));
@@ -904,10 +968,17 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   };
 
   const removeVideo = () => {
-    // Stopping a live stream/camera must NEVER delete an unrelated video
-    // previously saved by the user on this device.
-    const removingLocalFile = !!currentFileRef.current && !webcamRef.current;
-    videoRef.current?.pause();
+    // Closing a source releases playback and capture resources. Retained
+    // originals stay available until the user disables local retention.
+    const localFile = currentFileRef.current;
+    const video = videoRef.current;
+    if (localFile && ownerId && saveVideo && video && Number.isFinite(video.currentTime)) {
+      const position = video.currentTime;
+      persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(() =>
+        localAnalysisStorage.savePosition(position, ownerId));
+      void persistenceQueueRef.current.catch(error => setError('Could not save playback position: ' + String(error)));
+    }
+    video?.pause();
     uploadGenerationRef.current += 1;
     resetTracks();
     firstFrameResolveRef.current?.();
@@ -928,21 +999,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setCloudUpload(null);
     setCloudError('');
     activeRunRef.current = '';
-    if (ownerId && removingLocalFile) localStorage.removeItem('visionguard:video-run:' + ownerId);
-    setStorage('idle');
+    setStorage(current => current === 'saved' && saveVideo ? current : 'idle');
     setPosition(0);
     setDuration(0);
     setError('');
-    if (removingLocalFile) {
-      // Explicitly removing a selected local video also clears its retained
-      // file; closing a remote stream or a camera never touches that file.
-      persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
-        await localAnalysisStorage.clearVideo(ownerId ?? undefined);
-        await localAnalysisStorage.clearPosition(ownerId ?? undefined);
-        await localAnalysisStorage.clearAnalysis(ownerId ?? undefined);
-      });
-      void persistenceQueueRef.current.catch(e => setError('Could not clear local video: ' + String(e)));
-    }
+
   };
 
   // The app shell remains visible while Live Analysis is hidden. Keep a
@@ -973,7 +1034,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (!camera || !video) return;
     video.srcObject = camera;
     void video.play().catch(() => {
-      setError('Camera is ready, but playback was blocked. Press Play to start analysis.');
+      setError('The live source is ready. Use the player’s play control to start playback.');
     });
     return () => {
       if (video.srcObject === camera) video.srcObject = null;
@@ -1086,11 +1147,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     const file = currentFileRef.current;
     setStorage(checked && file ? 'saving' : 'not-saved');
     persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
-      if (!checked || !file) {
-        await localAnalysisStorage.clearVideo(ownerId ?? undefined);
-        return;
+      if (!checked) {
+        await localAnalysisStorage.clearVideo(ownerId);
+        await localAnalysisStorage.clearPosition(ownerId);
+        localStorage.removeItem('visionguard:video-run:' + ownerId);
+      } else if (file) {
+        await localAnalysisStorage.saveVideo(file, file.name, ownerId);
       }
-      await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined);
     });
     void persistenceQueueRef.current.then(() => setStorage(checked && file ? 'saved' : 'not-saved'))
       .catch(e => { setStorage('error'); setError('Could not save video locally: ' + String(e)); });
@@ -1143,9 +1206,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           !video.videoWidth || !video.videoHeight || video.paused || video.seeking ||
           video.ended || video.readyState < 2 || !Number.isFinite(mediaTime)) return;
 
-      // Optical tracking uses compact grayscale thumbnails (~448px wide), keeping
-      // moving boxes aligned while YOLO11s/WASM is taking ~1s per inference.
-      if (mediaTime - lastOpticalSampleRef.current >= OPTICAL_INTERVAL) {
+      const canInfer = readyRef.current && !busyRef.current &&
+        mediaTime - lastCapturedTimeRef.current >= MIN_CAPTURE_INTERVAL;
+      // Sample the exact media frame submitted to the worker as well as
+      // intermediate frames. This avoids replaying detections on a neighboring
+      // image when the detector and optical cadences do not line up.
+      if (readyRef.current && (canInfer || mediaTime - lastOpticalSampleRef.current >= OPTICAL_INTERVAL)) {
         lastOpticalSampleRef.current = mediaTime;
         if (!grayCanvasRef.current) grayCanvasRef.current = document.createElement('canvas');
         try {
@@ -1222,8 +1288,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }
       }
 
-      if (!readyRef.current || busyRef.current) return;
-      if (mediaTime - lastCapturedTimeRef.current < MIN_CAPTURE_INTERVAL) return;
+      if (!canInfer || captureErrorRef.current) return;
       lastCapturedTimeRef.current = mediaTime;
       const worker = workerRef.current;
       if (!worker) return;
@@ -1231,6 +1296,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       const generation = generationRef.current;
       const requestId = ++messageIdRef.current;
       inFlightIdRef.current = requestId;
+      const sourceWidth = video.videoWidth;
+      const sourceHeight = video.videoHeight;
       void captureInferenceBitmap(video, MAX_CAPTURE_WIDTH).then(bitmap => {
         if (stopped || generation !== generationRef.current || video.seeking ||
             !activeRef.current || video.paused || workerRef.current !== worker) {
@@ -1248,12 +1315,17 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           latestRef.current = null;
           setError('Detector stalled for 20 seconds. Playback continues; use Retry detector.');
         }, WORKER_TIMEOUT_MS);
-        worker.postMessage({
-          type: 'frame', bitmap, requestId, generation, mediaTime,
-          sourceWidth: video.videoWidth, sourceHeight: video.videoHeight
-        }, [bitmap]);
+        try {
+          worker.postMessage({
+            type: 'frame', bitmap, requestId, generation, mediaTime, sourceWidth, sourceHeight
+          }, [bitmap]);
+        } catch (error) {
+          bitmap.close();
+          throw error;
+        }
       }).catch(error => {
-        if (inFlightIdRef.current === requestId) clearInFlight();
+        if (inFlightIdRef.current !== requestId) return;
+        clearInFlight();
         captureErrorRef.current = true;
         setError('Could not capture a decoded video frame for AI: ' + String(error));
         if (webcamRef.current) setStreamHealth('error');
@@ -1296,6 +1368,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     let lastPaint = 0;
     let lastUI = 0;
     let lastSaved = 0;
+    let lastPerformance = 0;
+    let pausedFrame: { time: number; observation: Observation | null; width: number; height: number; dpr: number } | null = null;
+    let playbackSample: { time: number; frames: number } | null = null;
     const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false;
     const render = (time: number) => {
       const video = videoRef.current;
@@ -1307,6 +1382,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         const width = canvas.clientWidth;
         const height = canvas.clientHeight;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const staticFrame = video.paused && !video.seeking && !captureKindRef.current;
+        const observation = latestRef.current;
+        if (staticFrame && pausedFrame?.time === video.currentTime && pausedFrame.observation === observation &&
+            pausedFrame.width === width && pausedFrame.height === height && pausedFrame.dpr === dpr) {
+          animation = requestAnimationFrame(render);
+          return;
+        }
+        if (!staticFrame) pausedFrame = null;
         const imageWidth = Math.round(width * dpr);
         const imageHeight = Math.round(height * dpr);
         if (imageWidth && imageHeight && (canvas.width !== imageWidth || canvas.height !== imageHeight)) {
@@ -1314,11 +1397,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           canvas.height = imageHeight;
         }
         const context = canvas.getContext('2d');
-        let visible = 0;
-        const visibleTracks: PersistentTrack[] = [];
+        let visibleTracks: PersistentTrack[] = [];
+        let overlayAgeMs: number | null = null;
         if (context) {
           context.clearRect(0, 0, canvas.width, canvas.height);
-          const observation = latestRef.current;
           if (observation && video.videoWidth && video.videoHeight &&
               !video.seeking && !video.ended &&
               shouldPaintLiveOverlay(
@@ -1328,77 +1410,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               )) {
             const frameWidth = video.videoWidth;
             const frameHeight = video.videoHeight;
-            const fit = Math.min(width / frameWidth, height / frameHeight);
-            const offsetX = (width - frameWidth * fit) / 2;
-            const offsetY = (height - frameHeight * fit) / 2;
             const displayedTime = displayedVideoMediaTime(
               video.currentTime, presentedMediaTimeRef.current, video.paused, video.seeking
             );
             const tracks = projectLiveTracks(
               observation.tracks, observation.time, displayedTime, frameWidth, frameHeight
-            );
-            context.save();
-            context.scale(dpr, dpr);
-            context.beginPath();
-            context.rect(offsetX, offsetY, frameWidth * fit, frameHeight * fit);
-            context.clip();
-            const renderedBoxes: Array<{
-              track: PersistentTrack;
-              x: number; y: number; w: number; h: number;
-            }> = [];
-            for (const track of tracks) {
-              const x = offsetX + (track.x - track.w / 2) * fit;
-              const y = offsetY + (track.y - track.h / 2) * fit;
-              const w = track.w * fit;
-              const h = track.h * fit;
-              if (!Number.isFinite(x + y + w + h) || w < 4 || h < 4) continue;
-              visible += 1;
-              context.strokeStyle = '#51f6b5';
-              context.lineWidth = 2;
-              context.strokeRect(x, y, w, h);
-              const stable = track as PersistentTrack;
-              visibleTracks.push(stable);
-              renderedBoxes.push({ track: stable, x, y, w, h });
-            }
-
-            // Existing vehicle labels keep their chosen anchor. Returning
-            // detections or nearby newcomers must not rearrange or erase them.
-            // No detection or tracking state is changed by label rendering.
-            const occupiedLabels: Array<{ x: number; y: number; w: number; h: number }> = [];
-            const anchorMap = labelAnchorsRef.current;
-            renderedBoxes.sort((a, b) => {
-              const hasA = anchorMap.has(a.track.id);
-              const hasB = anchorMap.has(b.track.id);
-              if (hasA !== hasB) return hasA ? -1 : 1;
-              return (b.w * b.h - a.w * a.h) || (a.track.id - b.track.id);
-            });
-            context.font = '600 11px system-ui,sans-serif';
-            for (const box of renderedBoxes) {
-              const stable = box.track;
-              // Both full and compact labels must retain the recognized
-              // vehicle class (CAR/TRUCK/BUS/etc), ID and estimated speed.
-              const labels = vehicleOverlayLabels(stable);
-              const widths = labels.map(label => context.measureText(label).width + 12);
-              const previous = anchorMap.get(stable.id);
-              const placement = placeLiveLabel(
-                box, { x: offsetX, y: offsetY, w: frameWidth * fit, h: frameHeight * fit },
-                widths, occupiedLabels, previous
-              );
-              if (!placement) continue;
-              anchorMap.set(stable.id, {
-                slot: placement.slot, variant: placement.variant, lastSeenMs: time,
-              });
-              occupiedLabels.push(placement.rect);
-              context.fillStyle = 'rgba(7,16,34,.90)';
-              context.fillRect(placement.rect.x, placement.rect.y, placement.rect.w, placement.rect.h);
-              context.fillStyle = '#ccffeb';
-              context.fillText(labels[placement.variant], placement.rect.x + 6, placement.rect.y + 13);
-            }
-            // A departed vehicle must not reserve an anchor indefinitely.
-            for (const [id, last] of anchorMap) {
-              if (time - last.lastSeenMs > 1500) anchorMap.delete(id);
-            }
-            context.restore();
+            ) as PersistentTrack[];
+            visibleTracks = paintLiveOverlay(context, tracks,
+              { width: frameWidth, height: frameHeight }, { width, height, dpr },
+              labelAnchorsRef.current, time, { boxes: showBoxes, labels: showLabels });
+            if (showBoxes && visibleTracks.length) overlayAgeMs = Math.round(Math.max(0, displayedTime - observation.time) * 1000);
           }
         }
         // Include empty video frames as well as tracked ones: these are vital
@@ -1408,17 +1429,39 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             !video.paused && !video.ended && !video.seeking) {
           appendQualityFrame(qualityFramesRef.current,
             presentedMediaTimeRef.current ?? video.currentTime,
-            video.videoWidth, video.videoHeight, visibleTracks);
+            video.videoWidth, video.videoHeight, showBoxes ? visibleTracks : [], overlayAgeMs);
         }
         if (time - lastUI > 250) {
           lastUI = time;
+          if (staticFrame) pausedFrame = { time: video.currentTime, observation, width, height, dpr };
           setPosition(video.currentTime);
           const latestSpeed = fastestVisibleEstimate(visibleTracks);
           setLiveMaxSpeed(previous => previous === latestSpeed ? previous : latestSpeed);
-          if (paintCountRef.current !== visible) {
-            paintCountRef.current = visible;
-            setVisibleCount(visible);
+          const observed = visibleTracks.filter(track => !track.isPredicted);
+          if (paintCountRef.current !== observed.length) {
+            paintCountRef.current = observed.length;
+            setVisibleCount(observed.length);
           }
+          const classes: Record<string, number> = {};
+          for (const track of observed) classes[track.className] = (classes[track.className] ?? 0) + 1;
+          const key = JSON.stringify(Object.entries(classes).sort(([a], [b]) => a.localeCompare(b)));
+          if (classCountsKeyRef.current !== key) {
+            classCountsKeyRef.current = key;
+            setVisibleClasses(classes);
+          }
+        }
+        if (time - lastPerformance >= 1000 && showTelemetry) {
+          lastPerformance = time;
+          const quality = video.getVideoPlaybackQuality?.();
+          const renderedFrames = quality ? quality.totalVideoFrames - quality.droppedVideoFrames : null;
+          const playbackFps = renderedFrames !== null && playbackSample && renderedFrames >= playbackSample.frames && !video.paused
+            ? (renderedFrames - playbackSample.frames) * 1000 / (time - playbackSample.time) : null;
+          playbackSample = renderedFrames !== null ? { time, frames: renderedFrames } : null;
+          const completions = completionTimesRef.current.filter(at => time - at <= 3500);
+          const interval = (completions.at(-1) ?? 0) - (completions[0] ?? 0);
+          const inferenceFps = completions.length > 1 && interval > 0 && !video.paused
+            ? (completions.length - 1) * 1000 / interval : null;
+          setPerformanceStats({ playbackFps, inferenceFps, overlayAgeMs });
         }
         if (urlRef.current && time - lastSaved > 2000 && !video.paused && Number.isFinite(video.currentTime)) {
           lastSaved = time;
@@ -1430,10 +1473,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     };
     animation = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animation);
-  }, [active]);
+  }, [active, showBoxes, showLabels, showTelemetry, url]);
 
   return (
-    <div className={'vg-page vg-analyze-page space-y-5' + (focusMode ? ' vg-analyze-focus' : '')}>
+    <div className={'vg-page vg-analyze-page' + (focusMode ? ' vg-analyze-focus' : '')}>
       <header className="vg-page-header vg-analysis-header">
         {focusMode && <div className="vg-focus-banner">
           <span className="vg-focus-banner-dot" aria-hidden="true"/>
@@ -1441,11 +1484,24 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <small>Press Esc to exit</small>
         </div>}
         <div className="vg-analysis-heading">
-          <span className="vg-page-kicker">VIDEO INTELLIGENCE / WORKSPACE</span>
           <h1>Live analysis</h1>
-          <p>Inspect footage using on-device detection and visual tracking.</p>
+          <p>Track vehicles from a video, browser tab, or device camera.</p>
         </div>
-        <div className="vg-analysis-actions flex flex-wrap gap-2">
+        <div className="vg-analysis-actions">
+          <button type="button" onClick={() => setFocusMode(value => !value)}
+            aria-pressed={focusMode}
+            aria-controls="vg-analysis-player"
+            aria-keyshortcuts="Escape"
+            className="vg-analysis-focus-toggle">
+            {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            {focusMode ? 'Exit focus' : 'Focus view'}
+          </button>
+        </div>
+      </header>
+
+      <section className="vg-analysis-sourcebar vg-panel" aria-labelledby="vg-sources-title">
+        <h2 id="vg-sources-title">Video source</h2>
+        <div className="vg-analysis-source-actions">
           <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
             onChange={event => {
               const file = event.target.files?.[0];
@@ -1458,7 +1514,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           </button>
           <button type="button" onClick={() => webcamActive ? removeVideo() : void startWebcam()}
             disabled={cameraStarting}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 disabled:opacity-50">
+            className="vg-secondary">
             <Camera size={16} /> {cameraStarting ? 'Opening camera…' : webcamActive ? 'Stop camera' : 'Use camera'}
           </button>
           <button type="button"
@@ -1469,14 +1525,14 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             <MonitorPlay size={16}/>
             {tabCaptureStarting ? 'Choose a tab…' : tabCaptureActive ? 'Stop tab capture' : 'Analyze tab'}
           </button>
-          {(webcamActive || tabCaptureActive) && saveVideo && <button type="button"
+          {(!url || webcamActive || tabCaptureActive) && saveVideo && <button type="button"
             onClick={() => void reopenSavedVideo()}
             className="vg-secondary">
-            <Film size={16}/> Saved video
+            <Film size={16}/> Reopen saved video
           </button>}
           <a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer"
             title="Optional: browse YouTube in a separate tab. Open a video, then select Analyze tab."
-            className="inline-flex items-center gap-1.5 rounded-lg px-2 py-2 text-xs font-semibold text-slate-500 transition-colors hover:text-[#bd5035]">
+            className="vg-analysis-external">
             Open YouTube <ExternalLink size={13}/>
           </a>
           {qualityEnabled && !!currentFileRef.current && !!qualityFramesRef.current.length &&
@@ -1487,17 +1543,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             </button>}
           {url && !webcamActive && !tabCaptureActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
             className="vg-secondary" title="Close current video"><X size={18} /></button>}
-          <button type="button" onClick={() => setFocusMode(value => !value)}
-            aria-pressed={focusMode}
-            aria-controls="vg-analysis-player vg-analysis-telemetry vg-analysis-details"
-            aria-keyshortcuts="Escape"
-            className={'vg-analysis-focus-toggle ' + (focusMode ? 'vg-analysis-focus-active' : '')}
-            title={focusMode ? 'Exit focus view (Esc)' : 'Enlarge video and telemetry; hide other workspace controls'}>
-            {focusMode ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-            {focusMode ? 'Exit focus' : 'Focus view'}
-          </button>
         </div>
-      </header>
+      </section>
 
       {tabCaptureActive && <div className="vg-panel flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -1533,10 +1580,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
       </div>}
 
+      <div className={'vg-analysis-grid' + (showTelemetry ? '' : ' vg-analysis-grid-wide')}>
       <section id="vg-analysis-player" className="vg-panel vg-analysis-player-card overflow-hidden" aria-label="Video analysis player">
         <div className="vg-analysis-stage-head">
-          <span><ScanLine size={15} aria-hidden="true" /> ANALYSIS VIEWPORT</span>
-          <span className="vg-analysis-engine-state">
+          <span><ScanLine size={15} aria-hidden="true" /> Video and tracking</span>
+          <span className="vg-analysis-engine-state" role="status">
             <i aria-hidden="true" data-state={detector} />
             {detector === 'ready' ? 'Detector ready' :
               detector === 'loading' ? 'Loading YOLO11s' :
@@ -1595,10 +1643,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 }}
                 onPause={event => {
                   setPlaying(false);
+                  setPerformanceStats(previous => ({ ...previous, inferenceFps: null, playbackFps: null }));
                   if (!webcamActive && !tabCaptureActive && !cloudPlaybackActive && ownerId)
                     void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId).catch(() => {});
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
+                onResize={() => { if (readyVideo) resetTracks(); }}
                 onSeeking={resetTracks}
                 onEnded={() => {
                   setPlaying(false);
@@ -1616,7 +1666,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                       : 'The browser cannot decode this video. Try converting it to H.264 MP4.');
                 }}
               />
-              <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />
+              <canvas ref={canvasRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
               <div className="vg-analysis-live-badges pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-semibold text-white">
                   {tabCaptureActive ? (
@@ -1626,13 +1676,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                     streamHealth === 'playing' ? 'CAMERA LIVE' :
                     streamHealth === 'buffering' ? 'CAMERA BUFFERING' : 'STARTING CAMERA'
                   ) : readyVideo ? (playing ? 'PLAYING VIDEO' : 'PAUSED') : 'OPENING VIDEO'}
-                </span>
-                <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-medium text-white">
-                  {detector === 'ready' ? (visibleCount ? 'Tracking ' + visibleCount + ' vehicles'
-                      : detectionCount === null ? 'Scanning vehicles...' :
-                        detectionCount > 0 ? 'YOLO sees ' + detectionCount + ' candidates' : 'No vehicles detected') :
-                    detector === 'loading' ? 'Preparing YOLO11s...' :
-                    detector === 'error' ? 'Detector unavailable' : 'Detector starting'}
                 </span>
               </div>
               <button type="button" onClick={() => void toggleFullscreen()}
@@ -1646,8 +1689,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
               <Film size={42} className="text-[#f2a27e]" />
               <div className="text-lg font-semibold">Select an analysis source</div>
-              <p className="max-w-md text-sm text-slate-300">Choose video, camera, or tab above.</p>
-              <p className="max-w-md text-xs leading-5 text-slate-400">YouTube: play it in another tab → Analyze tab → Share that tab.</p>
+              <p className="max-w-md text-sm text-slate-300">Choose a local file or grant access to a camera or browser tab.</p>
+              <p className="max-w-md text-xs leading-5 text-slate-400">Detection runs on this device.</p>
             </div>
           )}
         </div>
@@ -1657,7 +1700,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               <div className="vg-analysis-source-title truncate">{filename}</div>
               <div className="vg-analysis-source-meta">
                 {tabCaptureActive ? 'Live browser tab' :
-                  webcamActive ? 'Live camera' : readableTime(position) + ' / ' + readableTime(duration)} · 1× playback
+                  webcamActive ? 'Live camera' : readableTime(position) + ' / ' + readableTime(duration)}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1670,62 +1713,31 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 className="vg-analysis-player-button">
                 <RefreshCw size={14} /> Retry detector
               </button>}
-              {!playing && <button type="button" onClick={() => void videoRef.current?.play().catch(e => setError(String(e)))}
-                className="vg-analysis-player-button">
-                <Play size={14} /> Play
+              {!webcamActive && !tabCaptureActive && <button type="button" onClick={() => {
+                const video = videoRef.current;
+                if (video?.paused) void video.play().catch(e => setError(String(e)));
+                else video?.pause();
+              }} className="vg-analysis-player-button">
+                {playing ? <Pause size={14}/> : <Play size={14}/>} {playing ? 'Pause' : 'Play'}
               </button>}
             </div>
           </div>
         )}
       </section>
 
-      <section id="vg-analysis-telemetry" className="vg-monitor" aria-label="Live analysis telemetry">
-        <div className="vg-monitor-heading">
-          <div className="vg-monitor-heading-title">
-            <span className="vg-monitor-overline">LIVE TELEMETRY</span>
-            <h2>At a glance</h2>
-          </div>
-          <span className="vg-monitor-state" data-state={detector}>
-            <span aria-hidden="true" className="vg-monitor-state-dot" />
-            {detector === 'ready' ? 'Detector ready' :
-              detector === 'loading' ? 'Starting detection' :
-              detector === 'error' ? 'Detector unavailable' : 'Awaiting video'}
-          </span>
-        </div>
-        <div className="vg-analysis-telemetry">
-          <div className="vg-analysis-telemetry-card">
-            <div className="vg-telemetry-title">
-              <span className="vg-telemetry-icon"><Activity size={17} aria-hidden="true" /></span>
-              <span>Vehicles in frame</span>
-            </div>
-            <div className="vg-telemetry-value tabular-nums">{visibleCount}</div>
-            <p className="vg-telemetry-detail">Currently visible tracks</p>
-          </div>
-          <div className="vg-analysis-telemetry-card">
-            <div className="vg-telemetry-title">
-              <span className="vg-telemetry-icon"><Cpu size={17} aria-hidden="true" /></span>
-              <span>Processing time</span>
-            </div>
-            <div className="vg-telemetry-value tabular-nums">
-              {inferenceMs === null ? '—' : inferenceMs}
-              {inferenceMs !== null && <span className="vg-telemetry-unit">ms</span>}
-            </div>
-            <p className="vg-telemetry-detail">{provider ? provider.toUpperCase() : 'Waiting for model'} · {analyzedFrames} analyzed frames</p>
-            {provider === 'wasm' && fallbackReason && <p className="vg-telemetry-warning" title={fallbackReason}>Using CPU fallback</p>}
-          </div>
-          <div className="vg-analysis-telemetry-card">
-            <div className="vg-telemetry-title">
-              <span className="vg-telemetry-icon"><Gauge size={17} aria-hidden="true" /></span>
-              <span>Speed estimate</span>
-            </div>
-            <div className="vg-telemetry-value tabular-nums">
-              {liveMaxSpeed === null ? '—' : liveMaxSpeed === 0 ? '0' : '≈' + Math.round(liveMaxSpeed)}
-              <span className="vg-telemetry-unit">km/h</span>
-            </div>
-            <p className="vg-telemetry-detail">Optical estimate · not calibrated</p>
-          </div>
-        </div>
-      </section>
+      {showTelemetry && <LiveTelemetry detections={detectionCount} tracks={visibleCount}
+        classes={visibleClasses} fastest={liveMaxSpeed} frames={analyzedFrames}
+        provider={provider} fallbackReason={fallbackReason} latency={inferenceMs} {...performanceStats}/>}
+      </div>
+
+      <fieldset className="vg-analysis-display vg-panel">
+        <legend className="sr-only">Display preferences</legend>
+        <span aria-hidden="true"><SlidersHorizontal size={16}/> Display</span>
+        <label><input type="checkbox" checked={showBoxes} onChange={event => setShowBoxes(event.target.checked)}/> Boxes</label>
+        <label><input type="checkbox" checked={showLabels} disabled={!showBoxes} onChange={event => setShowLabels(event.target.checked)}/> Labels</label>
+        <label><input type="checkbox" checked={showTelemetry} onChange={event => setShowTelemetry(event.target.checked)}/> Telemetry</label>
+        {showBoxes && <small>Dashed boxes indicate predicted positions.</small>}
+      </fieldset>
 
       <details id="vg-analysis-details" className="vg-analysis-details vg-storage-disclosure">
         <summary className="vg-storage-summary">
