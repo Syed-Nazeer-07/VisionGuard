@@ -113,3 +113,6 @@ Do not use this historical result in place of the real-world evaluation above.
 
 Do not claim crash detection, red-light enforcement, or legally calibrated
 speed measurements without the corresponding model, data and validation.
+
+See the [overhaul verification](VISIONGUARD_OVERHAUL_QA.md) for model validation,
+paired browser excerpts, runtime measurements, and remaining release gates.

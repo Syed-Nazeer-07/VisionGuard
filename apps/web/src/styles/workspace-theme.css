@@ -1,23 +1,15 @@
-/*
- * VisionGuard Workspace / Atelier theme.
- * Single, scoped visual layer above workspace.css. The tracking engine,
- * player geometry, responsive navigation and semantic status colors stay intact.
- *
- * Tokens: porcelain canvas, white surfaces, graphite chrome, ember action.
- * This file intentionally contains no decorative gradient, blur or overlay.
- */
 .vg-shell {
-  --vg-canvas: #f7f6f3;
+  --vg-canvas: #f4f5f0;
   --vg-surface: #ffffff;
-  --vg-ink: #1b2025;
-  --vg-muted: #646a70;
-  --vg-line: #e5e4df;
+  --vg-ink: #172b28;
+  --vg-muted: #526460;
+  --vg-line: #dce3dd;
   --vg-accent: #b94c30;
   --vg-accent-hover: #b9472a;
   --vg-accent-soft: #fff0e9;
-  --vg-sidebar: #191b20;
-  --vg-sidebar-muted: #adb0b7;
-  font-family: "Segoe UI Variable Text", Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --vg-sidebar: #132524;
+  --vg-sidebar-muted: #b0c1bd;
+  font-family: var(--vg-font);
   font-size: 14px;
   font-synthesis: none;
   color: var(--vg-ink);
@@ -50,22 +42,21 @@
 /* Graphite navigation: quiet until the selected section is active. */
 .vg-shell .vg-side-bar {
   background: var(--vg-sidebar);
-  border-color: #303138;
+  border-color: #2b403c;
   color: #f7f6f3;
   box-shadow: none;
 }
 .vg-shell .vg-side-head {
   height: 78px;
-  border-color: #303138;
+  border-color: #2b403c;
 }
 .vg-shell .vg-side-logo {
   color: #f8f7f5;
   font-weight: 750;
 }
 .vg-shell .vg-brand-dot { color: #f07a52; }
-.vg-shell .vg-side-group-label,
-.vg-shell .vg-side-launch-caption {
-  color: #83868f;
+.vg-shell .vg-side-group-label {
+  color: #a4b5b0;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: .12em;
@@ -74,7 +65,7 @@
   height: 44px;
   border: 1px solid transparent;
   border-radius: 10px;
-  color: #b7b9bf;
+  color: #c2d0cc;
   font-size: 13px;
   font-weight: 555;
   letter-spacing: -.005em;
@@ -83,13 +74,13 @@
 .vg-shell .vg-side-nav-item:hover,
 .vg-shell .vg-side-settings:hover {
   color: #fff;
-  background: #282a30;
-  border-color: #35363d;
+  background: #223a37;
+  border-color: #354c47;
 }
 .vg-shell .vg-side-nav-item[aria-current="page"] {
   color: #fff;
-  background: #333137;
-  border-color: #464047;
+  background: #283f3b;
+  border-color: #415550;
   font-weight: 700;
 }
 .vg-shell .vg-side-nav-item[aria-current="page"] > svg {
@@ -108,21 +99,7 @@
   background: #2e3036;
   border-color: #4a4b52;
 }
-.vg-shell .vg-side-launch-link {
-  min-height: 44px;
-  border: 1px solid #ed815d;
-  border-radius: 10px;
-  background: #ea7650;
-  color: #211c1a;
-  font-size: 13px;
-  font-weight: 770;
-  box-shadow: none;
-}
-.vg-shell .vg-side-launch-link:hover {
-  border-color: #ffa17f;
-  background: #ffa17f;
-}
-.vg-shell .vg-side-footer { border-color: #303138; }
+.vg-shell .vg-side-footer { border-color: #2b403c; }
 .vg-shell .vg-side-account {
   border: 1px solid #3a3b41;
   border-radius: 12px;
@@ -293,64 +270,45 @@
 }
 .vg-shell .vg-search-field > input::placeholder { color: #8c8c8c; }
 
-/* Dashboard: architectural hero, not a sci-fi gradient banner. */
-.vg-shell .vg-dashboard-hero {
-  min-height: 245px;
-  gap: 22px;
-  padding: clamp(24px, 3.2vw, 42px);
-  border: 1px solid #28292d;
-  border-radius: 16px;
-  background: #202125;
-  box-shadow: none;
+/* Overview */
+.vg-shell .vg-overview-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr);
+  overflow: hidden;
+  min-height: 240px;
+  margin-bottom: 18px;
 }
-.vg-shell .vg-dashboard-hero::after { display: none; }
-.vg-shell .vg-dashboard-kicker {
-  color: #ffa183;
-  font-size: 11px;
-  font-weight: 740;
-  letter-spacing: .10em;
+.vg-shell .vg-overview-copy { padding: clamp(22px, 3vw, 42px); }
+.vg-shell .vg-overview-copy h1 {
+  margin: 0;
+  color: var(--vg-ink);
+  font-size: clamp(34px, 4vw, 58px);
+  font-weight: 730;
+  line-height: 1.04;
+  letter-spacing: -.07em;
 }
-.vg-shell .vg-dashboard-hero h1 {
-  max-width: 650px;
-  margin: 10px 0 12px;
-  color: #fbfaf7;
-  font-size: clamp(32px, 3.7vw, 50px);
-  font-weight: 740;
-  letter-spacing: -.052em;
-  line-height: 1.08;
+.vg-shell .vg-overview-copy p {
+  max-width: 38ch;
+  margin: 12px 0 20px;
+  color: var(--vg-muted);
+  font-size: 15px;
+  line-height: 1.55;
 }
-.vg-shell .vg-dashboard-hero p {
-  max-width: 560px;
-  color: #c9c8c4;
-  font-size: 14px;
-  line-height: 1.6;
+.vg-shell .vg-overview-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.vg-shell .vg-overview-copy > span { display: block; margin-top: 17px; font-size: 12px; color: var(--vg-muted); }
+.vg-shell .vg-overview-image { position: relative; min-height: 220px; background: #203633; }
+.vg-shell .vg-overview-image img { position: absolute; width: 100%; height: 100%; object-fit: cover; object-position: center 58%; }
+.vg-shell .vg-overview-image::after {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border: 1px solid rgb(255 255 255 / .35);
+  pointer-events: none;
 }
-.vg-shell .vg-dashboard-action {
-  min-height: 44px;
-  padding: 11px 16px;
-  border: 1px solid #ec8664;
-  border-radius: 10px;
-  background: #ec8664;
-  color: #25201d;
-  font-size: 12.5px;
-  font-weight: 780;
-}
-.vg-shell .vg-dashboard-action:hover {
-  background: #ffad8e;
-  border-color: #ffad8e;
-}
-.vg-shell .vg-dashboard-alt-action {
-  border-color: #5a5554;
-  color: #fbf6f1;
-  font-size: 12.5px;
-}
-.vg-shell .vg-dashboard-alt-action:hover {
-  background: #353237;
-  border-color: #81746f;
-}
-.vg-shell .vg-dashboard-last-activity {
-  color: #c0bdb9;
-  font-size: 12px;
+.vg-shell .vg-distribution { margin: 0; padding: 16px 18px 18px 8px; }
+@media (max-width: 639px) {
+  .vg-shell .vg-overview-header { grid-template-columns: minmax(0, 1fr); }
+  .vg-shell .vg-overview-image { min-height: 105px; }
 }
 
 /* Numeric cards are deliberately compact, with no arbitrary colored stripe. */
@@ -508,56 +466,6 @@
 }
 
 /* Live telemetry reads as one bright, structured data surface—not a dark island. */
-.vg-shell .vg-monitor {
-  border: 1px solid var(--vg-line);
-  border-radius: 14px;
-  background: #fff;
-  color: #25282d;
-  box-shadow: 0 2px 6px rgba(32, 26, 22, .025);
-}
-.vg-shell .vg-monitor-heading {
-  padding: 15px 21px;
-  border-color: #eceae6;
-}
-.vg-shell .vg-monitor-overline { color: #aa523a; }
-.vg-shell .vg-monitor-heading h2 {
-  color: #25282b;
-  font-size: 15px;
-}
-.vg-shell .vg-monitor-state {
-  border: 1px solid #e7e4de;
-  background: #f7f6f3;
-  color: #65666c;
-}
-.vg-shell .vg-monitor .vg-analysis-telemetry-card {
-  min-height: 126px;
-  padding: 20px 22px 21px;
-  border-color: #ebe8e4;
-  background: #fff;
-}
-.vg-shell .vg-monitor .vg-analysis-telemetry-card + .vg-analysis-telemetry-card {
-  border-left-color: #ebe8e4;
-}
-.vg-shell .vg-telemetry-title {
-  color: #5e6369;
-  font-size: 12.5px;
-  font-weight: 660;
-}
-.vg-shell .vg-telemetry-icon {
-  background: #fff0e9;
-  border-color: #f5dfd3;
-  color: #bc5638;
-}
-.vg-shell .vg-monitor .vg-analysis-telemetry-card > .vg-telemetry-value {
-  color: #1f2428;
-  font-weight: 760;
-}
-.vg-shell .vg-telemetry-unit { color: #777a80; }
-.vg-shell .vg-telemetry-detail {
-  color: #72757b;
-  font-size: 12px;
-}
-.vg-shell .vg-telemetry-warning { color: #995b22; }
 
 /* Secondary storage information shares the same typography and borders. */
 .vg-shell .vg-storage-disclosure {
@@ -602,27 +510,6 @@
    The clear contrast is a functional mode change, not a second app theme. */
 .vg-shell .vg-analyze-page.vg-analyze-focus { background: #151518; }
 .vg-shell .vg-analyze-focus .vg-analysis-header { background: #151518; }
-.vg-shell .vg-analyze-focus .vg-monitor {
-  border-color: #36363d;
-  background: #222227;
-  color: #fafafa;
-}
-.vg-shell .vg-analyze-focus .vg-monitor-heading { border-color: #3b3b42; }
-.vg-shell .vg-analyze-focus .vg-monitor-heading h2,
-.vg-shell .vg-analyze-focus .vg-monitor .vg-analysis-telemetry-card > .vg-telemetry-value { color: #fffaf6; }
-.vg-shell .vg-analyze-focus .vg-monitor .vg-analysis-telemetry-card {
-  border-color: #38383d;
-  background: transparent;
-}
-.vg-shell .vg-analyze-focus .vg-telemetry-title { color: #dfdbd7; }
-.vg-shell .vg-analyze-focus .vg-telemetry-detail { color: #b6b4b2; }
-.vg-shell .vg-analyze-focus .vg-telemetry-unit { color: #d2ccc7; }
-.vg-shell .vg-analyze-focus .vg-telemetry-icon {
-  background: #3d302e;
-  border-color: #66453d;
-  color: #ffad89;
-}
-.vg-shell .vg-analyze-focus .vg-monitor-state { border-color: #4b4a50; background: #303035; color: #efebea; }
 .vg-shell .vg-analyze-focus .vg-analysis-focus-toggle[aria-pressed="true"] {
   background: #fff4ee;
   border-color: #fff4ee;
@@ -679,27 +566,125 @@
 }
 
 /* Touch targets and responsive rhythm. */
-@media (max-width: 900px) {
-  .vg-shell .vg-monitor .vg-analysis-telemetry-card:last-child {
-    border-top-color: #ebe8e4;
-  }
-}
 @media (max-width: 760px) {
   .vg-shell .vg-page { padding: 20px 16px 38px; }
   .vg-shell .vg-page-header h1 { font-size: 31px; }
-  .vg-shell .vg-dashboard-hero { min-height: 0; }
-  .vg-shell .vg-monitor .vg-analysis-telemetry-card { padding: 18px; }
-}
-@media (max-width: 620px) {
-  .vg-shell .vg-monitor .vg-analysis-telemetry-card + .vg-analysis-telemetry-card {
-    border-top-color: #ebe8e4;
-  }
-  .vg-shell .vg-analyze-focus .vg-monitor .vg-analysis-telemetry-card + .vg-analysis-telemetry-card {
-    border-top-color: #38383d;
-  }
 }
 @media (prefers-reduced-motion: reduce) {
   .vg-shell .vg-side-nav-item,
   .vg-shell .vg-data-row,
   .vg-shell .vg-stat { transition: none; }
+}
+
+/* Current analysis workbench and system configuration */
+.vg-shell .vg-analysis-header { align-items: center; margin-bottom: 18px; }
+.vg-shell .vg-analysis-sourcebar,
+.vg-shell .vg-analysis-display {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 15px;
+  padding: 12px 15px;
+  margin: 0 0 14px;
+}
+.vg-shell .vg-analysis-sourcebar h2 { margin: 0; color: var(--vg-ink); font-size: .86rem; font-weight: 690; }
+.vg-shell .vg-analysis-source-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.vg-shell .vg-analysis-source-actions button { min-height: 42px; }
+.vg-shell .vg-analysis-external { display: inline-flex; align-items: center; gap: 5px; min-height: 42px; padding: 0 8px; color: var(--vg-muted); font-size: .8rem; }
+.vg-shell .vg-analysis-external:hover { color: var(--vg-accent); text-decoration: underline; }
+.vg-shell .vg-analysis-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(235px, 26%);
+  align-items: start;
+  gap: 14px;
+  margin-block: 14px;
+}
+.vg-shell .vg-analysis-grid-wide { grid-template-columns: minmax(0, 1fr); }
+.vg-shell .vg-analysis-player-card { border-radius: 12px; background: #10221f; border-color: #2a403b; }
+.vg-shell .vg-analysis-stage-head, .vg-shell .vg-analysis-player-footer { border-color: #35504a; background: #1b302d; }
+.vg-shell .vg-analysis-stage-head > span:first-child { letter-spacing: .01em; font-size: .82rem; }
+.vg-shell .vg-player-frame:not(:fullscreen) { background-color: #10221f; }
+.vg-shell .vg-analysis-display { min-width: 0; }
+.vg-shell .vg-analysis-display > span { display: inline-flex; align-items: center; gap: 7px; color: var(--vg-muted); font-size: .82rem; font-weight: 650; }
+.vg-shell .vg-analysis-display label { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; font-size: .84rem; cursor: pointer; }
+.vg-shell .vg-analysis-display label:has(:disabled) { opacity: .6; cursor: default; }
+.vg-shell .vg-analysis-display input { width: 17px; height: 17px; accent-color: #28645a; }
+.vg-shell .vg-analysis-display small { margin-inline-start: auto; color: var(--vg-muted); font-size: .75rem; }
+.vg-shell .vg-live-telemetry { overflow: hidden; min-width: 0; }
+.vg-shell .vg-live-counts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.vg-shell .vg-live-counts > div { padding: 13px 10px 13px 15px; }
+.vg-shell .vg-live-counts > div + div { border-inline-start: 1px solid var(--vg-line); }
+.vg-shell .vg-live-counts dt { min-height: 2.2em; margin-bottom: 4px; color: var(--vg-muted); font-size: .75rem; }
+.vg-shell .vg-live-counts dd { margin: 0; font-size: 1.55rem; font-weight: 690; font-variant-numeric: tabular-nums; }
+.vg-shell :is(.vg-live-classes, .vg-live-speed, .vg-live-performance) {
+  padding: 12px 15px;
+  border-top: 1px solid var(--vg-line);
+  font-size: .8rem;
+  overflow-wrap: anywhere;
+}
+.vg-shell .vg-live-classes h3, .vg-shell .vg-live-performance summary { color: var(--vg-ink); font-weight: 680; }
+.vg-shell .vg-live-classes p, .vg-shell .vg-live-performance p { margin: 6px 0 0; color: var(--vg-muted); font-size: .76rem; }
+.vg-shell .vg-live-classes ul { margin: 5px 0 0; padding: 0; list-style: none; }
+.vg-shell .vg-live-classes li, .vg-shell .vg-live-performance dl > div { display: flex; justify-content: space-between; gap: 8px; padding-block: 3px; }
+.vg-shell .vg-live-classes li > span { text-transform: capitalize; }
+.vg-shell .vg-live-speed > * { display: block; }
+.vg-shell .vg-live-speed > strong { margin-block: 3px; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.vg-shell .vg-live-speed small, .vg-shell .vg-live-speed span, .vg-shell .vg-live-performance dt { color: var(--vg-muted); }
+.vg-shell .vg-live-performance summary { min-height: 24px; cursor: pointer; }
+.vg-shell .vg-live-performance summary > span { float: right; color: var(--vg-muted); font-size: .68rem; }
+.vg-shell .vg-live-performance dl { margin: 7px 0 0; }
+.vg-shell .vg-live-performance dd { margin: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vg-shell .vg-analyze-focus :is(.vg-analysis-sourcebar, .vg-analysis-display) { display: none; }
+.vg-shell .vg-analyze-focus .vg-analysis-grid { grid-template-columns: minmax(0, 1fr); margin-top: 8px; }
+.vg-shell .vg-analyze-focus .vg-live-telemetry { width: min(100%, 600px); margin-inline: auto; }
+
+.vg-shell .vg-configuration { margin-inline: 0; padding: 0; }
+.vg-shell .vg-config-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.vg-shell .vg-config-grid h2 { display: flex; align-items: center; gap: 8px; }
+.vg-shell .vg-config-facts { margin: 0; padding: 10px 18px; }
+.vg-shell .vg-config-facts > div { display: flex; justify-content: space-between; gap: 12px; padding-block: 10px; font-size: .85rem; }
+.vg-shell .vg-config-facts > div + div { border-top: 1px solid var(--vg-line); }
+.vg-shell .vg-config-facts dt, .vg-shell .vg-config-note, .vg-shell .vg-config-form p { color: var(--vg-muted); }
+.vg-shell .vg-config-facts dd { margin: 0; text-align: right; font-weight: 630; }
+.vg-shell .vg-config-note { margin: 0; padding: 12px 18px 17px; border-top: 1px solid var(--vg-line); font-size: .82rem; line-height: 1.55; }
+.vg-shell .vg-config-form { display: grid; justify-items: start; gap: 12px; padding: 16px 18px 19px; font-size: .84rem; }
+.vg-shell .vg-config-form label { font-weight: 680; }
+.vg-shell .vg-config-form label + p { margin-block: 4px 0; line-height: 1.55; }
+.vg-shell .vg-config-form input { width: 8rem; }
+
+@media (max-width: 850px) {
+  .vg-shell .vg-analysis-grid, .vg-shell .vg-config-grid { grid-template-columns: minmax(0, 1fr); }
+  .vg-shell .vg-analysis-display small { margin-inline-start: 0; }
+}
+@media (max-width: 480px) {
+  .vg-shell .vg-analysis-source-actions { width: 100%; }
+  .vg-shell .vg-analysis-source-actions button { min-height: 44px; }
+  .vg-shell .vg-analysis-sourcebar, .vg-shell .vg-analysis-display { padding: 10px 12px; gap: 7px 12px; }
+  .vg-shell .vg-analysis-display label { min-height: 44px; }
+  .vg-shell .vg-analysis-display small { width: 100%; }
+  .vg-shell .vg-analysis-stage-head { padding-inline: 10px; gap: 7px; }
+  .vg-shell .vg-analysis-stage-head > span { min-width: 0; white-space: normal; }
+}
+
+.vg-shell .vg-modal {
+  position: fixed;
+  inset: 0;
+  width: min(540px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  margin: auto;
+  border: 1px solid var(--vg-line);
+  border-radius: 12px;
+  color: var(--vg-ink);
+  background: var(--vg-surface);
+  box-shadow: 0 16px 56px rgb(14 30 27 / .2);
+  overscroll-behavior: contain;
+}
+.vg-shell .vg-modal::backdrop { background: rgb(10 26 23 / .55); }
+.vg-shell .vg-modal-drawer {
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(520px, 100vw);
+  height: 100dvh;
+  max-height: none;
+  border-radius: 0;
 }

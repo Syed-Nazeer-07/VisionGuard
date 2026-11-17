@@ -50,9 +50,9 @@ export function ForgotPassword() {
           <Mail size={17} className="pointer-events-none absolute left-3 top-[12px] text-slate-400"/>
           <input id="recovery-email" type="email" autoComplete="email"
             placeholder="you@example.com" {...register('email')}
-            className="vg-field w-full pl-10" aria-invalid={!!errors.email}/>
+            className="vg-field w-full pl-10" aria-invalid={!!errors.email} aria-describedby={errors.email ? 'recovery-email-error' : undefined}/>
         </div>
-        {errors.email && <p className="mt-2 text-xs text-red-600">{errors.email.message}</p>}
+        {errors.email && <p role="alert" id="recovery-email-error" className="mt-2 text-xs text-red-600">{errors.email.message}</p>}
       </div>
       <button type="submit" disabled={loading} className="vg-primary w-full">
         <Send size={16}/> {loading ? 'Sending link…' : 'Send reset link'}

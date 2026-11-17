@@ -26,6 +26,7 @@ const PHYSICAL_WIDTH_METERS: Record<string, number> = {
   'bus/truck': 2.55,
 };
 function classFamily(value: string): string {
+  if (value === 'bicycle' || value === 'motorcycle') return 'two-wheeler';
   return ['car', 'bus', 'truck', 'bus/truck'].includes(value) ? 'motor-vehicle' : value;
 }
 function finiteTrack(t: LiveTrack) {
@@ -37,10 +38,18 @@ function compatibility(a: LiveTrack, b: LiveTrack) {
   const sizeRatio = Math.max(a.w / b.w, b.w / a.w, a.h / b.h, b.h / a.h);
   if (!Number.isFinite(sizeRatio) || sizeRatio > 2.1) return -1;
   const iou = getIOU(a, b);
+  if (classFamily(a.className) === 'two-wheeler' && a.className !== b.className && iou < .65) return -1;
   const distance = Math.hypot(a.x - b.x, a.y - b.y);
   const allowed = Math.max(9, Math.min(a.w + b.w, a.h + b.h) * .34);
   if (iou < .17 && distance > allowed) return -1;
   return iou * 3 - distance / Math.max(10, (a.w + a.h) / 2) - (sizeRatio - 1) * .3;
+}
+
+function overlapsDuplicate(a: LiveTrack, b: LiveTrack, sameClassThreshold: number) {
+  const family = classFamily(a.className);
+  if (family !== classFamily(b.className)) return false;
+  const threshold = family === 'two-wheeler' && a.className !== b.className ? .72 : sameClassThreshold;
+  return getIOU(a, b) > threshold;
 }
 
 
@@ -144,8 +153,7 @@ export function reconcileVehicles(
     if (usedNew.has(index) || candidate.isPredicted) return;
     // A predicted-only box cannot establish a fresh vehicle ID.
     // Avoid duplicated boxes for the same vehicle.
-    if (assigned.some(t => classFamily(t.className) === classFamily(candidate.className) &&
-      getIOU(t, candidate) > .4)) return;
+    if (assigned.some(track => overlapsDuplicate(track, candidate, .4))) return;
     // If optical tracking temporarily lost this car, reuse the ID that the
     // persistent detector assigned it earlier rather than creating a new tag.
     const remembered = knownSourceIds.get(candidate.id);
@@ -176,8 +184,7 @@ export function reconcileVehicles(
         mediaTime - (old.lastOpticalAt ?? old.lastDetectedAt) > 0.38 ||
         mediaTime - old.lastDetectedAt > 1.7 ||
         assigned.some(track => track.id === old.id)) return;
-    if (assigned.some(t => classFamily(t.className) === classFamily(old.className) &&
-      getIOU(t, old) > .45)) return;
+    if (assigned.some(track => overlapsDuplicate(track, old, .45))) return;
     assigned.push(old);
   });
   return { tracks: assigned, nextId, sourceAssignments };
@@ -194,6 +201,9 @@ export function updateScreenSpeed(
   track: LiveTrack,
   mediaTime: number
 ): { history: SpeedHistory; kmh: number | null } {
+  if (track.isPredicted || !Number.isFinite(mediaTime) || !finiteTrack(track)) {
+    return { history, kmh: null };
+  }
   // Slow CPU/WASM inference can leave >1s between real observations.
   // Keep a bounded two-second trajectory for a *coarse optical estimate*,
   // but never reuse a reading once the last actual sample has become stale.
@@ -223,7 +233,11 @@ export function updateScreenSpeed(
   // Vertical component is foreshortened in typical elevated roadside footage.
   // This factor is a heuristic only. It MUST be labeled as estimated, not exact.
   const groundPixelPerSecond = Math.hypot(dx, dy * 2.0) / elapsed;
-  const estimate = Math.min(160, Math.max(0, 3.6 * metersPerPixel * groundPixelPerSecond));
+  const estimate = 3.6 * metersPerPixel * groundPixelPerSecond;
+  if (!Number.isFinite(estimate) || estimate > 160) {
+    const point = { time: mediaTime, x: track.x, y: track.y + track.h / 2 };
+    return { history: { points: [point], smoothedKmh: null }, kmh: null };
+  }
   const next = previousEstimate === null ? estimate : previousEstimate * .75 + estimate * .25;
   return { history: { points, smoothedKmh: next }, kmh: next };
 }

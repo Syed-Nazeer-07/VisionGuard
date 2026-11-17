@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, BarChart3, Clock3, FileKey, FileText, FolderSearch,
-  LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen, ArrowUpRight,
+  LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
   Settings, UserCog, Users, X
 } from 'lucide-react';
 import { ErrorBoundary } from '../ErrorBoundary';
@@ -167,16 +167,6 @@ export function AppLayout() {
           onClick={() => setMobileOpen(false)}><X size={18}/></button>
       </div>
 
-      <div className="px-3 pt-5">
-        {!compactSidebar && <p className="vg-side-launch-caption mb-2.5 pl-2 uppercase">QUICK ACTION</p>}
-        <Link to="/app/analyze" title={compactSidebar ? 'Start a new analysis' : undefined}
-          onClick={() => setMobileOpen(false)}
-          className={'vg-side-launch-link px-3 ' + (compactSidebar ? '!justify-center' : '')}>
-          <Activity size={17} aria-hidden="true"/>
-          {!compactSidebar && <span>Start analysis</span>}
-          {!compactSidebar && <ArrowUpRight size={16} aria-hidden="true"/>}
-        </Link>
-      </div>
       <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-6" aria-label="Workspace navigation">
         {menuGroup('Workspace', PRIMARY_NAV)}
         {menuGroup('Insights', DATA_NAV)}
@@ -226,7 +216,7 @@ export function AppLayout() {
         <button type="button" className="rounded-md px-2 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-50"
           onClick={() => window.dispatchEvent(new Event('visionguard:stop-tab-capture'))}>Stop</button>
       </div>}
-      <main className="vg-main-scroll relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto" id="main-content">
+      <main tabIndex={-1} className="vg-main-scroll relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto" id="main-content">
         <ErrorBoundary>
           {/* Retain the playback element/worker between app pages. */}
           <div style={activeAnalyze

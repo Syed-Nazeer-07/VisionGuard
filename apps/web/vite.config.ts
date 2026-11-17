@@ -66,7 +66,7 @@ export default defineConfig({
   plugins: [onnxRuntimeWasmDevPlugin(), react(), tailwindcss()],
   optimizeDeps: {
     // Pre-bundling relocates ORT's module and breaks its import.meta.url-relative loading.
-    exclude: ['onnxruntime-web'],
+    exclude: ['onnxruntime-web', 'onnxruntime-web/webgpu'],
   },
   server: {
     host: '0.0.0.0',

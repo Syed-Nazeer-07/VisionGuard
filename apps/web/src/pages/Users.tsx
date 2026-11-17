@@ -1,3 +1,4 @@
+import { Modal } from '../components/ui/Modal';
 import { useState, useEffect, useMemo } from 'react'
 import { 
   Search, Plus, Users as UsersIcon, Shield,
@@ -385,7 +386,7 @@ export function Users() {
 
       {/* Users Table */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto min-h-[300px]">
+        <div className="overflow-x-auto" role="region" aria-label="Workspace users table" tabIndex={0}>
           {loading ? (
             <div className="h-64 flex flex-col items-center justify-center text-slate-400">
               <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
@@ -520,20 +521,17 @@ export function Users() {
 
       {/* Slide-out Drawer (Create / Edit / Details / Permissions) */}
       {isDrawerOpen && (
-        <div className="fixed inset-0 z-50 overflow-hidden bg-black/40 backdrop-blur-2xs flex justify-end animate-in fade-in duration-200">
-          <div 
-            className="w-full max-w-lg bg-white shadow-2xl flex flex-col h-full border-l border-slate-200 animate-in slide-in-from-right duration-200"
-            onClick={e => e.stopPropagation()}
-          >
+        <Modal labelledBy="users-drawer-title" onDismiss={() => setIsDrawerOpen(false)} className="vg-modal-drawer">
+          <div className="bg-white flex flex-col h-full">
             {/* Drawer Header */}
             <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
               <div>
-                <h3 className="text-sm font-bold text-slate-900">
+                <h2 id="users-drawer-title" className="text-sm font-bold text-slate-900">
                   {drawerView === 'create' && 'Provision New Staff User'}
                   {drawerView === 'edit' && `Edit Profile: ${selectedUser?.name || selectedUser?.email}`}
                   {drawerView === 'details' && `Account Inspection: ${selectedUser?.name || selectedUser?.email}`}
                   {drawerView === 'permissions' && 'Role Capabilities & Access Matrix'}
-                </h3>
+                </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
                   {drawerView === 'create' && 'Create a verified user via Supabase provisioning service.'}
                   {drawerView === 'edit' && 'Update identity and assign operational role permissions.'}
@@ -542,7 +540,7 @@ export function Users() {
                 </p>
               </div>
               <button
-                onClick={() => setIsDrawerOpen(false)}
+                onClick={() => setIsDrawerOpen(false)} aria-label="Close user details"
                 className="text-slate-400 hover:text-slate-800 p-1.5 rounded-lg cursor-pointer"
               >
                 <X className="w-4 h-4" />
@@ -758,13 +756,14 @@ export function Users() {
 
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Confirmation Modal */}
       {confirmModal.isOpen && (
-        <div className="fixed inset-0 z-50 overflow-hidden bg-black/50 backdrop-blur-2xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4">
+        <Modal labelledBy="users-confirm-title" describedBy="users-confirm-copy"
+          onDismiss={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}>
+          <div className="p-5 space-y-4">
             <div className="flex items-start gap-3">
               <div className={cn(
                 "w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
@@ -773,8 +772,8 @@ export function Users() {
                 <AlertTriangle className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900">{confirmModal.title}</h3>
-                <p className="text-xs text-slate-600 mt-1 leading-relaxed">{confirmModal.description}</p>
+                <h2 id="users-confirm-title" className="text-sm font-bold text-slate-900">{confirmModal.title}</h2>
+                <p id="users-confirm-copy" className="text-xs text-slate-600 mt-1 leading-relaxed">{confirmModal.description}</p>
               </div>
             </div>
 
@@ -803,7 +802,7 @@ export function Users() {
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
 
     </div>

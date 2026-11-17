@@ -38,13 +38,11 @@ export function ResetPassword() {
         setVerifying(false);
       }
     });
-    void supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
-      if (!mounted) return;
-      setReady(Boolean(session));
-      setVerifying(false);
-    }).catch(() => {
+    // A session from an ordinary sign-in does not verify a recovery link.
+    // Supabase emits PASSWORD_RECOVERY after validating the callback.
+    void supabase.auth.getSession().finally(() => {
       if (mounted) setVerifying(false);
-    });
+    }).catch(() => {});
     return () => { mounted = false; subscription.unsubscribe(); };
   }, []);
 
@@ -77,7 +75,7 @@ export function ResetPassword() {
       </div>
       <Link to="/login" className="vg-primary w-full">Continue to sign in</Link>
     </div> : verifying ?
-      <p className="text-sm text-slate-500">Checking your reset link…</p> :
+      <p role="status" className="text-sm text-slate-500">Checking your reset link…</p> :
       !ready ? <div className="space-y-4">
         <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           This reset link could not be verified. It may have expired or already been used.

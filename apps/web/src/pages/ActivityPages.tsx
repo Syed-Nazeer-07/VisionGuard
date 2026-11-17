@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { Link } from 'react-router-dom';
 import { PaginatedRows } from '../components/ui/PaginatedRows';
 import { ArrowUpRight, Download, Film, Plus, Search, X } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { jsPDF } from 'jspdf';
 import { useAuthStore } from '../store/auth';
 import { activityLedger, countRepeatedTracks, isRepeatedVehicleTrack, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
 import { csvCell } from '../services/csvExport';
 import { groupIncidentRecords, incidentLabel, incidentReviewLabel, manualIncidentEvidence } from '../services/incidentPresentation';
+
+const VehicleDistribution = lazy(() => import('../components/analysis/VehicleDistribution'));
 
 const niceDate = (time: number) => new Date(time).toLocaleString();
 const fmt = (n: number) => n.toLocaleString();
@@ -23,16 +24,16 @@ function useRuns() {
   return { ...data, stats, userId };
 }
 
-function Stat({ label, number, note }: { label: string; number: number; note: string }) {
+function Stat({ label, number, note }: { label: string; number: number | null; note: string }) {
   return <section className="vg-stat" aria-label={label}>
     <div className="vg-stat-label">{label}</div>
-    <div className="vg-stat-value">{fmt(number)}</div>
+    <div className="vg-stat-value">{number === null ? '—' : fmt(number)}</div>
     <div className="vg-stat-foot">{note}</div>
   </section>;
 }
 
-function distribution(records: AnalysisRecord[]) {
-  return Object.entries(summarizeActivity(records).distribution)
+function distribution(counts: Record<string, number>) {
+  return Object.entries(counts)
     .map(([name, count]) => ({ name: title(name), count }))
     .sort((a,b) => b.count-a.count);
 }
@@ -70,40 +71,31 @@ function RecentRuns({ records, loaded }: { records: AnalysisRecord[]; loaded: bo
 
 export function ActivityDashboard() {
   const { records, loaded, stats, error } = useRuns();
-  const data = distribution(records);
+  const data = useMemo(() => distribution(stats.distribution), [stats.distribution]);
   const mostRecent = records.reduce((latest, run) => Math.max(latest, run.updatedAt), 0);
-  return <main className="vg-page">
-    <header className="vg-dashboard-hero">
-      <div>
-        <div className="vg-dashboard-kicker">VISIONGUARD / OPERATIONS OVERVIEW</div>
-        <h1>Every observation, in focus.</h1>
-        <p>Your traffic intelligence workspace. Revisit analyzed footage, review vehicle activity, and follow up on observations with context.</p>
-      </div>
-      <div className="vg-dashboard-hero-side">
-        <div className="vg-dashboard-hero-actions">
-          <Link to="/app/analyze" className="vg-dashboard-action">
-            Start an analysis <ArrowUpRight size={17} aria-hidden="true"/>
-          </Link>
-          <Link to="/app/videos" className="vg-dashboard-alt-action">
-            Browse history <ArrowUpRight size={15} aria-hidden="true"/>
-          </Link>
+  return <div className="vg-page">
+    <header className="vg-overview-header vg-panel">
+      <div className="vg-overview-copy">
+        <h1>Overview</h1>
+        <p>Review recent analyses, vehicle observations, and incidents that need attention.</p>
+        <div className="vg-overview-actions">
+          <Link to="/app/analyze" className="vg-primary">Start an analysis <ArrowUpRight size={17} aria-hidden="true"/></Link>
+          <Link to="/app/videos" className="vg-secondary">Browse history</Link>
         </div>
-        <span className="vg-dashboard-last-activity">
-          {!loaded ? 'Loading workspace…' : mostRecent > 0
-            ? 'Last analyzed · ' + niceDate(mostRecent)
-            : 'No analysis sessions saved yet'}
-        </span>
+        <span>{!loaded ? 'Loading workspace…' : mostRecent > 0
+          ? 'Last analyzed ' + niceDate(mostRecent) : 'No analysis sessions saved yet'}</span>
       </div>
+      <div className="vg-overview-image" aria-hidden="true"><img src="/traffic_monitoring_corridor.jpg" alt=""/></div>
     </header>
     {error && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{error}</p>}
     <div className="vg-metric-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <Stat label="Repeated vehicle tracks" number={stats.vehicles}
-        note={stats.transientTrackCandidates + ' brief/noisy candidates excluded'}/>
-      <Stat label="Analysis sessions" number={stats.runs} note="Videos and live sources"/>
-      <Stat label="Inference frames" number={stats.analyzedFrames} note="Completed detector observations"/>
-      <Stat label="Review flags" number={stats.violations}
-        note={stats.pendingReviews + ' pending · ' +
-          (stats.reviewedFlags + stats.dismissedFlags) + ' handled'}/>
+      <Stat label="Repeated vehicle tracks" number={loaded ? stats.vehicles : null}
+        note={loaded ? fmt(stats.transientTrackCandidates) + ' brief candidates excluded' : 'Observed on multiple frames'}/>
+      <Stat label="Analysis sessions" number={loaded ? stats.runs : null} note="Videos and live sources"/>
+      <Stat label="Inference frames" number={loaded ? stats.analyzedFrames : null} note="Completed detector observations"/>
+      <Stat label="Review flags" number={loaded ? stats.violations : null}
+        note={loaded ? stats.pendingReviews + ' pending · ' +
+          (stats.reviewedFlags + stats.dismissedFlags) + ' handled' : 'Pending human review'}/>
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
       <RecentRuns records={records} loaded={loaded}/>
@@ -118,21 +110,13 @@ export function ActivityDashboard() {
             Detected vehicle classes will appear after you analyze a source.
             <Link to="/app/analyze">Analyze footage</Link>
           </div> :
-          <div className="h-72 px-4 py-5">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} layout="vertical" margin={{ left: 10, right: 12 }}>
-                <CartesianGrid stroke="#ece9e3" horizontal={false}/>
-                <XAxis type="number" allowDecimals={false} tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
-                <YAxis type="category" dataKey="name" width={90} tick={{fontSize:11,fill:'#475569'}} axisLine={false} tickLine={false}/>
-                <Tooltip cursor={{ fill: '#fcf7f2' }} />
-                <Bar dataKey="count" name="Vehicles" fill="#d46a47" radius={[0,5,5,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>}
+          <Suspense fallback={<p className="vg-empty-row" role="status">Loading chart…</p>}>
+            <VehicleDistribution data={data}/>
+          </Suspense>}
       </section>
     </div>
     <p className="vg-footnote">Counts exclude fleeting track IDs but can still include duplicates after occlusion. Speed readings are uncalibrated optical proxies.</p>
-  </main>;
+  </div>;
 }
 
 export function ActivityAnalytics() {
@@ -153,10 +137,10 @@ export function ActivityAnalytics() {
     return records.filter(r => now - r.updatedAt <= ms);
   }, [range, records, asOf]);
   const counts = useMemo(() => summarizeActivity(filtered), [filtered]);
-  const byClass = distribution(filtered);
-  return <main className="vg-page vg-data-page">
+  const byClass = useMemo(() => distribution(counts.distribution), [counts.distribution]);
+  return <div className="vg-page vg-data-page">
     <header className="vg-page-header">
-      <div><span className="vg-page-kicker">DATA EXPLORER / OBSERVATIONS</span><h1>Analytics</h1><p>Understand vehicle classes, activity volume and session history.</p></div>
+      <div><h1>Analytics</h1><p>Understand vehicle classes, activity volume and session history.</p></div>
       <div role="group" aria-label="Analytics time range" className="vg-range-control">
         {([
           ['all', 'All time'], ['today', '24 hours'], ['week', '7 days'], ['month', '30 days'],
@@ -172,24 +156,16 @@ export function ActivityAnalytics() {
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     <div className="vg-metric-grid mb-5 grid gap-3 sm:grid-cols-3">
       <Stat label="Repeated tracks" number={counts.vehicles} note="Observed on multiple frames"/>
-      <Stat label="Peak simultaneous tracks" number={counts.maximumVisible} note="Maximum detected in one frame"/>
+      <Stat label="Peak simultaneous tracks" number={counts.maximumVisible} note="Largest set of observed tracks in a detector frame"/>
       <Stat label="Inference frames" number={counts.analyzedFrames} note="Completed observations"/>
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
       <section className="vg-panel overflow-hidden">
         <div className="vg-section-head"><div><h2>Classification breakdown</h2><p className="vg-section-subtitle">Observed classes across recorded sessions</p></div><span className="vg-metadata-chip">{byClass.length} classes</span></div>
         {loaded && byClass.length ?
-          <div className="h-72 p-5">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={byClass} margin={{left: 4, right: 12, bottom: 0}}>
-                <CartesianGrid stroke="#ece9e3" vertical={false}/>
-                <XAxis dataKey="name" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
-                <YAxis allowDecimals={false} tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
-                <Tooltip cursor={{fill:'#fcf7f2'}}/>
-                <Bar dataKey="count" name="Vehicles" fill="#d46a47" radius={[5,5,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
-          </div> :
+          <Suspense fallback={<p className="vg-empty-row" role="status">Loading chart…</p>}>
+            <VehicleDistribution data={byClass}/>
+          </Suspense> :
           <p className="vg-empty-row">{loaded ? 'No classification data for this period.' : 'Loading data…'}</p>}
       </section>
       <section className="vg-panel overflow-hidden">
@@ -210,7 +186,7 @@ export function ActivityAnalytics() {
       </section>
     </div>
     <p className="vg-footnote">Repeated track IDs exclude brief detections, but ID switches may still count one vehicle twice. No physical speed is calibrated.</p>
-  </main>;
+  </div>;
 }
 
 function exportCSV(records: AnalysisRecord[]) {
@@ -301,18 +277,18 @@ export function ActivityReports() {
       setPdfBusy(false);
     }
   };
-  return <main className="vg-page vg-data-page">
+  return <div className="vg-page vg-data-page">
     <header className="vg-page-header">
-      <div><span className="vg-page-kicker">EXPORT CENTER / YOUR DATA</span><h1>Reports</h1><p>Create downloadable records from your saved traffic analysis sessions.</p></div>
+      <div><h1>Reports</h1><p>Create downloadable records from your saved traffic analysis sessions.</p></div>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     {exportError && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{exportError}</p>}
     <section className="vg-panel overflow-hidden">
-      <div className="vg-section-head"><div><h2>Export options</h2><p className="vg-section-subtitle">Select the scope and choose your preferred format</p></div><span className="vg-metadata-chip">ON-DEVICE EXPORT</span></div>
+      <div className="vg-section-head"><div><h2>Export options</h2><p className="vg-section-subtitle">Select the scope and choose your preferred format</p></div></div>
       <div className="p-5 sm:p-6">
         {loaded && !records.length && <div className="vg-report-empty mb-5">
           <strong>No sessions available to export.</strong>
-          <p>Analyze a source to build a report. Reports use saved observations, never fabricated data.</p>
+          <p>Analyze a source to create a report from your saved observations.</p>
           <Link to="/app/analyze">Start an analysis <ArrowUpRight size={15} aria-hidden="true"/></Link>
         </div>}
         <label htmlFor="report-run" className="mb-2 block text-xs font-semibold text-slate-600">Select scope</label>
@@ -339,7 +315,7 @@ export function ActivityReports() {
         <p className="vg-footnote">PDF includes tracked vehicles and saved review flags. Vehicle CSV contains tracks; incident CSV contains review decisions. Image-derived speed remains an uncalibrated visual estimate, not an enforcement measurement.</p>
       </div>
     </section>
-  </main>;
+  </div>;
 }
 
 interface B2VideoRow {
@@ -398,9 +374,9 @@ export function ActivityVideoLibrary() {
     })().catch(e => { if(alive) {setB2Loading(false);setB2Error(String(e));} });
     return () => { alive = false; };
   },[userId]);
-  return <main className="vg-page vg-data-page">
+  return <div className="vg-page vg-data-page">
     <header className="vg-page-header vg-history-heading">
-      <div><span className="vg-page-kicker">LIBRARY / SAVED ACTIVITY</span><h1>History</h1><p>Sessions, original files and optional cloud backups—in one view.</p></div>
+      <div><h1>History</h1><p>Sessions, original files and optional cloud backups—in one view.</p></div>
       <div className="vg-search-field">
         <Search size={17} aria-hidden="true" />
         <input type="search" value={search} onChange={event => setSearch(event.target.value)}
@@ -479,7 +455,7 @@ export function ActivityVideoLibrary() {
       </section>
     </div>
     <p className="vg-footnote">Analysis records are retained separately from source video files. Saving a session does not upload its footage.</p>
-  </main>;
+  </div>;
 }
 
 function IncidentRow({
@@ -600,17 +576,20 @@ export function ActivityIncidents() {
       evidenceNote: manualIncidentEvidence(flagType, note, chosenTrack?.estimatedSpeedKmh ?? null),
     };
     activityLedger.addReviewedViolation(userId, run.id, record);
-    void activityLedger.flush(userId).catch(console.warn);
     setNote('');
     setTrackId('');
     setManualOpen(false);
-    setFeedback('Incident saved for review.');
+    setFeedback('Saving incident…');
+    void activityLedger.flush(userId).then(() => {
+      if (useAuthStore.getState().user?.id === userId) setFeedback('Incident saved for review on this device.');
+    }).catch(() => {
+      if (useAuthStore.getState().user?.id === userId) setFeedback('Could not save the incident to device storage.');
+    });
   };
 
-  return <main className="vg-page">
+  return <div className="vg-page">
     <header className="vg-page-header vg-incidents-header">
       <div>
-        <span className="vg-page-kicker">OBSERVATIONS / HUMAN REVIEW</span>
         <h1>Incidents</h1>
         <p>Review potential events and decide what needs follow-up.</p>
       </div>
@@ -715,7 +694,7 @@ export function ActivityIncidents() {
             onReview={changeReview}/>}/> :
         <p className="vg-empty-row">No manual incidents match this filter.</p>}
     </section>}
-    <p className="vg-footnote">Reviewed means checked by a person—not a verified traffic offence.
+    <p className="vg-footnote">Reviewed means a person checked the observation. Automated flags are review candidates.
       Review decisions are saved with the incident and included in exported reports.</p>
-  </main>;
+  </div>;
 }

@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Activity, ArrowRight, ArrowUpRight, BarChart3,
   ChevronRight, CircleDot, FileText, Film, Layers3, LockKeyhole,
-  Menu, MousePointer2, ScanLine, ShieldCheck, Sparkles, X,
+  Menu, MousePointer2, ScanLine, ShieldCheck, X,
 } from 'lucide-react';
 import './Landing.css';
 
@@ -11,7 +11,6 @@ type Perspective = 'observe' | 'follow' | 'review';
 const perspectives: Array<{
   id: Perspective;
   label: string;
-  eyebrow: string;
   title: string;
   description: string;
   image: string;
@@ -20,7 +19,6 @@ const perspectives: Array<{
   {
     id: 'observe',
     label: 'Observe',
-    eyebrow: '01 / ORIGINAL CONTEXT',
     title: 'Start with the actual scene.',
     description: 'Choose your footage and make the road itself the starting point.',
     image: '/traffic_monitoring_corridor.jpg',
@@ -29,7 +27,6 @@ const perspectives: Array<{
   {
     id: 'follow',
     label: 'Follow',
-    eyebrow: '02 / VEHICLE MOVEMENT',
     title: 'Follow what moves.',
     description: 'In the analysis workspace, YOLO11s and tracking tools help connect observations over time.',
     image: '/traffic_flow_analysis.jpg',
@@ -38,7 +35,6 @@ const perspectives: Array<{
   {
     id: 'review',
     label: 'Review',
-    eyebrow: '03 / THE BIGGER PICTURE',
     title: 'See beyond a single frame.',
     description: 'Return to session activity, analytics and review tools after playback.',
     image: '/traffic_operations_center.jpg',
@@ -105,6 +101,17 @@ function Brand() {
 
 export function Landing() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const menuRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMobileOpen(false);
+      menuRef.current?.focus();
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [mobileOpen]);
   const [perspective, setPerspective] = useState<Perspective>('observe');
   const selected = perspectives.find(item => item.id === perspective) ?? perspectives[0];
 
@@ -127,6 +134,7 @@ export function Landing() {
           <button
             type="button"
             className="vgn-menu-button"
+            ref={menuRef}
             aria-expanded={mobileOpen}
             aria-controls="vgn-mobile-navigation"
             aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
@@ -150,11 +158,10 @@ export function Landing() {
         <section className="vgn-hero">
           <div className="vgn-shell vgn-hero-grid">
             <div className="vgn-hero-content">
-              <span className="vgn-eyebrow"><span /> TRAFFIC INTELLIGENCE, REIMAGINED</span>
-              <h1>Every frame has<br /><em>more to say.</em></h1>
-              <p>See movement, make sense of activity and keep the bigger picture in focus. One connected workspace for video-based traffic analysis.</p>
+              <h1>Traffic video<br /><em>in focus.</em></h1>
+              <p>Analyze authorized footage on your device, track vehicles, and review what you observed.</p>
               <div className="vgn-hero-actions">
-                <a href="/register" className="vgn-button vgn-button-accent">Open VisionGuard <ArrowUpRight size={18} /></a>
+                <a href="/register" className="vgn-button vgn-button-accent">Create an account <ArrowUpRight size={18} /></a>
                 <a href="#platform" className="vgn-button vgn-button-ghost">Explore the platform <ArrowRight size={17} /></a>
               </div>
               <div className="vgn-hero-footnote">
@@ -168,7 +175,7 @@ export function Landing() {
               <div className="vgn-stage">
                 <div className="vgn-stage-chrome">
                   <span className="vgn-stage-title"><span /> VISIONGUARD / SCENE EXPLORER</span>
-                  <span className="vgn-stage-tag">INTERACTIVE PREVIEW</span>
+                  <span className="vgn-stage-tag">WORKFLOW PREVIEW</span>
                 </div>
                 <div className="vgn-stage-image" key={selected.id}>
                   <img src={selected.image} alt={selected.alt} fetchPriority={selected.id === 'observe' ? 'high' : 'auto'} />
@@ -177,10 +184,10 @@ export function Landing() {
                   <div className="vgn-stage-corner vgn-stage-corner-c" aria-hidden="true" />
                   <div className="vgn-stage-corner vgn-stage-corner-d" aria-hidden="true" />
                   <div className="vgn-stage-image-label">ILLUSTRATIVE SCENE — NO LIVE INFERENCE</div>
-                  <div className="vgn-stage-image-no"><span>{selected.eyebrow}</span><strong>{selected.title}</strong></div>
+                  <div className="vgn-stage-image-no"><strong>{selected.title}</strong></div>
                 </div>
                 <div className="vgn-stage-tabs" role="group" aria-label="Explore the VisionGuard analysis workflow">
-                  <span>EXPLORE A PERSPECTIVE</span>
+                  <span>Workflow</span>
                   <div>
                     {perspectives.map(item => (
                       <button
@@ -210,9 +217,8 @@ export function Landing() {
 
         <section className="vgn-section vgn-intro" id="platform">
           <div className="vgn-shell">
-            <div className="vgn-section-top"><span>01 / A CLEARER PERSPECTIVE</span><span>LESS NOISE. MORE CONTEXT.</span></div>
             <div className="vgn-intro-heading">
-              <h2>More than a box<br />around a <em>vehicle.</em></h2>
+              <h2>From detection to <em>review.</em></h2>
               <div>
                 <p>Video analysis should help you understand what happened—not leave you with disconnected detections and numbers.</p>
                 <p>VisionGuard connects the visual moment to a broader workflow: track activity, explore results, and return to sessions later.</p>
@@ -221,7 +227,6 @@ export function Landing() {
 
             <div className="vgn-editorial-grid">
               <article className="vgn-editorial-main">
-                <div className="vgn-card-index">01 / THE SCENE</div>
                 <div className="vgn-editorial-art">
                   <img src="/traffic_flow_analysis.jpg" alt="Illustrative overhead view of road traffic" loading="lazy" />
                   <span className="vgn-art-label">ORIGINAL FOOTAGE PROVIDES THE CONTEXT</span>
@@ -233,17 +238,15 @@ export function Landing() {
               </article>
               <div className="vgn-editorial-aside">
                 <article className="vgn-editorial-detail">
-                  <div className="vgn-card-index">02 / THE WORKFLOW</div>
                   <div className="vgn-detail-art" aria-hidden="true">
                     <span className="vgn-detail-line" />
-                    <div><ScanLine size={17} /><span>Detection</span><b>01</b></div>
-                    <div><Activity size={17} /><span>Tracking</span><b>02</b></div>
-                    <div><BarChart3 size={17} /><span>Analysis</span><b>03</b></div>
+                    <div><ScanLine size={17} /><span>Detection</span></div>
+                    <div><Activity size={17} /><span>Tracking</span></div>
+                    <div><BarChart3 size={17} /><span>Analysis</span></div>
                   </div>
                   <div className="vgn-small-copy"><h3>From frames to findings.</h3><p>One journey from footage to recorded activity.</p></div>
                 </article>
                 <article className="vgn-editorial-note">
-                  <div className="vgn-card-index">03 / YOUR DECISION</div>
                   <LockKeyhole size={29} strokeWidth={1.55} aria-hidden="true" />
                   <div className="vgn-small-copy"><h3>Your footage. Your call.</h3><p>Browser analysis doesn't require sending the original file to cloud storage.</p></div>
                 </article>
@@ -254,15 +257,14 @@ export function Landing() {
 
         <section className="vgn-section vgn-capabilities" id="capabilities">
           <div className="vgn-shell">
-            <div className="vgn-section-top vgn-section-top-dark"><span>02 / THE TOOLKIT</span><span>MADE TO WORK TOGETHER</span></div>
             <div className="vgn-capability-heading">
-              <h2>Under the hood,<br /><em>real capability.</em></h2>
+              <h2>Analysis <em>capabilities.</em></h2>
               <p>Four connected ways to turn moving pixels into something you can actually review.</p>
             </div>
             <div className="vgn-capability-grid">
               {capabilities.map(({ number, title, text, icon: Icon }) => (
                 <article className="vgn-capability" key={number}>
-                  <div className="vgn-capability-top"><span>{number} / 04</span><Icon size={22} strokeWidth={1.5} /></div>
+                  <div className="vgn-capability-top"><Icon size={22} strokeWidth={1.5} aria-hidden="true"/></div>
                   <h3>{title}</h3>
                   <p>{text}</p>
                 </article>
@@ -273,9 +275,8 @@ export function Landing() {
 
         <section className="vgn-section vgn-how" id="workflow">
           <div className="vgn-shell">
-            <div className="vgn-section-top"><span>03 / THE SIMPLE PROCESS</span><span>THREE STEPS TO START</span></div>
             <div className="vgn-how-heading">
-              <h2>From upload<br />to <em>understanding.</em></h2>
+              <h2>How analysis <em>works.</em></h2>
               <p>Bring the footage. Explore what's visible. Return when you need the context again.</p>
             </div>
             <div className="vgn-steps">
@@ -296,8 +297,7 @@ export function Landing() {
         <section className="vgn-cta">
           <div className="vgn-shell vgn-cta-grid">
             <div>
-              <span className="vgn-cta-eyebrow"><Sparkles size={16} /> THE ROAD LOOKS DIFFERENT FROM HERE</span>
-              <h2>See what your<br /><em>footage can say.</em></h2>
+              <h2>Start analyzing <em>footage.</em></h2>
               <p>Less guesswork between the scene and the insight. Explore VisionGuard's connected analysis workspace.</p>
               <div className="vgn-cta-actions">
                 <a className="vgn-button vgn-button-cta" href="/register">Get started <ArrowUpRight size={18} /></a>
