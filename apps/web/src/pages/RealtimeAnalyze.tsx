@@ -373,7 +373,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (resumeSyncedPlaybackRef.current) {
           resumeSyncedPlaybackRef.current = false;
           const recordedVideo = videoRef.current;
-          if (syncedPlaybackRef.current && !captureKindRef.current && activeRef.current && recordedVideo &&
+          if ((syncedPlaybackRef.current || frameLockedRef.current) && !captureKindRef.current && activeRef.current && recordedVideo &&
               !recordedVideo.ended && !recordedVideo.seeking) {
             void recordedVideo.play().catch(() => {});
           }
@@ -399,8 +399,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       const details = requestDetailsRef.current;
       requestDetailsRef.current = null;
       clearInFlight();
-      if (message.generation !== generationRef.current) return;
+      if (message.generation !== generationRef.current) {
+        if (details?.locked) releaseFrameHold(false, message.generation);
+        return;
+      }
       const video = videoRef.current;
+      if (details?.locked) releaseFrameHold(message.type === 'result', message.generation);
       if (details?.preview) {
         setInspection('idle');
         if (message.type === 'error') setError('Could not inspect frame: ' + message.message);
@@ -573,7 +577,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       type: 'init', modelPath: MODEL_PATH,
       provider: recoverWithWasmRef.current ? 'wasm' : preferredProviderRef.current
     });
-  }, [clearInFlight]);
+  }, [clearInFlight, releaseFrameHold]);
 
   const submitFrame = useCallback((video: HTMLVideoElement, mediaTime: number, preview = false) => {
     const worker = workerRef.current;
@@ -582,7 +586,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     const generation = generationRef.current;
     const requestId = ++messageIdRef.current;
     inFlightIdRef.current = requestId;
-    requestDetailsRef.current = { preview, captureMs: 0 };
+    const locked = shouldLockRecordedInference(
+      frameLockedRef.current, preview, Boolean(captureKindRef.current), video.paused
+    );
+    requestDetailsRef.current = { preview, captureMs: 0, locked };
     const captureStarted = performance.now();
     const sourceWidth = video.videoWidth;
     const sourceHeight = video.videoHeight;
@@ -600,14 +607,25 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       flowTracksRef.current = [];
       setError('Detector stalled for 20 seconds. Playback continues; use Retry detector.');
     }, WORKER_TIMEOUT_MS);
-    void captureInferenceBitmap(video, MAX_CAPTURE_WIDTH).then(bitmap => {
+    // Start the bitmap snapshot while the video still displays the frame
+    // reported by requestVideoFrameCallback. Hold its media clock during
+    // inference, so late results do not need seconds of optical replay.
+    const bitmapPromise = captureInferenceBitmap(video, MAX_CAPTURE_WIDTH);
+    if (locked) {
+      frameHoldRef.current = true;
+      setFrameHeld(true);
+      video.pause();
+    }
+    void bitmapPromise.then(bitmap => {
       if (generation !== generationRef.current || video.seeking || videoRef.current !== video ||
-          !activeRef.current || video.paused !== preview || workerRef.current !== worker) {
+          !activeRef.current || (video.paused !== preview && !(locked && video.paused)) ||
+          workerRef.current !== worker) {
         bitmap.close();
         if (inFlightIdRef.current === requestId) {
           requestDetailsRef.current = null;
           clearInFlight();
           if (preview) setInspection('idle');
+          if (locked) releaseFrameHold(false, generation);
         }
         return;
       }
@@ -626,11 +644,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       requestDetailsRef.current = null;
       if (preview) setInspection('idle');
       else captureErrorRef.current = true;
+      if (locked) releaseFrameHold(false, generation);
       setError('Could not capture a decoded video frame for AI: ' + String(error));
       if (webcamRef.current) setStreamHealth('error');
     });
     return true;
-  }, [clearInFlight]);
+  }, [clearInFlight, releaseFrameHold]);
 
   const attachVideo = useCallback((
     file: Blob, name: string, savedPosition = 0, restoredRunId?: string
