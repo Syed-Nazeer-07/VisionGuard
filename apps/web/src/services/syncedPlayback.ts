@@ -36,3 +36,12 @@ export function recommendedSyncPlaybackRate(
   const smoothed = previous * 0.35 + target * 0.65;
   return Math.min(1, Math.max(MIN_SYNC_PLAYBACK_RATE, Math.round(smoothed * 100) / 100));
 }
+
+/** Hold only recorded Sync playback during a cold ONNX model startup. */
+export function shouldHoldRecordedPlayback(
+  syncedPlayback: boolean,
+  detectorReady: boolean,
+  liveCapture: boolean,
+): boolean {
+  return syncedPlayback && !detectorReady && !liveCapture;
+}
