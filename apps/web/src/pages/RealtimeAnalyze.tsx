@@ -190,6 +190,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       ? INITIAL_SYNC_PLAYBACK_RATE : 1;
     video.playbackRate = rate;
     setAnalysisRate(rate);
+    if (syncedPlayback && !readyRef.current && !webcamActive && !tabCaptureActive &&
+        !video.paused && !video.ended) {
+      // Sync may be enabled AFTER playback has already started; stop the
+      // source clock until the detector can inspect its current frame.
+      resumeSyncedPlaybackRef.current = true;
+      video.pause();
+    }
     if (!syncedPlayback && resumeSyncedPlaybackRef.current) {
       // The user chose native playback while waiting for model readiness.
       resumeSyncedPlaybackRef.current = false;
