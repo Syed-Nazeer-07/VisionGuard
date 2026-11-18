@@ -35,6 +35,7 @@ export function evaluateTracking(data) {
     throw Error('Expected ' + FORMAT + ' with at least one annotated frame.');
   let tp=0,fp=0,fn=0,idSwitches=0,duplicates=0,exitGhostFrames=0;
   let maxExitGhostSeconds=0,matchedIoU=0,previousTime=-Infinity;
+  let centerJitter=0,centerJitterSamples=0;
   const classes=new Map(), ids=new Map(), exited=new Map();
   const classTotals = name => {
     if(!classes.has(name)) classes.set(name,{tp:0,fp:0,fn:0});
@@ -72,9 +73,16 @@ export function evaluateTracking(data) {
       matchedGt.add(a);matchedPred.add(b);
       tp++;matchedIoU+=overlap;classTotals(gt[a].className).tp++;
       const previous=ids.get(gt[a].id);
-      if(previous && previous.predictedId!==pred[b].id &&
-         frame.time-previous.time<=MAX_ID_GAP_SECONDS)idSwitches++;
-      ids.set(gt[a].id,{predictedId:pred[b].id,time:frame.time});
+      const truth=gt[a].box, box=pred[b].box;
+      const errorX=(box.x-truth.x)/truth.w, errorY=(box.y-truth.y)/truth.h;
+      if(previous && frame.time-previous.time<=MAX_ID_GAP_SECONDS) {
+        if(previous.predictedId!==pred[b].id) idSwitches++;
+        else {
+          centerJitter+=Math.hypot(errorX-previous.errorX,errorY-previous.errorY);
+          centerJitterSamples++;
+        }
+      }
+      ids.set(gt[a].id,{predictedId:pred[b].id,time:frame.time,errorX,errorY});
     }
     for(let i=0;i<gt.length;i++) if(!matchedGt.has(i)) {
       fn++;classTotals(gt[i].className).fn++;
@@ -91,7 +99,7 @@ export function evaluateTracking(data) {
       if(pred.some(p=>p.id===info.predictedId)&&!acceptedIds.has(info.predictedId)) {
         exitGhostFrames++;
         maxExitGhostSeconds=Math.max(maxExitGhostSeconds,frame.time-info.firstAbsentAt);
-      } else exited.delete(gtId);
+      }
     }
     previousTime=frame.time;
   }
@@ -99,6 +107,8 @@ export function evaluateTracking(data) {
     evaluationType:'annotation-comparison-not-real-world-validation',
     frames:data.frames.length,tp,fp,fn,...metrics(tp,fp,fn),
     meanMatchedIoU:rate(matchedIoU,tp),idSwitches,
+    meanNormalizedCenterJitter:centerJitterSamples ? centerJitter/centerJitterSamples : null,
+    centerJitterSamples,
     duplicatePredictionPairs:duplicates,exitGhostFrames,maxExitGhostSeconds,
     perClass:Object.fromEntries([...classes].sort(([a],[b])=>a.localeCompare(b))
       .map(([name,c])=>[name,{...c,...metrics(c.tp,c.fp,c.fn)}])),

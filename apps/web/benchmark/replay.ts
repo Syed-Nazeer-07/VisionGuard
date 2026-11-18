@@ -44,19 +44,22 @@ export async function replayDetections(
     }));
     let previous: GrayFrame | null = null;
     const frames = [];
+    let trackMs = 0;
     for (const time of [...schedule].sort((a, b) => a - b)) {
       await seekFrame(video, time);
       const current = takeGrayFrame(video, time, canvas);
       if (!current) throw new Error('Unable to sample optical features at ' + time);
       if (previous) {
+        const started = performance.now();
         const moved = advanceOpticalTracks(tracks, previous, current);
         tracks = recoverBriefOpticalMisses(tracks, moved, previous.time, current.time,
           current.sourceWidth, current.sourceHeight);
+        trackMs += performance.now() - started;
       }
       previous = current;
       if (scoredTimes.includes(time)) frames.push({ time, tracks });
     }
-    runs.push({ anchor: seed.mediaTime, frames });
+    runs.push({ anchor: seed.mediaTime, frames, trackMs });
   }
   return runs;
 }

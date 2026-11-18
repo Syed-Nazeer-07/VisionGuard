@@ -158,6 +158,11 @@ try {
   assert.match(csv, /Reviewed/i);
   assert.match(csv, /Fixture review observation/);
   checked.push('An incident and its human review survive reload and appear in the incident CSV.');
+  const pdfReady = page.waitForEvent('download');
+  await page.getByRole('button',{name:'Download PDF',exact:true}).click();
+  const pdf = await readFile(await (await pdfReady).path());
+  assert.equal(pdf.subarray(0,5).toString(), '%PDF-');
+  checked.push('Download PDF produces a real activity report PDF.');
 
   role = 'Viewer';
   await page.goto(base+'/app/users');
@@ -177,6 +182,9 @@ try {
   await page.getByLabel('Confirm new password',{exact:true}).fill('fixture-only-password-012');
   await page.getByRole('button',{name:'Update password'}).click();
   await page.getByText('Your password has been updated successfully.',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Continue to sign in',exact:true}).click();
+  await page.waitForURL(base+'/login');
+  await page.getByRole('textbox',{name:'Email',exact:true}).waitFor();
   checked.push('The Supabase client recovery callback unlocks the reset form after the fixture API validates it.');
 
   assert.deepEqual(errors, []);

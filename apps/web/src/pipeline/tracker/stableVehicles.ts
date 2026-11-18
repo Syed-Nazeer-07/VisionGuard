@@ -16,6 +16,7 @@ export interface SpeedHistory {
   points: TrajectoryPoint[];
   smoothedKmh: number | null;
 }
+export const MAX_DETECTOR_CONFIRMATION_AGE_SEC = 3.5;
 const PHYSICAL_WIDTH_METERS: Record<string, number> = {
   bicycle: 0.65,
   motorcycle: 0.80,
@@ -264,13 +265,14 @@ export function recoverBriefOpticalMisses(
   // Never let a caller accidentally turn predicted geometry into a new
   // optical confirmation. Only actual image-matched tracks enter this list.
   const result: PersistentTrack[] = observed
-    .filter(track => !track.isPredicted)
+    .filter(track => !track.isPredicted && mediaTime - track.lastDetectedAt <= MAX_DETECTOR_CONFIRMATION_AGE_SEC)
     .map(track => ({ ...track, lastOpticalAt: mediaTime, isPredicted: false }));
   const present = new Set(result.map(t => t.id));
   const elapsed = mediaTime - previousTime;
   if (!(elapsed > 0 && elapsed <= .25)) return result;
   for (const track of previous) {
     if (present.has(track.id)) continue;
+    if (mediaTime - track.lastDetectedAt > MAX_DETECTOR_CONFIRMATION_AGE_SEC) continue;
     const sinceReliable = mediaTime - (track.lastOpticalAt ?? track.lastDetectedAt);
     if (sinceReliable < 0 || sinceReliable > .17) continue;
     const velocityLimit = Math.max(110, Math.max(track.w, track.h) * 2.5);

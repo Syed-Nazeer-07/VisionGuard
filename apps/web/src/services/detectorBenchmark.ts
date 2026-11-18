@@ -18,6 +18,15 @@ export function percentiles(samples: readonly number[]) {
   return { p50: at(.50), p95: at(.95) };
 }
 
+/** A slow detector can still report throughput across several completions. */
+export function recentInferenceFps(completions: readonly number[], now: number): number | null {
+  const latest = completions.at(-1);
+  if (latest === undefined || now - latest > 15_000) return null;
+  const first = completions.findIndex(time => latest - time <= 15_000);
+  if (first < 0 || latest <= completions[first]) return null;
+  return (completions.length - first - 1) * 1000 / (latest - completions[first]);
+}
+
 export function describeBenchmark(
   startup: DetectorStartup | null, provider: string, frames: readonly FrameTiming[],
   overlays: readonly QualityFrame[], counters: {

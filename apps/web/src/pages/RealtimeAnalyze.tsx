@@ -19,13 +19,13 @@ import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import type { DetectorEvent, DetectorProvider, DetectorStartup } from '../pipeline/worker/detectorProtocol';
-import { describeBenchmark, pageJsHeapBytes, type FrameTiming } from '../services/detectorBenchmark';
+import { describeBenchmark, pageJsHeapBytes, recentInferenceFps, type FrameTiming } from '../services/detectorBenchmark';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
 import { hasAdvancedVideoFrame, isLiveFrameDiscontinuity, isStreamStalled, shouldPaintLiveOverlay } from '../services/streamRecovery';
 import { useAuthStore } from '../store/auth';
 import { advanceOpticalTracks, takeGrayFrame, type GrayFrame } from '../pipeline/tracker/opticalTracking';
-import { reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
+import { MAX_DETECTOR_CONFIRMATION_AGE_SEC, reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack, type SpeedHistory } from '../pipeline/tracker/stableVehicles';
 import {
   projectLiveTracks, type LiveTrack
 } from '../pipeline/tracker/liveProjection';
@@ -35,7 +35,6 @@ import {
 const MODEL_PATH = resolveDeployedModelUrl(import.meta.env.VITE_YOLO_MODEL_URL, import.meta.env.PROD);
 const MIN_CAPTURE_INTERVAL = 0.12;
 const OPTICAL_INTERVAL = 0.085;
-const HISTORY_WINDOW = 3.5;
 const MAX_CAPTURE_WIDTH = 640;
 const WORKER_TIMEOUT_MS = 20_000;
 
@@ -58,14 +57,17 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const navigate = useNavigate();
   const search = new URLSearchParams(location.search);
   const qualityEnabled = search.get('quality') === '1';
+  const traceEveryFrame = qualityEnabled && search.get('qaFrames') === 'decoded';
   const preferredProvider = qualityEnabled && search.get('engine') === 'wasm' ? 'wasm' : 'auto';
   const preferredProviderRef = useRef<DetectorProvider>(preferredProvider);
   const recoverWithWasmRef = useRef(false);
   const qualityEnabledRef = useRef(qualityEnabled);
+  const traceEveryFrameRef = useRef(traceEveryFrame);
   useEffect(() => {
     preferredProviderRef.current = preferredProvider;
     qualityEnabledRef.current = qualityEnabled;
-  }, [preferredProvider, qualityEnabled]);
+    traceEveryFrameRef.current = traceEveryFrame;
+  }, [preferredProvider, qualityEnabled, traceEveryFrame]);
   const qualityFramesRef = useRef<QualityFrame[]>([]);
   const timingsRef = useRef<FrameTiming[]>([]);
   const benchmarkRef = useRef({
@@ -161,6 +163,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [detector, setDetector] = useState<DetectorState>('idle');
   const [provider, setProvider] = useState('');
   const [inferenceMs, setInferenceMs] = useState<number | null>(null);
+  const [detectorSourceAge, setDetectorSourceAge] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(0);
   const [liveMaxSpeed, setLiveMaxSpeed] = useState<number | null>(null);
   const [analyzedFrames, setAnalyzedFrames] = useState(0);
@@ -255,6 +258,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setPerformanceStats({ playbackFps: null, inferenceFps: null, overlayAgeMs: null });
     setLiveMaxSpeed(null);
     setDetectionCount(null);
+    setDetectorSourceAge(null);
     // Do not release an in-flight request here. It must finish or time out;
     // otherwise two GPU sessions could infer concurrently on different frames.
     workerRef.current?.postMessage({ type: 'reset' });
@@ -345,6 +349,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         inferenceErrorsRef.current = 0;
         setError(previous => previous.startsWith('Frame inference error:') ? '' : previous);
         if (!video || video.seeking || !activeRef.current) return;
+        const resultAgeMs = Math.max(0, ((presentedMediaTimeRef.current ?? video.currentTime) - message.mediaTime) * 1000);
+        setDetectorSourceAge(Math.round(resultAgeMs));
         let sample: FrameTiming | null = null;
         if (qualityEnabledRef.current) {
           const stats = benchmarkRef.current;
@@ -354,7 +360,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               inferenceMs: message.inferenceMs, modelRunMs: message.modelRunMs,
               preprocessMs: message.preprocessMs, postprocessMs: message.postprocessMs,
               captureMs: details?.captureMs ?? 0,
-              resultAgeMs: Math.max(0, ((presentedMediaTimeRef.current ?? video.currentTime) - message.mediaTime) * 1000),
+              resultAgeMs,
               replayMs: null
             };
             timingsRef.current.push(sample);
@@ -373,16 +379,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         // to the video that the user is seeing NOW. We never paint a raw
         // 900ms-old detection onto a later video frame.
         const history = grayHistoryRef.current;
-        let anchor = -1;
-        let closestDistance = Infinity;
-        for (let i = 0; i < history.length; i++) {
-          const distance = Math.abs(history[i].time - message.mediaTime);
-          if (distance < closestDistance) {
-            anchor = i;
-            closestDistance = distance;
-          }
-        }
-        if (anchor < 0 || closestDistance > 0.14) {
+        const anchor = history.findIndex(frame => frame.time === message.mediaTime);
+        if (anchor < 0) {
           // One late inference result must not erase newer optically matched
           // vehicles. Expire genuinely stale overlays as before.
           // Do not clear a currently visible, image-confirmed track merely
@@ -1429,7 +1427,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               }
             }
             history.push(current);
-            while (history.length && mediaTime - history[0].time > HISTORY_WINDOW) history.shift();
+            while (history.length && mediaTime - history[0].time > MAX_DETECTOR_CONFIRMATION_AGE_SEC) history.shift();
           }
         } catch (e) {
           // Cross-origin cameras without CORS can play visibly, but cannot
@@ -1544,7 +1542,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             !video.paused && !video.ended && !video.seeking) {
           appendQualityFrame(qualityFramesRef.current,
             presentedMediaTimeRef.current ?? video.currentTime,
-            video.videoWidth, video.videoHeight, showBoxes ? visibleTracks : [], overlayAgeMs);
+            video.videoWidth, video.videoHeight, showBoxes ? visibleTracks : [], overlayAgeMs, traceEveryFrameRef.current);
         }
         if (time - lastUI > 250) {
           lastUI = time;
@@ -1572,10 +1570,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           const playbackFps = renderedFrames !== null && playbackSample && renderedFrames >= playbackSample.frames && !video.paused
             ? (renderedFrames - playbackSample.frames) * 1000 / (time - playbackSample.time) : null;
           playbackSample = renderedFrames !== null ? { time, frames: renderedFrames } : null;
-          const completions = completionTimesRef.current.filter(at => time - at <= 3500);
-          const interval = (completions.at(-1) ?? 0) - (completions[0] ?? 0);
-          const inferenceFps = completions.length > 1 && interval > 0 && !video.paused
-            ? (completions.length - 1) * 1000 / interval : null;
+          const inferenceFps = video.paused ? null : recentInferenceFps(completionTimesRef.current, time);
           setPerformanceStats({ playbackFps, inferenceFps, overlayAgeMs });
         }
         if (urlRef.current && time - lastSaved > 2000 && !video.paused && Number.isFinite(video.currentTime)) {
@@ -1762,6 +1757,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 onPause={event => {
                   benchmarkRef.current.previousMediaTime = null;
                   benchmarkRef.current.lastFrameAt = null;
+                  completionTimesRef.current = [];
                   setPlaying(false);
                   setPerformanceStats(previous => ({ ...previous, inferenceFps: null, playbackFps: null }));
                   if (!webcamActive && !tabCaptureActive && !cloudPlaybackActive && ownerId)
@@ -1862,7 +1858,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
       {showTelemetry && <LiveTelemetry detections={detectionCount} tracks={visibleCount}
         classes={visibleClasses} fastest={liveMaxSpeed} frames={analyzedFrames}
-        provider={provider} fallbackReason={fallbackReason} latency={inferenceMs} startup={startup} {...performanceStats}/>}
+        provider={provider} fallbackReason={fallbackReason} latency={inferenceMs} startup={startup}
+        detectorSourceAge={detectorSourceAge} canInspectFile={!!url && !webcamActive && !tabCaptureActive}
+        {...performanceStats}/>}
       </div>
 
       <fieldset className="vg-analysis-display vg-panel">

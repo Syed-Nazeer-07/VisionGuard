@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeBenchmark, percentiles } from './detectorBenchmark';
+import { describeBenchmark, percentiles, recentInferenceFps } from './detectorBenchmark';
 
 describe('detector performance reporting', () => {
   it('separates detector throughput and presented video frames', () => {
@@ -17,5 +17,10 @@ describe('detector performance reporting', () => {
     const values = [600, 310, 290, 320, NaN];
     expect(percentiles(values)).toEqual({ p50: 310, p95: 600 });
     expect(values[0]).toBe(600);
+  });
+  it('reports slow inference and clears a stale rate', () => {
+    expect(recentInferenceFps([1_000, 5_000, 9_000], 10_000)).toBe(.25);
+    expect(recentInferenceFps([1_000, 5_000, 9_000], 30_000)).toBeNull();
+    expect(recentInferenceFps([9_000], 10_000)).toBeNull();
   });
 });

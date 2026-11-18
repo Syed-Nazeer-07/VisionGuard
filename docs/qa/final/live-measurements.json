@@ -1,0 +1,1181 @@
+{
+  "reference": "b177088",
+  "comparison": "PR #16 final tracking changes",
+  "environment": "Chromium 156 on two-vCPU Linux x86-64, forced isolated WASM, same original YOLO11s model",
+  "trials": [
+    {
+      "scene": "road",
+      "trial": 1,
+      "labeledFrames": 16,
+      "sharedFrames": 5,
+      "scores": [
+        {
+          "exportedFrames": 257,
+          "frames": 5,
+          "tp": 1,
+          "fp": 1,
+          "fn": 7,
+          "precision": 0.5,
+          "recall": 0.125,
+          "f1": 0.2,
+          "meanMatchedIoU": 0.5055574630946874,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 1,
+              "fp": 1,
+              "fn": 6,
+              "precision": 0.5,
+              "recall": 0.14285714285714285,
+              "f1": 0.22222222222222224
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 541.8250000001863,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 96.10999999940395,
+              "sessionMs": 1581.0750000001863,
+              "validationMs": 0.08500000089406967,
+              "wasmThreads": 2,
+              "totalMs": 2393.1100000003353
+            },
+            "busyFrames": 244,
+            "inferenceCount": 11,
+            "playMs": 18882.78500000015,
+            "droppedVideoFrames": 5,
+            "presentedVideoFrames": 468,
+            "pageJsHeapStartBytes": 50147022,
+            "pageJsHeapBytes": 63250139,
+            "firstWorkerFrameMs": 2387.9500000001863,
+            "sampledWorkerFrames": 11,
+            "inferenceFps": 0.582541187647898,
+            "playbackFps": 24.784479619928753,
+            "workerMs": {
+              "p50": 1377.5,
+              "p95": 2388
+            },
+            "warmWorkerMs": {
+              "p50": 1330.4,
+              "p95": 1976.7
+            },
+            "preprocessMs": {
+              "p50": 8.5,
+              "p95": 68.9
+            },
+            "modelRunMs": {
+              "p50": 1373.7,
+              "p95": 2296
+            },
+            "postprocessMs": {
+              "p50": 1.7,
+              "p95": 87.4
+            },
+            "captureMs": {
+              "p50": 24.4,
+              "p95": 89
+            },
+            "resultAgeMs": {
+              "p50": 1480,
+              "p95": 2400
+            },
+            "replayMs": {
+              "p50": 10.8,
+              "p95": 58.6
+            },
+            "overlayAgeMs": {
+              "p50": 0,
+              "p95": 80
+            }
+          }
+        },
+        {
+          "exportedFrames": 182,
+          "frames": 5,
+          "tp": 0,
+          "fp": 1,
+          "fn": 8,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 0,
+              "fp": 1,
+              "fn": 7,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 1,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 282.9750000005588,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 69.49500000011176,
+              "sessionMs": 1182.9950000001118,
+              "validationMs": 0.05999999959021807,
+              "wasmThreads": 2,
+              "totalMs": 1725.625
+            },
+            "busyFrames": 175,
+            "inferenceCount": 6,
+            "playMs": 20239.25,
+            "droppedVideoFrames": 68,
+            "presentedVideoFrames": 415,
+            "pageJsHeapStartBytes": 50802754,
+            "pageJsHeapBytes": 114070977,
+            "firstWorkerFrameMs": 2424.5299999993294,
+            "sampledWorkerFrames": 6,
+            "inferenceFps": 0.29645367293748537,
+            "playbackFps": 20.50471237817607,
+            "workerMs": {
+              "p50": 1846.2,
+              "p95": 4496.6
+            },
+            "warmWorkerMs": {
+              "p50": 1846.2,
+              "p95": 4496.6
+            },
+            "preprocessMs": {
+              "p50": 10.4,
+              "p95": 201.6
+            },
+            "modelRunMs": {
+              "p50": 1824.2,
+              "p95": 4443.8
+            },
+            "postprocessMs": {
+              "p50": 6.2,
+              "p95": 38.2
+            },
+            "captureMs": {
+              "p50": 13.3,
+              "p95": 70.6
+            },
+            "resultAgeMs": {
+              "p50": 1920,
+              "p95": 4480
+            },
+            "replayMs": {
+              "p50": 18.8,
+              "p95": 35.3
+            },
+            "overlayAgeMs": {
+              "p50": 0,
+              "p95": 80
+            }
+          }
+        }
+      ]
+    },
+    {
+      "scene": "road",
+      "trial": 2,
+      "labeledFrames": 16,
+      "sharedFrames": 6,
+      "scores": [
+        {
+          "exportedFrames": 250,
+          "frames": 6,
+          "tp": 0,
+          "fp": 4,
+          "fn": 7,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 0,
+              "fp": 3,
+              "fn": 6,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 1,
+              "fn": 1,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 439.7700000004843,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 61.125,
+              "sessionMs": 1349.425000000745,
+              "validationMs": 0.054999999701976776,
+              "wasmThreads": 2,
+              "totalMs": 2031.8299999991432
+            },
+            "busyFrames": 237,
+            "inferenceCount": 11,
+            "playMs": 18989.41000000015,
+            "droppedVideoFrames": 26,
+            "presentedVideoFrames": 449,
+            "pageJsHeapStartBytes": 46943289,
+            "pageJsHeapBytes": 55124446,
+            "firstWorkerFrameMs": 2265.945000000298,
+            "sampledWorkerFrames": 11,
+            "inferenceFps": 0.5792702353574921,
+            "playbackFps": 23.644757788683087,
+            "workerMs": {
+              "p50": 1569.9,
+              "p95": 2265.9
+            },
+            "warmWorkerMs": {
+              "p50": 1542,
+              "p95": 1827.4
+            },
+            "preprocessMs": {
+              "p50": 10.3,
+              "p95": 34
+            },
+            "modelRunMs": {
+              "p50": 1563.7,
+              "p95": 2185.5
+            },
+            "postprocessMs": {
+              "p50": 3.4,
+              "p95": 50.8
+            },
+            "captureMs": {
+              "p50": 20.8,
+              "p95": 43.8
+            },
+            "resultAgeMs": {
+              "p50": 1600,
+              "p95": 2240
+            },
+            "replayMs": {
+              "p50": 10.8,
+              "p95": 46.5
+            },
+            "overlayAgeMs": {
+              "p50": 0,
+              "p95": 80
+            }
+          }
+        },
+        {
+          "exportedFrames": 252,
+          "frames": 6,
+          "tp": 0,
+          "fp": 5,
+          "fn": 7,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 0,
+              "fp": 4,
+              "fn": 6,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 1,
+              "fn": 1,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 470.84999999962747,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 113.19000000040978,
+              "sessionMs": 909.804999999702,
+              "validationMs": 0.049999999813735485,
+              "wasmThreads": 2,
+              "totalMs": 1672.9900000002235
+            },
+            "busyFrames": 240,
+            "inferenceCount": 10,
+            "playMs": 18886.224999999627,
+            "droppedVideoFrames": 17,
+            "presentedVideoFrames": 455,
+            "pageJsHeapStartBytes": 50144640,
+            "pageJsHeapBytes": 66173948,
+            "firstWorkerFrameMs": 2313.0849999999627,
+            "sampledWorkerFrames": 10,
+            "inferenceFps": 0.5294864378667625,
+            "playbackFps": 24.091632922937695,
+            "workerMs": {
+              "p50": 1655,
+              "p95": 2313.1
+            },
+            "warmWorkerMs": {
+              "p50": 1655,
+              "p95": 1951.8
+            },
+            "preprocessMs": {
+              "p50": 8.9,
+              "p95": 102.7
+            },
+            "modelRunMs": {
+              "p50": 1651.5,
+              "p95": 2194.2
+            },
+            "postprocessMs": {
+              "p50": 7.3,
+              "p95": 16.2
+            },
+            "captureMs": {
+              "p50": 24.7,
+              "p95": 91.6
+            },
+            "resultAgeMs": {
+              "p50": 1680,
+              "p95": 2440
+            },
+            "replayMs": {
+              "p50": 8.8,
+              "p95": 71.1
+            },
+            "overlayAgeMs": {
+              "p50": 0,
+              "p95": 80
+            }
+          }
+        }
+      ]
+    },
+    {
+      "scene": "kitti",
+      "trial": 1,
+      "labeledFrames": 90,
+      "sharedFrames": 60,
+      "scores": [
+        {
+          "exportedFrames": 72,
+          "frames": 60,
+          "tp": 0,
+          "fp": 92,
+          "fn": 716,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "bus": {
+              "tp": 0,
+              "fp": 27,
+              "fn": 0,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "car": {
+              "tp": 0,
+              "fp": 65,
+              "fn": 656,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 60,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 366.2949999999255,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 55.264999999664724,
+              "sessionMs": 1117.3950000004843,
+              "validationMs": 0.049999999813735485,
+              "wasmThreads": 2,
+              "totalMs": 1846.7199999997392
+            },
+            "busyFrames": 66,
+            "inferenceCount": 5,
+            "playMs": 13000.275000000373,
+            "droppedVideoFrames": 7,
+            "presentedVideoFrames": 76,
+            "pageJsHeapStartBytes": 51468190,
+            "pageJsHeapBytes": 57981273,
+            "firstWorkerFrameMs": 2890.324999999255,
+            "sampledWorkerFrames": 5,
+            "inferenceFps": 0.38460724869280505,
+            "playbackFps": 5.846030180130637,
+            "workerMs": {
+              "p50": 2162.1,
+              "p95": 2890.3
+            },
+            "warmWorkerMs": {
+              "p50": 2100.6,
+              "p95": 2364.2
+            },
+            "preprocessMs": {
+              "p50": 9,
+              "p95": 79.8
+            },
+            "modelRunMs": {
+              "p50": 2158.2,
+              "p95": 2790
+            },
+            "postprocessMs": {
+              "p50": 8.2,
+              "p95": 20.5
+            },
+            "captureMs": {
+              "p50": 5.8,
+              "p95": 31.6
+            },
+            "resultAgeMs": {
+              "p50": 1600,
+              "p95": 2000
+            },
+            "replayMs": {
+              "p50": 26.9,
+              "p95": 86.6
+            },
+            "overlayAgeMs": {
+              "p50": 0,
+              "p95": 0
+            }
+          }
+        },
+        {
+          "exportedFrames": 73,
+          "frames": 60,
+          "tp": 0,
+          "fp": 65,
+          "fn": 716,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 0,
+              "fp": 63,
+              "fn": 656,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 2,
+              "fn": 60,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 347.34499999973923,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 82.85500000044703,
+              "sessionMs": 3632.8499999996275,
+              "validationMs": 0.1299999998882413,
+              "wasmThreads": 2,
+              "totalMs": 4287.4900000002235
+            },
+            "busyFrames": 67,
+            "inferenceCount": 4,
+            "playMs": 12539.074999999255,
+            "droppedVideoFrames": 5,
+            "presentedVideoFrames": 79,
+            "pageJsHeapStartBytes": 50626527,
+            "pageJsHeapBytes": 64483899,
+            "firstWorkerFrameMs": 4030.7599999997765,
+            "sampledWorkerFrames": 4,
+            "inferenceFps": 0.3190027972557974,
+            "playbackFps": 6.300305245801999,
+            "workerMs": {
+              "p50": 2140.7,
+              "p95": 4030.8
+            },
+            "warmWorkerMs": {
+              "p50": 2140.7,
+              "p95": 2146.5
+            },
+            "preprocessMs": {
+              "p50": 10,
+              "p95": 247.4
+            },
+            "modelRunMs": {
+              "p50": 2108,
+              "p95": 3756.5
+            },
+            "postprocessMs": {
+              "p50": 11.3,
+              "p95": 26.8
+            },
+            "captureMs": {
+              "p50": 8.9,
+              "p95": 53.1
+            },
+            "resultAgeMs": {
+              "p50": 1700,
+              "p95": 2100
+            },
+            "replayMs": {
+              "p50": 21.7,
+              "p95": 77.6
+            },
+            "overlayAgeMs": {
+              "p50": 0,
+              "p95": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "scene": "kitti",
+      "trial": 2,
+      "labeledFrames": 90,
+      "sharedFrames": 63,
+      "scores": [
+        {
+          "exportedFrames": 70,
+          "frames": 63,
+          "tp": 11,
+          "fp": 71,
+          "fn": 744,
+          "precision": 0.13414634146341464,
+          "recall": 0.01456953642384106,
+          "f1": 0.02628434886499403,
+          "meanMatchedIoU": 0.5935306183516019,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": 0.03233751771974015,
+          "centerJitterSamples": 10,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "bus": {
+              "tp": 0,
+              "fp": 6,
+              "fn": 0,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "car": {
+              "tp": 11,
+              "fp": 65,
+              "fn": 681,
+              "precision": 0.14473684210526316,
+              "recall": 0.015895953757225433,
+              "f1": 0.028645833333333332
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 63,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 310.90000000037253,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 55.294999999925494,
+              "sessionMs": 1247.804999999702,
+              "validationMs": 0.1600000001490116,
+              "wasmThreads": 2,
+              "totalMs": 1873.0300000002608
+            },
+            "busyFrames": 63,
+            "inferenceCount": 5,
+            "playMs": 13295.089999999851,
+            "droppedVideoFrames": 6,
+            "presentedVideoFrames": 77,
+            "pageJsHeapStartBytes": 51598905,
+            "pageJsHeapBytes": 62093583,
+            "firstWorkerFrameMs": 2619.7799999993294,
+            "sampledWorkerFrames": 5,
+            "inferenceFps": 0.37607868769598823,
+            "playbackFps": 5.7916117905182185,
+            "workerMs": {
+              "p50": 2091.9,
+              "p95": 2619.8
+            },
+            "warmWorkerMs": {
+              "p50": 1924.5,
+              "p95": 2190.8
+            },
+            "preprocessMs": {
+              "p50": 10.6,
+              "p95": 43.4
+            },
+            "modelRunMs": {
+              "p50": 2070.1,
+              "p95": 2548.9
+            },
+            "postprocessMs": {
+              "p50": 10.7,
+              "p95": 55.5
+            },
+            "captureMs": {
+              "p50": 5.1,
+              "p95": 8.5
+            },
+            "resultAgeMs": {
+              "p50": 1600,
+              "p95": 1900
+            },
+            "replayMs": {
+              "p50": 43.4,
+              "p95": 99.8
+            },
+            "overlayAgeMs": {
+              "p50": 0,
+              "p95": 0
+            }
+          }
+        },
+        {
+          "exportedFrames": 79,
+          "frames": 63,
+          "tp": 0,
+          "fp": 67,
+          "fn": 755,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "bus/truck": {
+              "tp": 0,
+              "fp": 5,
+              "fn": 0,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "car": {
+              "tp": 0,
+              "fp": 62,
+              "fn": 692,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 63,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 215.8649999992922,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 47.18999999947846,
+              "sessionMs": 1127.160000000149,
+              "validationMs": 0.07000000029802322,
+              "wasmThreads": 2,
+              "totalMs": 1602.359999999404
+            },
+            "busyFrames": 73,
+            "inferenceCount": 4,
+            "playMs": 12014.80999999959,
+            "droppedVideoFrames": 5,
+            "presentedVideoFrames": 78,
+            "pageJsHeapStartBytes": 44983784,
+            "pageJsHeapBytes": 71065213,
+            "firstWorkerFrameMs": 2729.2900000000373,
+            "sampledWorkerFrames": 4,
+            "inferenceFps": 0.33292245154106775,
+            "playbackFps": 6.4919878050508215,
+            "workerMs": {
+              "p50": 2411.7,
+              "p95": 2729.3
+            },
+            "warmWorkerMs": {
+              "p50": 2411.7,
+              "p95": 2580.6
+            },
+            "preprocessMs": {
+              "p50": 7.4,
+              "p95": 86.3
+            },
+            "modelRunMs": {
+              "p50": 2389.3,
+              "p95": 2625.8
+            },
+            "postprocessMs": {
+              "p50": 14.6,
+              "p95": 17.2
+            },
+            "captureMs": {
+              "p50": 3.9,
+              "p95": 52.3
+            },
+            "resultAgeMs": {
+              "p50": 1900,
+              "p95": 2100
+            },
+            "replayMs": {
+              "p50": 60.7,
+              "p95": 77.7
+            },
+            "overlayAgeMs": {
+              "p50": 0,
+              "p95": 0
+            }
+          }
+        }
+      ]
+    },
+    {
+      "scene": "overhead",
+      "trial": 1,
+      "labeledFrames": 18,
+      "sharedFrames": 17,
+      "scores": [
+        {
+          "exportedFrames": 300,
+          "frames": 17,
+          "tp": 0,
+          "fp": 0,
+          "fn": 30,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 30,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 307.1049999995157,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 67.11000000033528,
+              "sessionMs": 1052.3100000005215,
+              "validationMs": 3.7299999995157123,
+              "wasmThreads": 2,
+              "totalMs": 1565.5499999998137
+            },
+            "busyFrames": 282,
+            "inferenceCount": 17,
+            "playMs": 29800.450000000186,
+            "droppedVideoFrames": 0,
+            "presentedVideoFrames": 349,
+            "pageJsHeapStartBytes": 51080010,
+            "pageJsHeapBytes": 94167447,
+            "firstWorkerFrameMs": 1738.1150000002235,
+            "sampledWorkerFrames": 17,
+            "inferenceFps": 0.5704611843109716,
+            "playbackFps": 11.71123254850171,
+            "workerMs": {
+              "p50": 1393.7,
+              "p95": 3967
+            },
+            "warmWorkerMs": {
+              "p50": 1387.6,
+              "p95": 3967
+            },
+            "preprocessMs": {
+              "p50": 4.4,
+              "p95": 68
+            },
+            "modelRunMs": {
+              "p50": 1386,
+              "p95": 3964.2
+            },
+            "postprocessMs": {
+              "p50": 0.5,
+              "p95": 24.2
+            },
+            "captureMs": {
+              "p50": 5.7,
+              "p95": 65.7
+            },
+            "resultAgeMs": {
+              "p50": 1360,
+              "p95": 3360
+            },
+            "replayMs": {
+              "p50": 0,
+              "p95": 5.1
+            },
+            "overlayAgeMs": null
+          }
+        },
+        {
+          "exportedFrames": 344,
+          "frames": 17,
+          "tp": 0,
+          "fp": 0,
+          "fn": 30,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 30,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 335.5,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 48.64000000059605,
+              "sessionMs": 907.6149999992922,
+              "validationMs": 0.06999999936670065,
+              "wasmThreads": 2,
+              "totalMs": 1486.8650000002235
+            },
+            "busyFrames": 322,
+            "inferenceCount": 20,
+            "playMs": 29366.93500000052,
+            "droppedVideoFrames": 0,
+            "presentedVideoFrames": 349,
+            "pageJsHeapStartBytes": 50127115,
+            "pageJsHeapBytes": 63511339,
+            "firstWorkerFrameMs": 2324.5800000000745,
+            "sampledWorkerFrames": 20,
+            "inferenceFps": 0.6810380449985552,
+            "playbackFps": 11.884113885224789,
+            "workerMs": {
+              "p50": 1285.4,
+              "p95": 1813.9
+            },
+            "warmWorkerMs": {
+              "p50": 1285.4,
+              "p95": 1813.9
+            },
+            "preprocessMs": {
+              "p50": 5.3,
+              "p95": 15
+            },
+            "modelRunMs": {
+              "p50": 1275.3,
+              "p95": 1781.1
+            },
+            "postprocessMs": {
+              "p50": 1.9,
+              "p95": 16.4
+            },
+            "captureMs": {
+              "p50": 3.5,
+              "p95": 15.6
+            },
+            "resultAgeMs": {
+              "p50": 1200,
+              "p95": 1600
+            },
+            "replayMs": {
+              "p50": 0,
+              "p95": 0
+            },
+            "overlayAgeMs": null
+          }
+        }
+      ]
+    },
+    {
+      "scene": "overhead",
+      "trial": 2,
+      "labeledFrames": 18,
+      "sharedFrames": 4,
+      "scores": [
+        {
+          "exportedFrames": 125,
+          "frames": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 8,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 8,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 271.79999999981374,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 46.47000000067055,
+              "sessionMs": 3986.675000000745,
+              "validationMs": 0.05999999959021807,
+              "wasmThreads": 2,
+              "totalMs": 4434.730000000447
+            },
+            "busyFrames": 119,
+            "inferenceCount": 4,
+            "playMs": 36595.9450000003,
+            "droppedVideoFrames": 4,
+            "presentedVideoFrames": 339,
+            "pageJsHeapStartBytes": 51569908,
+            "pageJsHeapBytes": 58298293,
+            "firstWorkerFrameMs": 10699.144999999553,
+            "sampledWorkerFrames": 4,
+            "inferenceFps": 0.10930172728153262,
+            "playbackFps": 9.26332138710989,
+            "workerMs": {
+              "p50": 7527.8,
+              "p95": 10699.1
+            },
+            "warmWorkerMs": {
+              "p50": 7527.8,
+              "p95": 8643.5
+            },
+            "preprocessMs": {
+              "p50": 58.9,
+              "p95": 994.2
+            },
+            "modelRunMs": {
+              "p50": 7386.6,
+              "p95": 9635.4
+            },
+            "postprocessMs": {
+              "p50": 13.4,
+              "p95": 69.5
+            },
+            "captureMs": {
+              "p50": 77.2,
+              "p95": 168.4
+            },
+            "resultAgeMs": {
+              "p50": 5760,
+              "p95": 7600
+            },
+            "replayMs": null,
+            "overlayAgeMs": null
+          }
+        },
+        {
+          "exportedFrames": 147,
+          "frames": 4,
+          "tp": 0,
+          "fp": 0,
+          "fn": 8,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "meanNormalizedCenterJitter": null,
+          "centerJitterSamples": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 8,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          },
+          "benchmark": {
+            "provider": "wasm",
+            "crossOriginIsolated": true,
+            "startup": {
+              "downloadMs": 2414.160000000149,
+              "modelBytes": 38012145,
+              "adapterMs": 0,
+              "runtimeImportMs": 370.3849999997765,
+              "sessionMs": 6850.31500000041,
+              "validationMs": 0.049999999813735485,
+              "wasmThreads": 2,
+              "totalMs": 10507.254999999888
+            },
+            "busyFrames": 140,
+            "inferenceCount": 5,
+            "playMs": 36900.950000000186,
+            "droppedVideoFrames": 0,
+            "presentedVideoFrames": 350,
+            "pageJsHeapStartBytes": 51615947,
+            "pageJsHeapBytes": 123362463,
+            "firstWorkerFrameMs": 5847.870000000112,
+            "sampledWorkerFrames": 5,
+            "inferenceFps": 0.13549786658608992,
+            "playbackFps": 9.484850661026295,
+            "workerMs": {
+              "p50": 5894.7,
+              "p95": 8831.3
+            },
+            "warmWorkerMs": {
+              "p50": 5894.7,
+              "p95": 8831.3
+            },
+            "preprocessMs": {
+              "p50": 67.9,
+              "p95": 634.2
+            },
+            "modelRunMs": {
+              "p50": 5826.1,
+              "p95": 8784.8
+            },
+            "postprocessMs": {
+              "p50": 4.2,
+              "p95": 26.3
+            },
+            "captureMs": {
+              "p50": 19.6,
+              "p95": 133.2
+            },
+            "resultAgeMs": {
+              "p50": 4640,
+              "p95": 6000
+            },
+            "replayMs": null,
+            "overlayAgeMs": null
+          }
+        }
+      ]
+    }
+  ]
+}

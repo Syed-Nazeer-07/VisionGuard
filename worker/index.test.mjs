@@ -45,6 +45,11 @@ test('does not return misleading success for a Hugging Face HTML page or missing
   const offline = await modelResponse(new Request(address), async () => { throw Error('network'); });
   assert.equal(offline.status, 502);
 });
+test('rejects a partial ONNX upstream response', async () => {
+  const response = await modelResponse(new Request(address), async () =>
+    new Response('truncated', { status: 206, headers: { 'content-type': 'application/octet-stream' } }));
+  assert.equal(response.status, 502);
+});
 test('unrelated routes continue to serve the original Vite single-page application', async () => {
   const request = new Request('https://visionguard.example.workers.dev/login');
   const result = await worker.fetch(request, { ASSETS: {

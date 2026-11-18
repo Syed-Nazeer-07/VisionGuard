@@ -118,8 +118,9 @@ function matchFeature(
   const cx = Math.round(predictedDx);
   const cy = Math.round(predictedDy);
   const radius = Math.min(13, search);
+  const sampleCount = (patchRadius + 1) ** 2;
 
-  const patchError = (tx: number, ty: number) => {
+  const patchError = (tx: number, ty: number, limit = Infinity) => {
     let sum = 0;
     for (let py = -patchRadius; py <= patchRadius; py += 2) {
       const rowOld = (top + py) * width + left;
@@ -127,8 +128,10 @@ function matchFeature(
       for (let px = -patchRadius; px <= patchRadius; px += 2) {
         sum += Math.abs(previous.pixels[rowOld + px] - current.pixels[rowNew + px]);
       }
+      // Remaining absolute differences cannot improve a losing candidate.
+      if (sum >= limit) return sum;
     }
-    return sum / ((patchRadius + 1) ** 2);
+    return sum;
   };
   for (let dy = cy - radius; dy <= cy + radius; dy++) {
     const ty = top + dy;
@@ -136,7 +139,7 @@ function matchFeature(
     for (let dx = cx - radius; dx <= cx + radius; dx++) {
       const tx = left + dx;
       if (tx - patchRadius < 0 || tx + patchRadius >= width) continue;
-      const error = patchError(tx, ty);
+      const error = patchError(tx, ty, best);
       if (error < best) {
         best = error;
         bestDx = dx;
@@ -144,7 +147,7 @@ function matchFeature(
       }
     }
   }
-  if (best > maxError || !Number.isFinite(best)) return null;
+  if (best > maxError * sampleCount) return null;
   // One grayscale pixel can span several source pixels. Interpolating the
   // local minimum reduces quantization error on approaching vehicles.
   const tx = left + bestDx, ty = top + bestDy;
@@ -154,7 +157,7 @@ function matchFeature(
   if (ty - patchRadius > 0 && ty + patchRadius < height - 1 && Math.abs(bestDy - cy) < radius) {
     bestDy += subpixelOffset(patchError(tx, ty - 1), best, patchError(tx, ty + 1));
   }
-  return { dx: bestDx, dy: bestDy, x: left, y: top, error: best };
+  return { dx: bestDx, dy: bestDy, x: left, y: top, error: best / sampleCount };
 }
 
 /**

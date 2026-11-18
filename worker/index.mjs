@@ -48,7 +48,7 @@ export async function modelResponse(request, upstreamFetch = fetch) {
       status: 502, headers: errorHeaders,
     });
   }
-  if (!upstream.ok && upstream.status !== 304) {
+  if (upstream.status !== 200 && upstream.status !== 304) {
     return new Response('Public YOLO11s model download failed (upstream HTTP ' +
       upstream.status + ').', { status: 502, headers: errorHeaders });
   }

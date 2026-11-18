@@ -82,8 +82,8 @@ try {
     let accuracy;
     if (run.replay) {
       const { width, height } = run.frames[0];
-      accuracy = { replayAccuracy: run.replay.map(({ anchor, frames }) => ({
-        anchor, ...evaluateTracking({
+      accuracy = { replayAccuracy: run.replay.map(({ anchor, frames, trackMs }) => ({
+        anchor, trackMs, ...evaluateTracking({
           ...truth, frames: frames.map(frame => ({
             ...referenceFor(frame, width, height), predictions: predictions(frame.tracks)
           }))

@@ -119,3 +119,6 @@ paired browser excerpts, runtime measurements, and remaining release gates.
 
 For fixed-frame detection, controlled optical replay, startup timing, and
 Windows ARM reproduction, use the [browser detector verification](VISIONGUARD_DETECTOR_QA.md).
+
+For the paired uninterrupted playback trials and the release boundary, see the
+[production verification report](VISIONGUARD_FINAL_VERIFICATION.md).
