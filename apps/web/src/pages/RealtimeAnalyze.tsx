@@ -350,6 +350,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       worker.terminate();
       workerRef.current = null;
       clearInFlight();
+      releaseFrameHold(false, generationRef.current);
       recoverWithWasmRef.current = true;
       setDetector('error');
       setError('YOLO11s initialization timed out. Video playback remains available; retry detector.');
@@ -392,6 +393,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         clearInFlight();
         setDetector('error');
         resumeSyncedPlaybackRef.current = false;
+        releaseFrameHold(false, generationRef.current);
         setError('YOLO11s could not start: ' + message.message);
         return;
       }
@@ -566,6 +568,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       readyRef.current = false;
       clearInFlight();
       requestDetailsRef.current = null;
+      releaseFrameHold(false, generationRef.current);
       recoverWithWasmRef.current = true;
       latestRef.current = null;
       flowTracksRef.current = [];
@@ -597,6 +600,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (inFlightIdRef.current !== requestId) return;
       clearInFlight();
       requestDetailsRef.current = null;
+      if (locked) releaseFrameHold(false, generation);
       recoverWithWasmRef.current = true;
       if (preview) setInspection('idle');
       worker.terminate();
