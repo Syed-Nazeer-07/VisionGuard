@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   INITIAL_SYNC_PLAYBACK_RATE, MIN_SYNC_PLAYBACK_RATE,
-  recommendedSyncPlaybackRate,
+  recommendedSyncPlaybackRate, shouldHoldRecordedPlayback,
 } from './syncedPlayback';
 
 describe('recorded-video detector-synchronized playback', () => {
@@ -20,6 +20,13 @@ describe('recorded-video detector-synchronized playback', () => {
   it('smooths a single high-latency spike rather than abruptly changing speed', () => {
     expect(recommendedSyncPlaybackRate(1600, 0.7)).toBeGreaterThan(0.1);
     expect(recommendedSyncPlaybackRate(1600, 0.7)).toBeLessThan(0.7);
+  });
+
+  it('holds recorded sync playback until the detector is ready', () => {
+    expect(shouldHoldRecordedPlayback(true, false, false)).toBe(true);
+    expect(shouldHoldRecordedPlayback(false, false, false)).toBe(false);
+    expect(shouldHoldRecordedPlayback(true, true, false)).toBe(false);
+    expect(shouldHoldRecordedPlayback(true, false, true)).toBe(false);
   });
 
   it('uses a safe bounded rate when timing is invalid', () => {
