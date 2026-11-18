@@ -17,6 +17,7 @@ import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
+import { INITIAL_SYNC_PLAYBACK_RATE, recommendedSyncPlaybackRate } from '../services/syncedPlayback';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import type { DetectorEvent, DetectorProvider, DetectorStartup } from '../pipeline/worker/detectorProtocol';
 import { describeBenchmark, pageJsHeapBytes, recentInferenceFps, type FrameTiming } from '../services/detectorBenchmark';
@@ -148,6 +149,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [showBoxes, setShowBoxes] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
   const [showTelemetry, setShowTelemetry] = useState(true);
+  const [syncedPlayback, setSyncedPlayback] = useState(false);
+  const [analysisRate, setAnalysisRate] = useState(1);
+  const syncedPlaybackRef = useRef(false);
+  syncedPlaybackRef.current = syncedPlayback;
   const [visibleClasses, setVisibleClasses] = useState<Record<string, number>>({});
   const completionTimesRef = useRef<number[]>([]);
   const [performanceStats, setPerformanceStats] = useState<{
@@ -174,6 +179,17 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudPlaybackLoading, setCloudPlaybackLoading] = useState(false);
   const [unavailableOriginal, setUnavailableOriginal] = useState<string | null>(null);
   const [error, setError] = useState('');
+
+  // Only recorded sources can change their media clock. Live cameras and
+  // shared tabs keep their native timing and are never slowed by this mode.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const rate = syncedPlayback && !webcamActive && !tabCaptureActive
+      ? INITIAL_SYNC_PLAYBACK_RATE : 1;
+    video.playbackRate = rate;
+    setAnalysisRate(rate);
+  }, [syncedPlayback, url, webcamActive, tabCaptureActive]);
 
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
@@ -371,6 +387,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         completions.push(performance.now());
         if (completions.length > 20) completions.shift();
         setInferenceMs(Math.round(message.inferenceMs));
+        if (syncedPlaybackRef.current && !captureKindRef.current && !video.paused) {
+          // Slow the RECORDED media clock when a CPU/WASM detector cannot keep
+          // up with 1x footage. This gives optical replay fewer media seconds
+          // to bridge. It cannot fix model false negatives or guarantee F1.
+          const rate = recommendedSyncPlaybackRate(
+            message.inferenceMs + (details?.captureMs ?? 0), video.playbackRate
+          );
+          if (Math.abs(video.playbackRate - rate) >= 0.01) {
+            video.playbackRate = rate;
+            setAnalysisRate(rate);
+          }
+        }
         setDetectionCount(message.detectionCount);
         setAnalyzedFrames(count => count + 1);
 
@@ -1712,7 +1740,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 className="h-full w-full object-contain"
                 onLoadedMetadata={event => {
                   setDuration(event.currentTarget.duration);
-                  event.currentTarget.playbackRate = 1;
+                  event.currentTarget.playbackRate = syncedPlayback && !webcamActive && !tabCaptureActive
+                     ? INITIAL_SYNC_PLAYBACK_RATE : 1;
                 }}
                 onLoadedData={event => {
                   setReadyVideo(true);
@@ -1869,6 +1898,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <label><input type="checkbox" checked={showBoxes} onChange={event => setShowBoxes(event.target.checked)}/> Boxes</label>
         <label><input type="checkbox" checked={showLabels} disabled={!showBoxes} onChange={event => setShowLabels(event.target.checked)}/> Labels</label>
         <label><input type="checkbox" checked={showTelemetry} onChange={event => setShowTelemetry(event.target.checked)}/> Telemetry</label>
+        {url && !webcamActive && !tabCaptureActive &&
+          <label title="Trade playback speed for more detector updates on recorded footage. Live camera and browser tabs are unaffected.">
+            <input type="checkbox" checked={syncedPlayback} onChange={event => setSyncedPlayback(event.target.checked)}/>
+            Sync video to AI {syncedPlayback && <span>({analysisRate.toFixed(2)}×)</span>}
+          </label>}
+        {syncedPlayback && url && !webcamActive && !tabCaptureActive &&
+          <small role="status">Recorded playback slows to match the detector. Turn off Sync for normal speed.</small>}
         {showBoxes && <small>Dashed boxes indicate predicted positions.</small>}
       </fieldset>
 
