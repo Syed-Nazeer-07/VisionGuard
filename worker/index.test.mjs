@@ -45,10 +45,27 @@ test('does not return misleading success for a Hugging Face HTML page or missing
   const offline = await modelResponse(new Request(address), async () => { throw Error('network'); });
   assert.equal(offline.status, 502);
 });
+test('rejects a partial ONNX upstream response', async () => {
+  const response = await modelResponse(new Request(address), async () =>
+    new Response('truncated', { status: 206, headers: { 'content-type': 'application/octet-stream' } }));
+  assert.equal(response.status, 502);
+});
 test('unrelated routes continue to serve the original Vite single-page application', async () => {
   const request = new Request('https://visionguard.example.workers.dev/login');
   const result = await worker.fetch(request, { ASSETS: {
     fetch(incoming) { assert.equal(incoming, request); return new Response('ok'); }
   } });
   assert.equal(await result.text(), 'ok');
+});
+
+test('revalidates a cached ONNX file with the host ETag and keeps a bodyless 304', async () => {
+  const request = new Request(address, { headers: { 'if-none-match': '"current"' } });
+  const result = await modelResponse(request, async (_url, options) => {
+    assert.equal(options.headers.get('if-none-match'), '"current"');
+    return new Response(null, { status: 304, headers: { etag: '"current"' } });
+  });
+  assert.equal(result.status, 304);
+  assert.equal(result.body, null);
+  assert.equal(result.headers.get('etag'), '"current"');
+  assert.equal(result.headers.get('cache-control'), 'public, max-age=3600');
 });

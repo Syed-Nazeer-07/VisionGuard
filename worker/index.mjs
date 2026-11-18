@@ -32,18 +32,23 @@ export async function modelResponse(request, upstreamFetch = fetch) {
     });
   }
 
+  const upstreamHeaders = new Headers({ accept: 'application/octet-stream' });
+  for (const name of ['if-none-match', 'if-modified-since']) {
+    const value = request.headers.get(name);
+    if (value) upstreamHeaders.set(name, value);
+  }
   let upstream;
   try {
     upstream = await upstreamFetch(MODEL_UPSTREAM, {
       method: request.method, redirect: 'follow',
-      headers: { accept: 'application/octet-stream' },
+      headers: upstreamHeaders,
     });
   } catch {
     return new Response('Public Hugging Face YOLO11s model is temporarily unreachable.', {
       status: 502, headers: errorHeaders,
     });
   }
-  if (!upstream.ok) {
+  if (upstream.status !== 200 && upstream.status !== 304) {
     return new Response('Public YOLO11s model download failed (upstream HTTP ' +
       upstream.status + ').', { status: 502, headers: errorHeaders });
   }
@@ -65,8 +70,9 @@ export async function modelResponse(request, upstreamFetch = fetch) {
     const value = upstream.headers.get(header);
     if (value) headers.set(header, value);
   }
-  return new Response(request.method === 'HEAD' ? null : upstream.body, {
-    status: 200, headers,
+  const unchanged = upstream.status === 304;
+  return new Response(request.method === 'HEAD' || unchanged ? null : upstream.body, {
+    status: unchanged ? 304 : 200, headers,
   });
 }
 

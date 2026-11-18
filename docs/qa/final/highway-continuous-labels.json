@@ -1,0 +1,399 @@
+{
+  "format": "visionguard-tracking-eval/v1",
+  "source": "Supervision highway video, 1280x720 at 25fps",
+  "region": "Vehicle box center y at or below source pixel 320",
+  "annotationStatus": "Hand-labeled from decoded source images with overlay hidden",
+  "frames": [
+    {
+      "time": 1.72,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "first-truck",
+          "className": "truck",
+          "box": {
+            "x": 271.5,
+            "y": 466.5,
+            "w": 163,
+            "h": 203
+          }
+        },
+        {
+          "id": "first-black",
+          "className": "car",
+          "box": {
+            "x": 469.0,
+            "y": 602.5,
+            "w": 126,
+            "h": 93
+          }
+        },
+        {
+          "id": "first-white",
+          "className": "car",
+          "box": {
+            "x": 503.0,
+            "y": 516.5,
+            "w": 92,
+            "h": 83
+          }
+        },
+        {
+          "id": "outbound-1",
+          "className": "car",
+          "box": {
+            "x": 838.5,
+            "y": 344.5,
+            "w": 59,
+            "h": 45
+          }
+        },
+        {
+          "id": "outbound-2",
+          "className": "car",
+          "box": {
+            "x": 1195.0,
+            "y": 572.0,
+            "w": 140,
+            "h": 108
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 3.24,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "first-truck",
+          "className": "truck",
+          "box": {
+            "x": 97.0,
+            "y": 623.0,
+            "w": 194,
+            "h": 194
+          }
+        },
+        {
+          "id": "outbound-2",
+          "className": "car",
+          "box": {
+            "x": 912.5,
+            "y": 392.0,
+            "w": 67,
+            "h": 52
+          }
+        }
+      ],
+      "exitedIds": [
+        "first-black",
+        "first-white"
+      ],
+      "predictions": []
+    },
+    {
+      "time": 3.76,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "outbound-2",
+          "className": "car",
+          "box": {
+            "x": 871.0,
+            "y": 364.0,
+            "w": 66,
+            "h": 48
+          }
+        }
+      ],
+      "exitedIds": [
+        "first-truck"
+      ],
+      "predictions": []
+    },
+    {
+      "time": 4.56,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "outbound-2",
+          "className": "car",
+          "box": {
+            "x": 814.0,
+            "y": 335.0,
+            "w": 48,
+            "h": 30
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 6,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 7.04,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "second-black",
+          "className": "car",
+          "box": {
+            "x": 443.0,
+            "y": 343.0,
+            "w": 46,
+            "h": 34
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 7.92,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "second-black",
+          "className": "car",
+          "box": {
+            "x": 421.0,
+            "y": 385.0,
+            "w": 56,
+            "h": 40
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 8.92,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "second-black",
+          "className": "car",
+          "box": {
+            "x": 378.0,
+            "y": 465.0,
+            "w": 94,
+            "h": 60
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 9.6,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "second-black",
+          "className": "car",
+          "box": {
+            "x": 314.5,
+            "y": 562.5,
+            "w": 115,
+            "h": 87
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 10.88,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [],
+      "exitedIds": [
+        "second-black"
+      ],
+      "predictions": []
+    },
+    {
+      "time": 12.16,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "third-black",
+          "className": "car",
+          "box": {
+            "x": 434.5,
+            "y": 337.5,
+            "w": 45,
+            "h": 33
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 13.2,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "third-black",
+          "className": "car",
+          "box": {
+            "x": 401.0,
+            "y": 373.5,
+            "w": 54,
+            "h": 45
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 14.32,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "third-black",
+          "className": "car",
+          "box": {
+            "x": 347.5,
+            "y": 451.5,
+            "w": 85,
+            "h": 61
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 14.96,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "third-black",
+          "className": "car",
+          "box": {
+            "x": 291.5,
+            "y": 525.5,
+            "w": 99,
+            "h": 79
+          }
+        },
+        {
+          "id": "second-truck",
+          "className": "truck",
+          "box": {
+            "x": 416.0,
+            "y": 328.5,
+            "w": 72,
+            "h": 83
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    },
+    {
+      "time": 16.6,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "second-truck",
+          "className": "truck",
+          "box": {
+            "x": 363.5,
+            "y": 371.0,
+            "w": 111,
+            "h": 150
+          }
+        },
+        {
+          "id": "fourth-blue",
+          "className": "car",
+          "box": {
+            "x": 440.5,
+            "y": 328.5,
+            "w": 41,
+            "h": 21
+          }
+        },
+        {
+          "id": "outbound-3",
+          "className": "car",
+          "box": {
+            "x": 970.5,
+            "y": 425.0,
+            "w": 83,
+            "h": 60
+          }
+        }
+      ],
+      "exitedIds": [
+        "third-black"
+      ],
+      "predictions": []
+    },
+    {
+      "time": 18.16,
+      "width": 1280,
+      "height": 720,
+      "groundTruth": [
+        {
+          "id": "second-truck",
+          "className": "truck",
+          "box": {
+            "x": 284.0,
+            "y": 462.0,
+            "w": 178,
+            "h": 246
+          }
+        },
+        {
+          "id": "fourth-blue",
+          "className": "car",
+          "box": {
+            "x": 411.0,
+            "y": 367.5,
+            "w": 62,
+            "h": 45
+          }
+        },
+        {
+          "id": "outbound-3",
+          "className": "car",
+          "box": {
+            "x": 813.0,
+            "y": 333.5,
+            "w": 38,
+            "h": 27
+          }
+        }
+      ],
+      "exitedIds": [],
+      "predictions": []
+    }
+  ]
+}

@@ -36,6 +36,12 @@ test('ID switches count only for short gaps',()=>{
     f(.1,[gt('A',25)],[pred(2,25)]),f(2,[gt('A',30)],[pred(3,30)])));
   assert.equal(score.idSwitches,1);
 });
+test('center jitter excludes actual vehicle movement and ID changes',()=>{
+  const score=evaluateTracking(trace(f(0,[gt('A',20)],[pred(1,20)]),
+    f(.1,[gt('A',30)],[pred(1,32)]), f(.2,[gt('A',60)],[pred(2,60)])));
+  assert.equal(score.centerJitterSamples,1);
+  assert.equal(score.meanNormalizedCenterJitter,.1);
+});
 test('annotation-marked exits measure lingering ghost boxes',()=>{
   const score=evaluateTracking(trace(f(0,[gt('A',180)],[pred(7,180)]),
     f(.1,[],[pred(7,190)],['A']),f(.2,[],[pred(7,190)]),f(.3,[],[])));
@@ -47,6 +53,12 @@ test('occlusion without explicit exit does not get mislabelled as ghost',()=>{
   const score=evaluateTracking(trace(f(0,[gt('A',180)],[pred(7,180)]),
     f(.1,[],[pred(7,190)])));
   assert.equal(score.exitGhostFrames,0);assert.equal(score.fp,1);
+});
+test('counts an exited ID that blinks back after a frame without a prediction',()=>{
+  const score=evaluateTracking(trace(f(0,[gt('A',180)],[pred(7,180)]),
+    f(.1,[],[],['A']), f(.2,[],[pred(7,190)])));
+  assert.equal(score.exitGhostFrames,1);
+  assert.equal(score.maxExitGhostSeconds,.1);
 });
 test('invalid ground truth and timestamps fail rather than fake a score',()=>{
   assert.throws(()=>evaluateTracking({frames:[]}),/Expected/);

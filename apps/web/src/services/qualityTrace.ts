@@ -26,13 +26,14 @@ export function appendQualityFrame(
   height: number,
   tracks: readonly LiveTrack[],
   overlayAgeMs?: number | null,
+  everyDecodedFrame = false,
 ): boolean {
   if (frames.length >= QA_MAX_FRAMES ||
       ![time, width, height].every(Number.isFinite) ||
       time < 0 || width <= 0 || height <= 0) return false;
   const previous = frames[frames.length - 1];
-  if (previous && time - previous.time < QA_MIN_FRAME_INTERVAL_SEC) return false;
-  if (previous && time <= previous.time) return false;
+  if (previous && (time <= previous.time ||
+      (!everyDecodedFrame && time - previous.time < QA_MIN_FRAME_INTERVAL_SEC))) return false;
   frames.push({
     time, width, height, overlayAgeMs, groundTruth: null, exitedIds: null,
     predictions: tracks.filter(t =>
@@ -46,11 +47,11 @@ export function appendQualityFrame(
   });
   return true;
 }
-export function serializeQualityTrace(frames: readonly QualityFrame[]): string {
+export function serializeQualityTrace(frames: readonly QualityFrame[], benchmark?: unknown): string {
   return JSON.stringify({
     format: 'visionguard-tracking-eval/v1',
     annotationStatus: 'NOT ANNOTATED - fill groundTruth and exitedIds before scoring',
     note: 'Browser-overlay predictions only; no model accuracy is implied',
-    frames,
+    frames, benchmark,
   }, null, 2) + '\n';
 }

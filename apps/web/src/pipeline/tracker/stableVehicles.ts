@@ -16,6 +16,7 @@ export interface SpeedHistory {
   points: TrajectoryPoint[];
   smoothedKmh: number | null;
 }
+export const MAX_DETECTOR_CONFIRMATION_AGE_SEC = 3.5;
 const PHYSICAL_WIDTH_METERS: Record<string, number> = {
   bicycle: 0.65,
   motorcycle: 0.80,
@@ -87,6 +88,7 @@ export function reconcileVehicles(
   mediaTime: number,
   nextId: number,
   knownSourceIds: ReadonlyMap<number, number> = new Map(),
+  capturedAt = mediaTime,
 ): { tracks: PersistentTrack[]; nextId: number; sourceAssignments: Map<number, number> } {
   // Predicted boxes are display-only and must never be interpreted as a
   // fresh YOLO/optical observation during identity reconciliation. Otherwise
@@ -115,11 +117,15 @@ export function reconcileVehicles(
     // finishes the frame that optical flow has already advanced through.
     const correction = .55;
     const mix = (x: number, y: number) => x + correction * (y - x);
-    // Box-size observations are noisier than center positions: suppress
-    // abrupt jumps, while still allowing approach/perspective size changes.
+    // Blend the new measured size directly. Clamping then applying a
+    // second small weight previously limited correction to 6% per detection,
+    // even when a vehicle had grown substantially between detector frames.
+    const uncertainScale = Math.max(after.w / before.w, before.w / after.w,
+      after.h / before.h, before.h / after.h) > 1.5;
     const smoothSize = (oldValue: number, observed: number) => {
+      if (!uncertainScale) return oldValue + .65 * (observed - oldValue);
       const bounded = Math.max(oldValue * .78, Math.min(oldValue * 1.22, observed));
-      return oldValue * .72 + bounded * .28;
+      return oldValue + .28 * (bounded - oldValue);
     };
     // For buses/trucks, smooth the actual class probabilities instead of
     // inventing a label from the colour of a vehicle's roof or trailer.
@@ -146,7 +152,7 @@ export function reconcileVehicles(
       speedIsEstimate: true,
       lastOpticalAt: mediaTime,
       isPredicted: false,
-      lastDetectedAt: mediaTime
+      lastDetectedAt: capturedAt
     });
   }
   viable.forEach((candidate, index) => {
@@ -173,7 +179,7 @@ export function reconcileVehicles(
         : { [candidate.className]: candidate.confidence * 2 },
       lastOpticalAt: mediaTime,
       isPredicted: false,
-      lastDetectedAt: mediaTime
+      lastDetectedAt: capturedAt
     });
   });
   // Keep a missed YOLO track only if fresh optical evidence still sees it.
@@ -259,13 +265,14 @@ export function recoverBriefOpticalMisses(
   // Never let a caller accidentally turn predicted geometry into a new
   // optical confirmation. Only actual image-matched tracks enter this list.
   const result: PersistentTrack[] = observed
-    .filter(track => !track.isPredicted)
+    .filter(track => !track.isPredicted && mediaTime - track.lastDetectedAt <= MAX_DETECTOR_CONFIRMATION_AGE_SEC)
     .map(track => ({ ...track, lastOpticalAt: mediaTime, isPredicted: false }));
   const present = new Set(result.map(t => t.id));
   const elapsed = mediaTime - previousTime;
   if (!(elapsed > 0 && elapsed <= .25)) return result;
   for (const track of previous) {
     if (present.has(track.id)) continue;
+    if (mediaTime - track.lastDetectedAt > MAX_DETECTOR_CONFIRMATION_AGE_SEC) continue;
     const sinceReliable = mediaTime - (track.lastOpticalAt ?? track.lastDetectedAt);
     if (sinceReliable < 0 || sinceReliable > .17) continue;
     const velocityLimit = Math.max(110, Math.max(track.w, track.h) * 2.5);

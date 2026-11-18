@@ -179,6 +179,13 @@ describe('persistent crowded vehicle tracking', () => {
     };
     expect(recoverBriefOpticalMisses([], [predicted], 2, 2.1, 300, 300)).toEqual([]);
   });
+  it('expires optical evidence after the detector confirmation window', () => {
+    const before: PersistentTrack = {
+      ...car(100, 120, 4), lastDetectedAt: 1, lastOpticalAt: 4.48,
+      speedKmh: null, speedIsEstimate: true
+    };
+    expect(recoverBriefOpticalMisses([before], [before], 4.48, 4.56, 300, 300)).toEqual([]);
+  });
   it('does not create a new identity for an unobserved predicted-only vehicle', () => {
     const next = reconcileVehicles([], [{ ...car(120, 100, 40), isPredicted: true }], 3, 1);
     expect(next.tracks).toEqual([]);

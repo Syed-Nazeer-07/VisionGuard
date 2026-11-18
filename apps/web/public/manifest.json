@@ -1,7 +1,7 @@
 {
   "name": "VisionGuard",
   "short_name": "VisionGuard",
-  "description": "AI-Powered Traffic Violation Detection & Video Analytics Platform",
+  "description": "Browser-based vehicle detection, tracking, and human review of traffic video.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FFFAF5",

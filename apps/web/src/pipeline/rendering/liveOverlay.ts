@@ -11,7 +11,7 @@ export function paintLiveOverlay(
   viewport: { width: number; height: number; dpr: number },
   anchors: Map<number, LiveLabelAnchor>,
   time: number,
-  options: { boxes: boolean; labels: boolean },
+  options: { boxes: boolean; labels: boolean; candidates?: boolean },
 ): PersistentTrack[] {
   const fit = Math.min(viewport.width / frame.width, viewport.height / frame.height);
   const bounds = {
@@ -47,7 +47,7 @@ export function paintLiveOverlay(
       (b.w * b.h - a.w * a.h) || (a.track.id - b.track.id));
     context.font = '600 11px system-ui,sans-serif';
     for (const box of boxes) {
-      const labels = vehicleOverlayLabels(box.track);
+      const labels = options.candidates ? [box.track.className] : vehicleOverlayLabels(box.track);
       const widths = labels.map(label => context.measureText(label).width + 12);
       const placement = placeLiveLabel(box, bounds, widths, occupied, anchors.get(box.track.id));
       if (!placement) continue;

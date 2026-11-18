@@ -18,6 +18,7 @@
 
 import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2.57.4'
 import { AwsClient } from 'npm:aws4fetch@1.0.20'
+import { isOriginalKey, isUuid } from './objectPaths.mjs'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -78,8 +79,9 @@ function xmlEscape(s: string): string {
 async function s3(cfg: B2Config, method: string, url: URL, init: { body?: string; headers?: Record<string, string> } = {}): Promise<Response> {
   const res = await cfg.aws.fetch(url.toString(), { method, body: init.body, headers: init.headers })
   if (!res.ok && res.status !== 404) {
-    const text = await res.text()
-    throw new HttpError(502, `B2 ${method} failed (HTTP ${res.status}): ${xmlValue(text, 'Message') ?? xmlValue(text, 'Code') ?? text.slice(0, 200)}`)
+    const code = xmlValue(await res.text(), 'Code')
+    const detail = code && /^[A-Za-z0-9]{1,60}$/.test(code) ? ': ' + code : ''
+    throw new HttpError(502, `B2 ${method} failed (HTTP ${res.status})${detail}`)
   }
   return res
 }
@@ -149,7 +151,7 @@ interface AssetRow {
 }
 
 async function loadAsset(db: SupabaseClient, videoId: string): Promise<AssetRow> {
-  if (typeof videoId !== 'string' || !/^[0-9a-f-]{36}$/i.test(videoId)) throw new HttpError(400, 'Invalid videoId')
+  if (!isUuid(videoId)) throw new HttpError(400, 'Invalid videoId')
   const { data, error } = await db
     .from('video_assets')
     .select('id, uploaded_by, storage_provider, storage_path, file_size, metadata')
@@ -166,7 +168,7 @@ function requireAssetOwner(asset: AssetRow, userId: string) {
 
 // The artifact key is DERIVED FROM UUIDs, never an arbitrary client path.
 async function loadArtifactRun(db: SupabaseClient, videoId: string, runId: unknown): Promise<string> {
-  if (typeof runId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(runId)) {
+  if (typeof runId !== 'string' || !isUuid(runId)) {
     throw new HttpError(400, 'Invalid analysis run ID')
   }
   const { data: run, error } = await db
@@ -177,16 +179,16 @@ async function loadArtifactRun(db: SupabaseClient, videoId: string, runId: unkno
     .maybeSingle()
   if (error) throw new HttpError(500, `analysis_runs lookup failed: ${error.message}`)
   if (!run) throw new HttpError(404, 'No accessible analysis run exists for this video')
-  return `artifacts/${videoId}/${runId}.json.gz`
+  return `artifacts/${run.video_id}/${run.id}.json.gz`
 }
 
-async function requireArtifactReader(db: SupabaseClient, asset: AssetRow, userId: string) {
+async function requireVideoReader(db: SupabaseClient, asset: AssetRow, userId: string) {
   if (asset.uploaded_by === userId) return
   const { data, error } = await db.rpc('auth_user_role')
   // Operators review saved runs, but may not DELETE the original footage
   // or an analysis artifact owned by someone else.
   if (error || !['Operator', 'Supervisor', 'Admin'].includes(data)) {
-    throw new HttpError(403, 'Only the video uploader or authorized staff can read this artifact')
+    throw new HttpError(403, 'Only the video uploader or authorized staff can read this video')
   }
 }
 
@@ -208,11 +210,19 @@ function requireUploadId(asset: AssetRow, uploadId: unknown): string {
   if (typeof uploadId !== 'string' || !uploadId || meta.b2_upload_id !== uploadId || typeof meta.b2_object_key !== 'string') {
     throw new HttpError(409, 'Upload session does not match this video asset')
   }
-  return meta.b2_object_key
+  return requireOriginalKey(asset.id, meta.b2_object_key)
+}
+
+function requireOriginalKey(videoId: string, key: string): string {
+  if (!isOriginalKey(videoId, key)) throw new HttpError(409, 'Stored object path is inconsistent with the video')
+  return key
 }
 
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json', 'Cache-Control': 'private, no-store' },
+  })
 }
 
 Deno.serve(async (req) => {
@@ -278,7 +288,7 @@ Deno.serve(async (req) => {
 
       case 'artifact-playback-url': {
         const asset = await loadAsset(db, videoId)
-        await requireArtifactReader(db, asset, userId)
+        await requireVideoReader(db, asset, userId)
         const key = await loadArtifactRun(db, videoId, body.runId)
         const cfg = b2Config()
         const head = await s3(cfg, 'HEAD', objectUrl(cfg, key))
@@ -361,7 +371,7 @@ Deno.serve(async (req) => {
         const res = await s3(cfg, 'POST', url, { body: xml, headers: { 'Content-Type': 'application/xml' } })
         const text = await res.text()
         if (res.status === 404 || text.includes('<Error>')) {
-          throw new HttpError(502, `B2 could not complete the upload: ${xmlValue(text, 'Message') ?? xmlValue(text, 'Code') ?? `HTTP ${res.status}`}`)
+          throw new HttpError(502, 'B2 could not complete the upload')
         }
 
         // Verify the stored object before anyone records it as uploaded.
@@ -386,13 +396,15 @@ Deno.serve(async (req) => {
       }
 
       case 'playback-url': {
-        const asset = await loadAsset(db, videoId) // RLS: caller must be able to read the asset
+        const asset = await loadAsset(db, videoId)
+        await requireVideoReader(db, asset, userId)
         if (asset.storage_provider !== 'b2') throw new HttpError(409, `Video asset ${asset.id} is not stored in B2`)
         if (!asset.storage_path) return json({ exists: false, reason: 'not_uploaded' })
         const cfg = b2Config()
-        const head = await s3(cfg, 'HEAD', objectUrl(cfg, asset.storage_path))
+        const object = objectUrl(cfg, requireOriginalKey(asset.id, asset.storage_path))
+        const head = await s3(cfg, 'HEAD', object)
         if (head.status === 404) return json({ exists: false, reason: 'object_missing' })
-        const url = await presign(cfg, 'GET', objectUrl(cfg, asset.storage_path), PLAYBACK_URL_TTL_SECONDS)
+        const url = await presign(cfg, 'GET', object, PLAYBACK_URL_TTL_SECONDS)
         return json({
           exists: true,
           url,
@@ -403,9 +415,10 @@ Deno.serve(async (req) => {
 
       case 'object-info': {
         const asset = await loadAsset(db, videoId)
+        await requireVideoReader(db, asset, userId)
         if (asset.storage_provider !== 'b2' || !asset.storage_path) return json({ exists: false, size: null })
         const cfg = b2Config()
-        const head = await s3(cfg, 'HEAD', objectUrl(cfg, asset.storage_path))
+        const head = await s3(cfg, 'HEAD', objectUrl(cfg, requireOriginalKey(asset.id, asset.storage_path)))
         return json(head.status === 404 ? { exists: false, size: null } : { exists: true, size: Number(head.headers.get('Content-Length') ?? '0') })
       }
 
@@ -430,11 +443,7 @@ Deno.serve(async (req) => {
           // is unavailable, return an error and retain a retriable DB record
           // instead of silently orphaning potentially billable objects.
           if (!asset.storage_path && typeof meta.b2_upload_id === 'string' && typeof meta.b2_object_key === 'string') {
-            const uploadPath = `videos/${asset.id}/`
-            if (!meta.b2_object_key.startsWith(uploadPath)) {
-              throw new HttpError(409, 'Multipart session object path is inconsistent with the video')
-            }
-            const url = objectUrl(cfg, meta.b2_object_key)
+            const url = objectUrl(cfg, requireOriginalKey(asset.id, meta.b2_object_key))
             url.searchParams.set('uploadId', meta.b2_upload_id)
             await s3(cfg, 'DELETE', url)
           }
