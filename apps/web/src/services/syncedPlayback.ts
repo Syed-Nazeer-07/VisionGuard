@@ -45,3 +45,13 @@ export function shouldHoldRecordedPlayback(
 ): boolean {
   return syncedPlayback && !detectorReady && !liveCapture;
 }
+
+/** Frame locking is deliberately unavailable for camera/tab sources and previews. */
+export function shouldLockRecordedInference(
+  enabled: boolean,
+  preview: boolean,
+  liveCapture: boolean,
+  videoPaused: boolean,
+): boolean {
+  return enabled && !preview && !liveCapture && !videoPaused;
+}

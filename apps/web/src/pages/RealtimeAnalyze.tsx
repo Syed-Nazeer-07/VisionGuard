@@ -17,7 +17,7 @@ import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
-import { INITIAL_SYNC_PLAYBACK_RATE, recommendedSyncPlaybackRate, shouldHoldRecordedPlayback } from '../services/syncedPlayback';
+import { INITIAL_SYNC_PLAYBACK_RATE, recommendedSyncPlaybackRate, shouldHoldRecordedPlayback, shouldLockRecordedInference } from '../services/syncedPlayback';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import type { DetectorEvent, DetectorProvider, DetectorStartup } from '../pipeline/worker/detectorProtocol';
 import { describeBenchmark, pageJsHeapBytes, recentInferenceFps, type FrameTiming } from '../services/detectorBenchmark';
@@ -80,7 +80,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [startup, setStartup] = useState<(DetectorStartup & { totalMs: number }) | null>(null);
   const previewRef = useRef<Observation | null>(null);
   const [inspection, setInspection] = useState<'idle' | 'pending' | { candidates: number }>('idle');
-  const requestDetailsRef = useRef<{ preview: boolean; captureMs: number } | null>(null);
+  const requestDetailsRef = useRef<{ preview: boolean; captureMs: number; locked: boolean } | null>(null);
   const ownerId = useAuthStore(state => state.user?.id ?? null);
   const activeRunRef = useRef('');
   const currentFileRef = useRef<File | null>(null);
@@ -151,6 +151,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [showTelemetry, setShowTelemetry] = useState(true);
   const [syncedPlayback, setSyncedPlayback] = useState(false);
   const [analysisRate, setAnalysisRate] = useState(1);
+  const [frameLocked, setFrameLocked] = useState(false);
+  const [frameHeld, setFrameHeld] = useState(false);
+  const frameLockedRef = useRef(false);
+  const frameHoldRef = useRef(false);
+  frameLockedRef.current = frameLocked;
   const syncedPlaybackRef = useRef(false);
   const resumeSyncedPlaybackRef = useRef(false);
   syncedPlaybackRef.current = syncedPlayback;
@@ -186,23 +191,30 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const rate = syncedPlayback && !webcamActive && !tabCaptureActive
+    const rate = syncedPlayback && !frameLocked && !webcamActive && !tabCaptureActive
       ? INITIAL_SYNC_PLAYBACK_RATE : 1;
     video.playbackRate = rate;
     setAnalysisRate(rate);
-    if (syncedPlayback && !readyRef.current && !webcamActive && !tabCaptureActive &&
+    if ((syncedPlayback || frameLocked) && !readyRef.current && !webcamActive && !tabCaptureActive &&
         !video.paused && !video.ended) {
       // Sync may be enabled AFTER playback has already started; stop the
       // source clock until the detector can inspect its current frame.
       resumeSyncedPlaybackRef.current = true;
       video.pause();
     }
-    if (!syncedPlayback && resumeSyncedPlaybackRef.current) {
+    if (!frameLocked && frameHoldRef.current) {
+      frameHoldRef.current = false;
+      setFrameHeld(false);
+      if (activeRef.current && video.paused && !video.ended && !video.seeking) {
+        void video.play().catch(() => {});
+      }
+    }
+    if (!syncedPlayback && !frameLocked && resumeSyncedPlaybackRef.current) {
       // The user chose native playback while waiting for model readiness.
       resumeSyncedPlaybackRef.current = false;
       void video.play().catch(() => {});
     }
-  }, [syncedPlayback, url, webcamActive, tabCaptureActive]);
+  }, [syncedPlayback, frameLocked, url, webcamActive, tabCaptureActive]);
 
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
@@ -257,6 +269,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   const resetTracks = useCallback(() => {
     generationRef.current += 1;
+    frameHoldRef.current = false;
+    setFrameHeld(false);
     resumeSyncedPlaybackRef.current = false;
     lastDecodedMediaTimeRef.current = null;
     presentedMediaTimeRef.current = null;
@@ -294,6 +308,22 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     workerRef.current?.postMessage({ type: 'reset' });
   }, []);
 
+  const releaseFrameHold = useCallback((resume: boolean, capturedGeneration: number) => {
+    if (!frameHoldRef.current) return;
+    frameHoldRef.current = false;
+    setFrameHeld(false);
+    if (!resume || !frameLockedRef.current) return;
+    // Keep the detected frame visible briefly before advancing. A seek,
+    // source switch, route change or mode change cancels delayed autoplay.
+    window.setTimeout(() => {
+      const video = videoRef.current;
+      if (!frameLockedRef.current || !activeRef.current || !readyRef.current ||
+          captureKindRef.current || generationRef.current !== capturedGeneration ||
+          !video || video.seeking || video.ended) return;
+      if (video.paused) void video.play().catch(() => {});
+    }, 160);
+  }, []);
+
   const startDetector = useCallback(() => {
     if (workerRef.current) return;
     inferenceErrorsRef.current = 0;
@@ -320,6 +350,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       worker.terminate();
       workerRef.current = null;
       clearInFlight();
+      releaseFrameHold(false, generationRef.current);
       recoverWithWasmRef.current = true;
       setDetector('error');
       setError('YOLO11s initialization timed out. Video playback remains available; retry detector.');
@@ -343,7 +374,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (resumeSyncedPlaybackRef.current) {
           resumeSyncedPlaybackRef.current = false;
           const recordedVideo = videoRef.current;
-          if (syncedPlaybackRef.current && !captureKindRef.current && activeRef.current && recordedVideo &&
+          if ((syncedPlaybackRef.current || frameLockedRef.current) && !captureKindRef.current && activeRef.current && recordedVideo &&
               !recordedVideo.ended && !recordedVideo.seeking) {
             void recordedVideo.play().catch(() => {});
           }
@@ -362,6 +393,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         clearInFlight();
         setDetector('error');
         resumeSyncedPlaybackRef.current = false;
+        releaseFrameHold(false, generationRef.current);
         setError('YOLO11s could not start: ' + message.message);
         return;
       }
@@ -369,8 +401,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       const details = requestDetailsRef.current;
       requestDetailsRef.current = null;
       clearInFlight();
-      if (message.generation !== generationRef.current) return;
+      if (message.generation !== generationRef.current) {
+        if (details?.locked) releaseFrameHold(false, message.generation);
+        return;
+      }
       const video = videoRef.current;
+      if (details?.locked) releaseFrameHold(message.type === 'result', message.generation);
       if (details?.preview) {
         setInspection('idle');
         if (message.type === 'error') setError('Could not inspect frame: ' + message.message);
@@ -532,6 +568,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       readyRef.current = false;
       clearInFlight();
       requestDetailsRef.current = null;
+      releaseFrameHold(false, generationRef.current);
       recoverWithWasmRef.current = true;
       latestRef.current = null;
       flowTracksRef.current = [];
@@ -543,7 +580,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       type: 'init', modelPath: MODEL_PATH,
       provider: recoverWithWasmRef.current ? 'wasm' : preferredProviderRef.current
     });
-  }, [clearInFlight]);
+  }, [clearInFlight, releaseFrameHold]);
 
   const submitFrame = useCallback((video: HTMLVideoElement, mediaTime: number, preview = false) => {
     const worker = workerRef.current;
@@ -552,7 +589,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     const generation = generationRef.current;
     const requestId = ++messageIdRef.current;
     inFlightIdRef.current = requestId;
-    requestDetailsRef.current = { preview, captureMs: 0 };
+    const locked = shouldLockRecordedInference(
+      frameLockedRef.current, preview, Boolean(captureKindRef.current), video.paused
+    );
+    requestDetailsRef.current = { preview, captureMs: 0, locked };
     const captureStarted = performance.now();
     const sourceWidth = video.videoWidth;
     const sourceHeight = video.videoHeight;
@@ -560,6 +600,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (inFlightIdRef.current !== requestId) return;
       clearInFlight();
       requestDetailsRef.current = null;
+      if (locked) releaseFrameHold(false, generation);
       recoverWithWasmRef.current = true;
       if (preview) setInspection('idle');
       worker.terminate();
@@ -570,14 +611,25 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       flowTracksRef.current = [];
       setError('Detector stalled for 20 seconds. Playback continues; use Retry detector.');
     }, WORKER_TIMEOUT_MS);
-    void captureInferenceBitmap(video, MAX_CAPTURE_WIDTH).then(bitmap => {
+    // Start the bitmap snapshot while the video still displays the frame
+    // reported by requestVideoFrameCallback. Hold its media clock during
+    // inference, so late results do not need seconds of optical replay.
+    const bitmapPromise = captureInferenceBitmap(video, MAX_CAPTURE_WIDTH);
+    if (locked) {
+      frameHoldRef.current = true;
+      setFrameHeld(true);
+      video.pause();
+    }
+    void bitmapPromise.then(bitmap => {
       if (generation !== generationRef.current || video.seeking || videoRef.current !== video ||
-          !activeRef.current || video.paused !== preview || workerRef.current !== worker) {
+          !activeRef.current || (video.paused !== preview && !(locked && video.paused)) ||
+          workerRef.current !== worker) {
         bitmap.close();
         if (inFlightIdRef.current === requestId) {
           requestDetailsRef.current = null;
           clearInFlight();
           if (preview) setInspection('idle');
+          if (locked) releaseFrameHold(false, generation);
         }
         return;
       }
@@ -596,11 +648,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       requestDetailsRef.current = null;
       if (preview) setInspection('idle');
       else captureErrorRef.current = true;
+      if (locked) releaseFrameHold(false, generation);
       setError('Could not capture a decoded video frame for AI: ' + String(error));
       if (webcamRef.current) setStreamHealth('error');
     });
     return true;
-  }, [clearInFlight]);
+  }, [clearInFlight, releaseFrameHold]);
 
   const attachVideo = useCallback((
     file: Blob, name: string, savedPosition = 0, restoredRunId?: string
@@ -1765,7 +1818,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 className="h-full w-full object-contain"
                 onLoadedMetadata={event => {
                   setDuration(event.currentTarget.duration);
-                  event.currentTarget.playbackRate = syncedPlayback && !webcamActive && !tabCaptureActive
+                  event.currentTarget.playbackRate = syncedPlayback && !frameLocked && !webcamActive && !tabCaptureActive
                      ? INITIAL_SYNC_PLAYBACK_RATE : 1;
                 }}
                 onLoadedData={event => {
@@ -1783,10 +1836,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   startDetector();
                 }}
                 onPlay={event => {
+                  if (frameHoldRef.current) {
+                    event.currentTarget.pause();
+                    return;
+                  }
                   previewRef.current = null;
                   setInspection('idle');
                   if (shouldHoldRecordedPlayback(
-                    syncedPlaybackRef.current, readyRef.current, Boolean(captureKindRef.current)
+                    syncedPlaybackRef.current || frameLockedRef.current,
+                    readyRef.current, Boolean(captureKindRef.current)
                   )) {
                     // Keep the opening frames available while a large ONNX
                     // model downloads. User can turn Sync off to play normally.
@@ -1796,6 +1854,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                     startDetector();
                     return;
                   }
+                  setFrameHeld(false);
                   setPlaying(true);
                   startDetector();
                 }}
@@ -1820,6 +1879,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   }
                 }}
                 onPause={event => {
+                  // Frame locking is not a user-initiated pause. Keep inference
+                  // counters intact while YOLO processes this same frame.
+                  if (frameHoldRef.current) return;
                   benchmarkRef.current.previousMediaTime = null;
                   benchmarkRef.current.lastFrameAt = null;
                   completionTimesRef.current = [];
@@ -1856,7 +1918,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   ) : webcamActive ? (
                     streamHealth === 'playing' ? 'CAMERA LIVE' :
                     streamHealth === 'buffering' ? 'CAMERA BUFFERING' : 'STARTING CAMERA'
-                  ) : readyVideo ? (playing ? 'PLAYING VIDEO' : 'PAUSED') : 'OPENING VIDEO'}
+                  ) : frameHeld ? 'ANALYZING FRAME' : readyVideo ? (playing ? 'PLAYING VIDEO' : 'PAUSED') : 'OPENING VIDEO'}
                 </span>
               </div>
               <button type="button" onClick={() => void toggleFullscreen()}
@@ -1936,9 +1998,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <label><input type="checkbox" checked={showTelemetry} onChange={event => setShowTelemetry(event.target.checked)}/> Telemetry</label>
         {url && !webcamActive && !tabCaptureActive &&
           <label title="Trade playback speed for more detector updates on recorded footage. Live camera and browser tabs are unaffected.">
-            <input type="checkbox" checked={syncedPlayback} onChange={event => setSyncedPlayback(event.target.checked)}/>
+            <input type="checkbox" checked={syncedPlayback} onChange={event => {
+              setSyncedPlayback(event.target.checked);
+              if (event.target.checked) setFrameLocked(false);
+            }}/>
             Sync video to AI {syncedPlayback && <span>({analysisRate.toFixed(2)}×)</span>}
           </label>}
+        {url && !webcamActive && !tabCaptureActive &&
+          <label title="Hold recorded frames while the detector runs. Much slower than normal playback but prevents stale results caused by slow inference.">
+            <input type="checkbox" checked={frameLocked} onChange={event => {
+              setFrameLocked(event.target.checked);
+              if (event.target.checked) setSyncedPlayback(false);
+            }}/> Frame-locked analysis
+          </label>}
+        {frameLocked && url && !webcamActive && !tabCaptureActive &&
+          <small role="status">Accuracy-first: hold each recorded frame during inference, then advance. This is slower and cannot correct model classification errors.</small>}
         {syncedPlayback && url && !webcamActive && !tabCaptureActive &&
           <small role="status">Recorded playback waits for detector readiness, then slows to match inference. Turn off Sync for normal speed.</small>}
         {showBoxes && <small>Dashed boxes indicate predicted positions.</small>}
