@@ -124,6 +124,15 @@ try {
   await page.locator('input[type=file]').setInputFiles(fixtureVideo);
   await page.waitForFunction(()=>window.vgTestCapture.getTracks().every(track=>track.readyState==='ended'));
   await page.waitForFunction(()=>document.querySelector('video')?.src.startsWith('blob:'));
+  const syncControl = page.getByRole('checkbox',{name:/Sync video to AI/});
+  await syncControl.check();
+  await page.waitForFunction(()=>{
+    const rate = document.querySelector('video')?.playbackRate;
+    return typeof rate === 'number' && rate >= 0.1 && rate < 1;
+  });
+  await syncControl.uncheck();
+  await page.waitForFunction(()=>document.querySelector('video')?.playbackRate === 1);
+  checked.push('Recorded-video sync can slow playback and restores 1x when disabled.');
   checked.push('Switching from the permitted Chromium fixture camera to a local file stops all camera tracks.');
 
   await page.getByText('Storage & privacy',{exact:true}).click();
