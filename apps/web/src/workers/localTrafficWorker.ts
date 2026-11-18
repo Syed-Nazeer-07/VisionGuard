@@ -1,4 +1,4 @@
-import { env, InferenceSession, Tensor } from 'onnxruntime-web/webgpu';
+import type { InferenceSession, Tensor } from 'onnxruntime-web';
 import {
   decodeTrafficVehicles, matchesYoloTensor, trafficLetterbox,
   YOLO_INPUT_SHAPE, YOLO_INPUT_SIZE, YOLO_OUTPUT_SHAPE
@@ -6,22 +6,12 @@ import {
 import { ByteTracker } from '../pipeline/tracker/bytetrack';
 import { calculateMotion, type LiveTrack } from '../pipeline/tracker/liveProjection';
 import { TwoWheelerAssociator } from '../pipeline/tracker/twoWheelerAssociator';
-import { ortWasmAssetsPath } from '../services/ortWasmPaths';
 import { disposeInferenceResources } from '../services/inferenceResources';
-import { verifyOnnxModelUrl } from '../services/modelProbe';
+import type { DetectorEvent, DetectorFrame, DetectorRequest } from '../pipeline/worker/detectorProtocol';
+import { openTrafficSession } from './trafficInferenceSession';
 
-env.wasm.wasmPaths = ortWasmAssetsPath(import.meta.env.DEV);
-
-type Incoming =
-  | { type: 'init'; modelPath: string }
-  | { type: 'reset' }
-  | {
-      type: 'frame'; bitmap: ImageBitmap; mediaTime: number; generation: number;
-      sourceWidth: number; sourceHeight: number; requestId: number
-    };
-
-let session: InferenceSession | null = null;
-let executionProvider = '';
+let runtime: Awaited<ReturnType<typeof openTrafficSession>> | null = null;
+let initializing = false;
 let working = false;
 let epoch = 0;
 const tracker = new ByteTracker();
@@ -37,45 +27,25 @@ let canvas: OffscreenCanvas | null = null;
 let context: OffscreenCanvasRenderingContext2D | null = null;
 let floatBuffer: Float32Array | null = null;
 
+let reusableInput: Tensor | null = null;
+let previousContentSize = '';
+
+function send(event: DetectorEvent) { self.postMessage(event); }
 function errorText(e: unknown) { return e instanceof Error ? e.message : String(e); }
 
-async function initialize(path: string) {
-  if (session) {
-    self.postMessage({ type: 'ready', provider: executionProvider });
-    return;
+async function initialize(message: Extract<DetectorRequest, { type: 'init' }>) {
+  if (runtime || initializing) return;
+  initializing = true;
+  try {
+    runtime = await openTrafficSession(message.modelPath, message.provider ?? 'auto', stage =>
+      send({ type: 'loading', stage }));
+    const { provider, startup, fallbackReason } = runtime;
+    send({ type: 'ready', provider, startup, fallbackReason });
+  } catch (error) {
+    send({ type: 'error', requestId: -1, generation: -1, message: errorText(error) });
+  } finally {
+    initializing = false;
   }
-  await verifyOnnxModelUrl(path);
-  let gpuError = '';
-  type Adapter = typeof env.webgpu.adapter & { info?: { isFallbackAdapter?: boolean } };
-  const gpu = (navigator as Navigator & {
-    gpu?: { requestAdapter: () => Promise<Adapter | null> }
-  }).gpu;
-  if (gpu) {
-    try {
-      const adapter = await gpu.requestAdapter();
-      if (!adapter || adapter.info?.isFallbackAdapter) {
-        gpuError = adapter ? 'The browser reported a software adapter.' : 'No hardware adapter was available.';
-      } else {
-        env.webgpu.adapter = adapter;
-        session = await InferenceSession.create(path, { executionProviders: ['webgpu'] });
-        executionProvider = 'webgpu';
-      }
-    } catch (error) { gpuError = errorText(error); }
-  }
-  if (!session) {
-    session = await InferenceSession.create(path, { executionProviders: ['wasm'] });
-    executionProvider = 'wasm';
-  }
-  const [input] = session.inputMetadata;
-  const [output] = session.outputMetadata;
-  if (session.inputMetadata.length !== 1 || session.outputMetadata.length !== 1 ||
-      !matchesYoloTensor(input, YOLO_INPUT_SHAPE) || !matchesYoloTensor(output, YOLO_OUTPUT_SHAPE)) {
-    const incompatible = session;
-    session = null;
-    await incompatible.release();
-    throw new Error('Incompatible model. Supply a float32 YOLO11 COCO ONNX export with input [1,3,640,640] and output [1,84,8400].');
-  }
-  self.postMessage({ type: 'ready', provider: executionProvider, fallbackReason: gpuError });
 }
 
 function preprocess(bitmap: ImageBitmap, sourceWidth: number, sourceHeight: number) {
@@ -84,47 +54,55 @@ function preprocess(bitmap: ImageBitmap, sourceWidth: number, sourceHeight: numb
     context = canvas.getContext('2d', { willReadFrequently: true });
     floatBuffer = new Float32Array(3 * SIZE * SIZE);
   }
-  if (!context || !floatBuffer) throw new Error('Unable to initialize inference canvas');
+  if (!context || !floatBuffer || !runtime) throw new Error('Unable to initialize inference canvas');
   const transform = trafficLetterbox(sourceWidth, sourceHeight);
   const { left, top, width, height } = transform;
-  context.fillStyle = 'rgb(114,114,114)';
-  context.fillRect(0, 0, SIZE, SIZE);
-  context.drawImage(bitmap, left, top, width, height);
-  const rgba = context.getImageData(0, 0, SIZE, SIZE).data;
+  // Only copy actual video pixels back to the CPU. Padding is constant.
+  context.drawImage(bitmap, 0, 0, width, height);
+  const rgba = context.getImageData(0, 0, width, height).data;
   const area = SIZE * SIZE;
   const dest = floatBuffer;
-  for (let i = 0; i < area; i++) {
-    const px = 4 * i;
-    dest[i] = rgba[px] / 255;
-    dest[area + i] = rgba[px + 1] / 255;
-    dest[2 * area + i] = rgba[px + 2] / 255;
+  const contentSize = width + 'x' + height;
+  if (contentSize !== previousContentSize) {
+    dest.fill(114 / 255);
+    previousContentSize = contentSize;
   }
-  // Derived from actual rounded letterbox dimensions, not the ImageBitmap
-  // dimensions (which may have been scaled down for transfer efficiency).
-  return {
-    tensor: new Tensor('float32', dest, YOLO_INPUT_SHAPE), transform
-  };
+  let src = 0;
+  for (let row = 0; row < height; row++) {
+    const rowStart = (top + row) * SIZE + left;
+    for (let col = 0; col < width; col++, src += 4) {
+      const pixel = rowStart + col;
+      dest[pixel] = rgba[src] / 255;
+      dest[area + pixel] = rgba[src + 1] / 255;
+      dest[2 * area + pixel] = rgba[src + 2] / 255;
+    }
+  }
+  reusableInput ??= new runtime.Tensor('float32', dest, YOLO_INPUT_SHAPE);
+  return { tensor: reusableInput, transform };
 }
 
-async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
-  if (working || !session) {
+async function handleFrame(message: DetectorFrame) {
+  if (working || !runtime) {
     message.bitmap.close();
-    self.postMessage({ type: 'error', requestId: message.requestId, generation: message.generation, message: 'Detector is busy or uninitialized' });
+    send({ type: 'error', requestId: message.requestId, generation: message.generation, message: 'Detector is busy or uninitialized' });
     return;
   }
   working = true;
   const thisEpoch = epoch;
+  const { session, provider } = runtime;
   const start = performance.now();
-  let inputTensor: Tensor | null = null;
   let outputTensors: Awaited<ReturnType<InferenceSession['run']>> | null = null;
   try {
     const processed = preprocess(message.bitmap, message.sourceWidth, message.sourceHeight);
-    inputTensor = processed.tensor;
+    const preprocessMs = performance.now() - start;
     const feeds = { [session.inputNames[0]]: processed.tensor };
+    const modelStarted = performance.now();
     outputTensors = await session.run(feeds);
+    const modelRunMs = performance.now() - modelStarted;
+    const postprocessStarted = performance.now();
     const output = outputTensors;
     if (thisEpoch !== epoch) {
-      self.postMessage({
+      send({
         type: 'skipped', requestId: message.requestId, generation: message.generation
       });
       return;
@@ -138,6 +116,14 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
     // Let motorcycle/bicycle detections bypass the car tracker's .45/.60
     // confidence gates. A separate, conservative two-wheeler tracker runs
     // only on class 1 and class 3, leaving all other vehicle paths unchanged.
+    if (message.preview) {
+      send({
+        type: 'result', requestId: message.requestId, generation: message.generation, mediaTime: message.mediaTime,
+        tracks: [], detections: boxes, detectionCount: boxes.length, provider, preprocessMs, modelRunMs,
+        postprocessMs: performance.now() - postprocessStarted, inferenceMs: performance.now() - start
+      });
+      return;
+    }
     const motorTracks = twoWheelers.update(boxes, message.mediaTime);
     const fourWheelBoxes = boxes.filter(box => box.classId !== 1 && box.classId !== 3);
     // With slow WASM inference vehicles often move too far between detections
@@ -165,23 +151,24 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
     for (const [id, o] of observations) {
       if (message.mediaTime - o.time > 2) observations.delete(id);
     }
-    self.postMessage({
+    send({
       type: 'result', requestId: message.requestId, generation: message.generation,
       mediaTime: message.mediaTime, tracks: [...tracks, ...motorTracks],
       detectionCount: boxes.length,
-      provider: executionProvider,
+      ...(message.diagnostics ? { detections: boxes } : {}),
+      provider, preprocessMs, modelRunMs, postprocessMs: performance.now() - postprocessStarted,
       inferenceMs: performance.now() - start
     });
   } catch (e) {
-    self.postMessage({
+    send({
       type: 'error', requestId: message.requestId, generation: message.generation,
       message: errorText(e)
     });
   } finally {
     // ONNX Runtime may own GPU buffers for each output tensor. Release the
-    // output only AFTER decoding it; otherwise long video sessions can retain
-    // GPU memory until GC (or beyond). Also release the CPU input tensor.
-    disposeInferenceResources(inputTensor, outputTensors, error => {
+    // output only after decoding it. The CPU input buffer and tensor
+    // remain owned by this single-flight worker and are reused.
+    disposeInferenceResources(null, outputTensors, error => {
       console.warn('[YOLO11s] Failed to release inference tensor:', error);
     });
     message.bitmap.close();
@@ -189,7 +176,7 @@ async function handleFrame(message: Extract<Incoming, { type: 'frame' }>) {
   }
 }
 
-self.onmessage = (event: MessageEvent<Incoming>) => {
+self.onmessage = (event: MessageEvent<DetectorRequest>) => {
   const message = event.data;
   if (message.type === 'reset') {
     epoch += 1;
@@ -197,9 +184,7 @@ self.onmessage = (event: MessageEvent<Incoming>) => {
     twoWheelers.reset();
     observations.clear();
   } else if (message.type === 'init') {
-    void initialize(message.modelPath).catch(error =>
-      self.postMessage({ type: 'error', requestId: -1, generation: -1, message: errorText(error) })
-    );
+    void initialize(message);
   } else {
     void handleFrame(message);
   }

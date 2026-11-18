@@ -1,7 +1,8 @@
 import type { BoundingBox } from '../types';
 import { LABELS } from './labels';
 
-export const VEHICLE_CLASS_IDS = new Set([1, 2, 3, 5, 6, 7]);
+const VEHICLE_CLASSES = [1, 2, 3, 5, 6, 7];
+export const VEHICLE_CLASS_IDS = new Set(VEHICLE_CLASSES);
 const NUM_CLASSES = 80;
 const ANCHORS = 8400;
 // Do not change thresholds for cars, buses or trucks while recovering tiny bikes.
@@ -78,15 +79,11 @@ export function decodeTrafficVehicles(
   for (let i = 0; i < ANCHORS; i++) {
     let bestClass = -1;
     let best = -Infinity;
-    let topClass = -1;
-    let topScore = -Infinity;
-    // Motorcycle and bicycle only: permit lower-confidence two-wheelers.
-    // This preserves the original car, bus and truck confidence behaviour.
-    for (let c = 0; c < NUM_CLASSES; c++) {
+    // Reject anchors below all vehicle thresholds before reading the other
+    // 74 class planes. A passing anchor keeps the original all-class veto.
+    for (const c of VEHICLE_CLASSES) {
       const confidence = data[(4 + c) * ANCHORS + i];
-      if (!Number.isFinite(confidence)) continue;
-      if (confidence > topScore) { topScore = confidence; topClass = c; }
-      if (VEHICLE_CLASS_IDS.has(c) && confidence > best) {
+      if (Number.isFinite(confidence) && confidence > best) {
         best = confidence;
         bestClass = c;
       }
@@ -95,6 +92,16 @@ export function decodeTrafficVehicles(
     const required = bestClass === 3 ? MOTORCYCLE_CONFIDENCE :
       bestClass === 1 ? BICYCLE_CONFIDENCE : 0.43;
     if (best < required) continue;
+    let topClass = bestClass;
+    let topScore = best;
+    for (let c = 0; c < NUM_CLASSES; c++) {
+      const confidence = data[(4 + c) * ANCHORS + i];
+      if (Number.isFinite(confidence) &&
+          (confidence > topScore || confidence === topScore && c < topClass)) {
+        topScore = confidence;
+        topClass = c;
+      }
+    }
     // Don't turn pedestrians into motorcycles. Permit ambiguity with a rider
     // only when the two-wheeler score closely competes with the person score.
     if (topClass !== bestClass) {
@@ -138,16 +145,11 @@ export function decodeTrafficVehicles(
   // smaller motorcycles. Preserve the original top-200 vehicle budget, but
   // also consider the strongest 80 two-wheelers without lowering thresholds.
   candidates.sort((a, b) => b.prob - a.prob);
-  const candidatePool = new Set(candidates.slice(0, 200));
-  let extraTwoWheelers = 0;
-  for (const candidate of candidates) {
-    if (extraTwoWheelers >= 80) break;
-    if (candidate.classId !== 1 && candidate.classId !== 3) continue;
-    candidatePool.add(candidate);
-    extraTwoWheelers++;
-  }
   const selected: BoundingBox[] = [];
-  for (const candidate of [...candidatePool].sort((a, b) => b.prob - a.prob)) {
+  let rankedTwoWheelers = 0;
+  for (const [index, candidate] of candidates.entries()) {
+    const inTwoWheelerBudget = isTwoWheeler(candidate.classId) && ++rankedTwoWheelers <= 80;
+    if (index >= 200 && !inTwoWheelerBudget) continue;
     if (selected.some(existing => {
       const sameGroup = groupOf(existing.classId) === groupOf(candidate.classId);
       const competingTwoWheelers = isTwoWheeler(existing.classId) && isTwoWheeler(candidate.classId);

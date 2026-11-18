@@ -1,0 +1,1682 @@
+{
+  "baseline": "9791c4b",
+  "browser": "Chromium 156 on Linux x86-64, 2 vCPUs",
+  "fixedFrameAndReplayRuns": {
+    "base-fixed-road": [
+      {
+        "startupMs": 3353.7999999998137,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "fallbackReason": "No hardware adapter was available.",
+          "startup": {
+            "probeMs": 221.70000000018626,
+            "sessionAndDownloadMs": 2893.899999999441
+          }
+        },
+        "isolated": false,
+        "firstFrameMs": 2295,
+        "warmWorkerMs": {
+          "p50": 1091.3,
+          "p95": 1146.7
+        },
+        "captureMs": {
+          "p50": 9.8,
+          "p95": 22
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        }
+      }
+    ],
+    "after-fixed-road": [
+      {
+        "startupMs": 2049.600000000559,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "startup": {
+            "downloadMs": 525.2000000001863,
+            "modelBytes": 38012145,
+            "adapterMs": 102,
+            "runtimeImportMs": 76,
+            "sessionMs": 1228.199999999255,
+            "validationMs": 0.20000000018626451,
+            "wasmThreads": 1
+          },
+          "fallbackReason": "No hardware adapter was available."
+        },
+        "isolated": false,
+        "firstFrameMs": 1201.9000000003725,
+        "warmWorkerMs": {
+          "p50": 1038.1,
+          "p95": 1081.8
+        },
+        "captureMs": {
+          "p50": 14.2,
+          "p95": 15.3
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        }
+      },
+      {
+        "startupMs": 1285.0999999996275,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "startup": {
+            "downloadMs": 340.20000000018626,
+            "modelBytes": 38012145,
+            "adapterMs": 42.5,
+            "runtimeImportMs": 27.100000000558794,
+            "sessionMs": 875.1000000005588,
+            "validationMs": 0.09999999962747097,
+            "wasmThreads": 1
+          },
+          "fallbackReason": "No hardware adapter was available."
+        },
+        "isolated": false,
+        "firstFrameMs": 1347.4000000003725,
+        "warmWorkerMs": {
+          "p50": 1048.9,
+          "p95": 1061.2
+        },
+        "captureMs": {
+          "p50": 10.3,
+          "p95": 12.3
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        }
+      }
+    ],
+    "base-fixed-overhead": [
+      {
+        "startupMs": 2302.100000000559,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "fallbackReason": "No hardware adapter was available.",
+          "startup": {
+            "probeMs": 86.5,
+            "sessionAndDownloadMs": 2068.4000000003725
+          }
+        },
+        "isolated": false,
+        "firstFrameMs": 1688.7000000001863,
+        "warmWorkerMs": {
+          "p50": 1078.2,
+          "p95": 1181.4
+        },
+        "captureMs": {
+          "p50": 6.8,
+          "p95": 18.9
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 18,
+          "tp": 7,
+          "fp": 0,
+          "fn": 25,
+          "precision": 1,
+          "recall": 0.21875,
+          "f1": 0.358974358974359,
+          "meanMatchedIoU": 0.9122977487744085,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "car": {
+              "tp": 7,
+              "fp": 0,
+              "fn": 25,
+              "precision": 1,
+              "recall": 0.21875,
+              "f1": 0.358974358974359
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 18,
+          "tp": 7,
+          "fp": 0,
+          "fn": 25,
+          "precision": 1,
+          "recall": 0.21875,
+          "f1": 0.358974358974359,
+          "meanMatchedIoU": 0.9122977487744085,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 7,
+              "fp": 0,
+              "fn": 25,
+              "precision": 1,
+              "recall": 0.21875,
+              "f1": 0.358974358974359
+            }
+          }
+        }
+      }
+    ],
+    "after-fixed-overhead": [
+      {
+        "startupMs": 1899,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "startup": {
+            "downloadMs": 453.80000000074506,
+            "modelBytes": 38012145,
+            "adapterMs": 74.70000000018626,
+            "runtimeImportMs": 36.30000000074506,
+            "sessionMs": 1291.0999999996275,
+            "validationMs": 2.6000000005587935,
+            "wasmThreads": 1
+          },
+          "fallbackReason": "No hardware adapter was available."
+        },
+        "isolated": false,
+        "firstFrameMs": 1262.7999999998137,
+        "warmWorkerMs": {
+          "p50": 1123.5,
+          "p95": 1323.6
+        },
+        "captureMs": {
+          "p50": 4.1,
+          "p95": 57.3
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 18,
+          "tp": 7,
+          "fp": 0,
+          "fn": 25,
+          "precision": 1,
+          "recall": 0.21875,
+          "f1": 0.358974358974359,
+          "meanMatchedIoU": 0.9122977487744085,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "car": {
+              "tp": 7,
+              "fp": 0,
+              "fn": 25,
+              "precision": 1,
+              "recall": 0.21875,
+              "f1": 0.358974358974359
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 18,
+          "tp": 7,
+          "fp": 0,
+          "fn": 25,
+          "precision": 1,
+          "recall": 0.21875,
+          "f1": 0.358974358974359,
+          "meanMatchedIoU": 0.9122977487744085,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 7,
+              "fp": 0,
+              "fn": 25,
+              "precision": 1,
+              "recall": 0.21875,
+              "f1": 0.358974358974359
+            }
+          }
+        }
+      }
+    ],
+    "base-isolated-road": [
+      {
+        "startupMs": 6721.830000001937,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "fallbackReason": "No hardware adapter was available.",
+          "startup": {
+            "probeMs": 308.25,
+            "sessionAndDownloadMs": 5683.004999998957
+          }
+        },
+        "isolated": true,
+        "firstFrameMs": 3254.480000000447,
+        "warmWorkerMs": {
+          "p50": 1176.4,
+          "p95": 1212.2
+        },
+        "captureMs": {
+          "p50": 22,
+          "p95": 37.9
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        }
+      }
+    ],
+    "after-isolated-road": [
+      {
+        "startupMs": 2098.8600000031292,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "startup": {
+            "downloadMs": 444.0049999989569,
+            "modelBytes": 38012145,
+            "adapterMs": 23.224999997764826,
+            "runtimeImportMs": 93.0599999986589,
+            "sessionMs": 1207.815000001341,
+            "validationMs": 0.08499999716877937,
+            "wasmThreads": 2
+          },
+          "fallbackReason": "No hardware adapter was available."
+        },
+        "isolated": true,
+        "firstFrameMs": 993.0650000013411,
+        "warmWorkerMs": {
+          "p50": 745.6,
+          "p95": 944.3
+        },
+        "captureMs": {
+          "p50": 24.6,
+          "p95": 47.6
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 20,
+          "fp": 0,
+          "fn": 5,
+          "precision": 1,
+          "recall": 0.8,
+          "f1": 0.888888888888889,
+          "meanMatchedIoU": 0.8374992310029639,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 15,
+              "fp": 0,
+              "fn": 5,
+              "precision": 1,
+              "recall": 0.75,
+              "f1": 0.8571428571428571
+            },
+            "truck": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1,
+              "recall": 1,
+              "f1": 1
+            }
+          }
+        }
+      }
+    ],
+    "base-kitti": [
+      {
+        "startupMs": 4226.199999999255,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "fallbackReason": "No hardware adapter was available.",
+          "startup": {
+            "probeMs": 205.90000000223517,
+            "sessionAndDownloadMs": 3713.5
+          }
+        },
+        "isolated": false,
+        "firstFrameMs": 3289.199999999255,
+        "warmWorkerMs": {
+          "p50": 1533.2,
+          "p95": 3586.7
+        },
+        "captureMs": {
+          "p50": 11,
+          "p95": 51.6
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 20,
+          "tp": 180,
+          "fp": 38,
+          "fn": 117,
+          "precision": 0.8256880733944955,
+          "recall": 0.6060606060606061,
+          "f1": 0.6990291262135921,
+          "meanMatchedIoU": 0.766330807881459,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "bus": {
+              "tp": 0,
+              "fp": 16,
+              "fn": 0,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "car": {
+              "tp": 178,
+              "fp": 21,
+              "fn": 99,
+              "precision": 0.8944723618090452,
+              "recall": 0.6425992779783394,
+              "f1": 0.7478991596638657
+            },
+            "truck": {
+              "tp": 2,
+              "fp": 1,
+              "fn": 18,
+              "precision": 0.6666666666666666,
+              "recall": 0.1,
+              "f1": 0.1739130434782609
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 20,
+          "tp": 174,
+          "fp": 32,
+          "fn": 123,
+          "precision": 0.8446601941747572,
+          "recall": 0.5858585858585859,
+          "f1": 0.6918489065606361,
+          "meanMatchedIoU": 0.7704250787715268,
+          "idSwitches": 3,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "bus": {
+              "tp": 0,
+              "fp": 18,
+              "fn": 0,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "car": {
+              "tp": 174,
+              "fp": 14,
+              "fn": 103,
+              "precision": 0.925531914893617,
+              "recall": 0.628158844765343,
+              "f1": 0.7483870967741936
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 20,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          }
+        }
+      }
+    ],
+    "after-kitti": [
+      {
+        "startupMs": 1753.7000000029802,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "startup": {
+            "downloadMs": 407.19999999925494,
+            "modelBytes": 38012145,
+            "adapterMs": 33.69999999925494,
+            "runtimeImportMs": 53.600000001490116,
+            "sessionMs": 1155.5,
+            "validationMs": 0.09999999776482582,
+            "wasmThreads": 1
+          },
+          "fallbackReason": "No hardware adapter was available."
+        },
+        "isolated": false,
+        "firstFrameMs": 1748.300000000745,
+        "warmWorkerMs": {
+          "p50": 1626.7,
+          "p95": 5615
+        },
+        "captureMs": {
+          "p50": 8.9,
+          "p95": 48.1
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 20,
+          "tp": 180,
+          "fp": 38,
+          "fn": 117,
+          "precision": 0.8256880733944955,
+          "recall": 0.6060606060606061,
+          "f1": 0.6990291262135921,
+          "meanMatchedIoU": 0.766330807881459,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "bus": {
+              "tp": 0,
+              "fp": 16,
+              "fn": 0,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "car": {
+              "tp": 178,
+              "fp": 21,
+              "fn": 99,
+              "precision": 0.8944723618090452,
+              "recall": 0.6425992779783394,
+              "f1": 0.7478991596638657
+            },
+            "truck": {
+              "tp": 2,
+              "fp": 1,
+              "fn": 18,
+              "precision": 0.6666666666666666,
+              "recall": 0.1,
+              "f1": 0.1739130434782609
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 20,
+          "tp": 174,
+          "fp": 32,
+          "fn": 123,
+          "precision": 0.8446601941747572,
+          "recall": 0.5858585858585859,
+          "f1": 0.6918489065606361,
+          "meanMatchedIoU": 0.7704250787715268,
+          "idSwitches": 3,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "bus": {
+              "tp": 0,
+              "fp": 18,
+              "fn": 0,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "car": {
+              "tp": 174,
+              "fp": 14,
+              "fn": 103,
+              "precision": 0.925531914893617,
+              "recall": 0.628158844765343,
+              "f1": 0.7483870967741936
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 20,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          }
+        }
+      }
+    ],
+    "base-coco": [
+      {
+        "startupMs": 3841.10000000149,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "fallbackReason": "No hardware adapter was available.",
+          "startup": {
+            "probeMs": 141.89999999850988,
+            "sessionAndDownloadMs": 3551.300000000745
+          }
+        },
+        "isolated": false,
+        "firstFrameMs": 4521.800000000745,
+        "warmWorkerMs": {
+          "p50": 1230.1,
+          "p95": 1230.1
+        },
+        "captureMs": {
+          "p50": 8.6,
+          "p95": 45
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 2,
+          "tp": 12,
+          "fp": 7,
+          "fn": 20,
+          "precision": 0.631578947368421,
+          "recall": 0.375,
+          "f1": 0.47058823529411764,
+          "meanMatchedIoU": 0.8052822709263466,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "bicycle": {
+              "tp": 1,
+              "fp": 0,
+              "fn": 8,
+              "precision": 1,
+              "recall": 0.1111111111111111,
+              "f1": 0.19999999999999998
+            },
+            "bus": {
+              "tp": 2,
+              "fp": 2,
+              "fn": 1,
+              "precision": 0.5,
+              "recall": 0.6666666666666666,
+              "f1": 0.5714285714285715
+            },
+            "car": {
+              "tp": 1,
+              "fp": 2,
+              "fn": 1,
+              "precision": 0.3333333333333333,
+              "recall": 0.5,
+              "f1": 0.4
+            },
+            "motorcycle": {
+              "tp": 6,
+              "fp": 3,
+              "fn": 8,
+              "precision": 0.6666666666666666,
+              "recall": 0.42857142857142855,
+              "f1": 0.5217391304347826
+            },
+            "truck": {
+              "tp": 2,
+              "fp": 0,
+              "fn": 2,
+              "precision": 1,
+              "recall": 0.5,
+              "f1": 0.6666666666666666
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 2,
+          "tp": 11,
+          "fp": 7,
+          "fn": 21,
+          "precision": 0.6111111111111112,
+          "recall": 0.34375,
+          "f1": 0.44000000000000006,
+          "meanMatchedIoU": 0.8061603231448888,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "bicycle": {
+              "tp": 1,
+              "fp": 0,
+              "fn": 8,
+              "precision": 1,
+              "recall": 0.1111111111111111,
+              "f1": 0.19999999999999998
+            },
+            "bus": {
+              "tp": 1,
+              "fp": 2,
+              "fn": 2,
+              "precision": 0.3333333333333333,
+              "recall": 0.3333333333333333,
+              "f1": 0.3333333333333333
+            },
+            "car": {
+              "tp": 1,
+              "fp": 2,
+              "fn": 1,
+              "precision": 0.3333333333333333,
+              "recall": 0.5,
+              "f1": 0.4
+            },
+            "motorcycle": {
+              "tp": 6,
+              "fp": 3,
+              "fn": 8,
+              "precision": 0.6666666666666666,
+              "recall": 0.42857142857142855,
+              "f1": 0.5217391304347826
+            },
+            "truck": {
+              "tp": 2,
+              "fp": 0,
+              "fn": 2,
+              "precision": 1,
+              "recall": 0.5,
+              "f1": 0.6666666666666666
+            }
+          }
+        }
+      }
+    ],
+    "after-coco": [
+      {
+        "startupMs": 1818.699999999255,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "startup": {
+            "downloadMs": 601.8999999985099,
+            "modelBytes": 38012145,
+            "adapterMs": 30,
+            "runtimeImportMs": 46.900000002235174,
+            "sessionMs": 1066.8999999985099,
+            "validationMs": 0.10000000149011612,
+            "wasmThreads": 1
+          },
+          "fallbackReason": "No hardware adapter was available."
+        },
+        "isolated": false,
+        "firstFrameMs": 2052,
+        "warmWorkerMs": {
+          "p50": 1292.4,
+          "p95": 1292.4
+        },
+        "captureMs": {
+          "p50": 8.6,
+          "p95": 51.3
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 2,
+          "tp": 12,
+          "fp": 7,
+          "fn": 20,
+          "precision": 0.631578947368421,
+          "recall": 0.375,
+          "f1": 0.47058823529411764,
+          "meanMatchedIoU": 0.8052822709263466,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "bicycle": {
+              "tp": 1,
+              "fp": 0,
+              "fn": 8,
+              "precision": 1,
+              "recall": 0.1111111111111111,
+              "f1": 0.19999999999999998
+            },
+            "bus": {
+              "tp": 2,
+              "fp": 2,
+              "fn": 1,
+              "precision": 0.5,
+              "recall": 0.6666666666666666,
+              "f1": 0.5714285714285715
+            },
+            "car": {
+              "tp": 1,
+              "fp": 2,
+              "fn": 1,
+              "precision": 0.3333333333333333,
+              "recall": 0.5,
+              "f1": 0.4
+            },
+            "motorcycle": {
+              "tp": 6,
+              "fp": 3,
+              "fn": 8,
+              "precision": 0.6666666666666666,
+              "recall": 0.42857142857142855,
+              "f1": 0.5217391304347826
+            },
+            "truck": {
+              "tp": 2,
+              "fp": 0,
+              "fn": 2,
+              "precision": 1,
+              "recall": 0.5,
+              "f1": 0.6666666666666666
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 2,
+          "tp": 11,
+          "fp": 7,
+          "fn": 21,
+          "precision": 0.6111111111111112,
+          "recall": 0.34375,
+          "f1": 0.44000000000000006,
+          "meanMatchedIoU": 0.8061603231448888,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "bicycle": {
+              "tp": 1,
+              "fp": 0,
+              "fn": 8,
+              "precision": 1,
+              "recall": 0.1111111111111111,
+              "f1": 0.19999999999999998
+            },
+            "bus": {
+              "tp": 1,
+              "fp": 2,
+              "fn": 2,
+              "precision": 0.3333333333333333,
+              "recall": 0.3333333333333333,
+              "f1": 0.3333333333333333
+            },
+            "car": {
+              "tp": 1,
+              "fp": 2,
+              "fn": 1,
+              "precision": 0.3333333333333333,
+              "recall": 0.5,
+              "f1": 0.4
+            },
+            "motorcycle": {
+              "tp": 6,
+              "fp": 3,
+              "fn": 8,
+              "precision": 0.6666666666666666,
+              "recall": 0.42857142857142855,
+              "f1": 0.5217391304347826
+            },
+            "truck": {
+              "tp": 2,
+              "fp": 0,
+              "fn": 2,
+              "precision": 1,
+              "recall": 0.5,
+              "f1": 0.6666666666666666
+            }
+          }
+        }
+      }
+    ],
+    "nano-road": [
+      {
+        "startupMs": 1084.7999999998137,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "startup": {
+            "downloadMs": 117.1000000005588,
+            "modelBytes": 10741397,
+            "adapterMs": 0,
+            "runtimeImportMs": 43.299999999813735,
+            "sessionMs": 833.1999999992549,
+            "validationMs": 0.09999999962747097,
+            "wasmThreads": 1
+          },
+          "fallbackReason": ""
+        },
+        "isolated": false,
+        "firstFrameMs": 523.5,
+        "warmWorkerMs": {
+          "p50": 387.8,
+          "p95": 399
+        },
+        "captureMs": {
+          "p50": 11,
+          "p95": 20.5
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 13,
+          "fp": 0,
+          "fn": 12,
+          "precision": 1,
+          "recall": 0.52,
+          "f1": 0.6842105263157895,
+          "meanMatchedIoU": 0.8129236555757854,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "car": {
+              "tp": 13,
+              "fp": 0,
+              "fn": 7,
+              "precision": 1,
+              "recall": 0.65,
+              "f1": 0.787878787878788
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 5,
+          "tp": 13,
+          "fp": 0,
+          "fn": 12,
+          "precision": 1,
+          "recall": 0.52,
+          "f1": 0.6842105263157895,
+          "meanMatchedIoU": 0.8129236555757854,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 13,
+              "fp": 0,
+              "fn": 7,
+              "precision": 1,
+              "recall": 0.65,
+              "f1": 0.787878787878788
+            },
+            "truck": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          }
+        }
+      }
+    ],
+    "nano-overhead": [
+      {
+        "startupMs": 1043.2999999998137,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "startup": {
+            "downloadMs": 108,
+            "modelBytes": 10741397,
+            "adapterMs": 0,
+            "runtimeImportMs": 71.70000000018626,
+            "sessionMs": 795,
+            "validationMs": 0,
+            "wasmThreads": 1
+          },
+          "fallbackReason": ""
+        },
+        "isolated": false,
+        "firstFrameMs": 535.8000000007451,
+        "warmWorkerMs": {
+          "p50": 360.7,
+          "p95": 403.4
+        },
+        "captureMs": {
+          "p50": 3.7,
+          "p95": 12.1
+        },
+        "rawAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 18,
+          "tp": 2,
+          "fp": 1,
+          "fn": 30,
+          "precision": 0.6666666666666666,
+          "recall": 0.0625,
+          "f1": 0.11428571428571428,
+          "meanMatchedIoU": 0.917634381392098,
+          "duplicatePredictionPairs": 0,
+          "perClass": {
+            "bus": {
+              "tp": 0,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            },
+            "car": {
+              "tp": 2,
+              "fp": 0,
+              "fn": 30,
+              "precision": 1,
+              "recall": 0.0625,
+              "f1": 0.11764705882352941
+            }
+          }
+        },
+        "matchedTrackerAccuracy": {
+          "evaluationType": "annotation-comparison-not-real-world-validation",
+          "frames": 18,
+          "tp": 0,
+          "fp": 0,
+          "fn": 32,
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "meanMatchedIoU": 0,
+          "idSwitches": 0,
+          "duplicatePredictionPairs": 0,
+          "exitGhostFrames": 0,
+          "maxExitGhostSeconds": 0,
+          "perClass": {
+            "car": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 32,
+              "precision": 0,
+              "recall": 0,
+              "f1": 0
+            }
+          }
+        }
+      }
+    ],
+    "base-replay-final": [
+      {
+        "startupMs": 4969.5,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "fallbackReason": "No hardware adapter was available.",
+          "startup": {
+            "probeMs": 295.3999999985099,
+            "sessionAndDownloadMs": 4296.5
+          }
+        },
+        "isolated": false,
+        "firstFrameMs": 2707.5,
+        "warmWorkerMs": {
+          "p50": 1454,
+          "p95": 1547
+        },
+        "captureMs": {
+          "p50": 15.2,
+          "p95": 72.3
+        },
+        "replayAccuracy": [
+          {
+            "anchor": 6.44,
+            "evaluationType": "annotation-comparison-not-real-world-validation",
+            "frames": 6,
+            "tp": 9,
+            "fp": 12,
+            "fn": 21,
+            "precision": 0.42857142857142855,
+            "recall": 0.3,
+            "f1": 0.3529411764705882,
+            "meanMatchedIoU": 0.5790087148066502,
+            "idSwitches": 0,
+            "duplicatePredictionPairs": 0,
+            "exitGhostFrames": 0,
+            "maxExitGhostSeconds": 0,
+            "perClass": {
+              "car": {
+                "tp": 3,
+                "fp": 12,
+                "fn": 21,
+                "precision": 0.2,
+                "recall": 0.125,
+                "f1": 0.15384615384615385
+              },
+              "truck": {
+                "tp": 6,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1,
+                "recall": 1,
+                "f1": 1
+              }
+            }
+          },
+          {
+            "anchor": 6.92,
+            "evaluationType": "annotation-comparison-not-real-world-validation",
+            "frames": 6,
+            "tp": 18,
+            "fp": 6,
+            "fn": 12,
+            "precision": 0.75,
+            "recall": 0.6,
+            "f1": 0.6666666666666665,
+            "meanMatchedIoU": 0.6515597982198604,
+            "idSwitches": 0,
+            "duplicatePredictionPairs": 0,
+            "exitGhostFrames": 0,
+            "maxExitGhostSeconds": 0,
+            "perClass": {
+              "car": {
+                "tp": 12,
+                "fp": 6,
+                "fn": 12,
+                "precision": 0.6666666666666666,
+                "recall": 0.5,
+                "f1": 0.5714285714285715
+              },
+              "truck": {
+                "tp": 6,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1,
+                "recall": 1,
+                "f1": 1
+              }
+            }
+          },
+          {
+            "anchor": 7.4,
+            "evaluationType": "annotation-comparison-not-real-world-validation",
+            "frames": 6,
+            "tp": 18,
+            "fp": 0,
+            "fn": 12,
+            "precision": 1,
+            "recall": 0.6,
+            "f1": 0.7499999999999999,
+            "meanMatchedIoU": 0.7584636975597545,
+            "idSwitches": 0,
+            "duplicatePredictionPairs": 0,
+            "exitGhostFrames": 0,
+            "maxExitGhostSeconds": 0,
+            "perClass": {
+              "car": {
+                "tp": 12,
+                "fp": 0,
+                "fn": 12,
+                "precision": 1,
+                "recall": 0.5,
+                "f1": 0.6666666666666666
+              },
+              "truck": {
+                "tp": 6,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1,
+                "recall": 1,
+                "f1": 1
+              }
+            }
+          },
+          {
+            "anchor": 7.64,
+            "evaluationType": "annotation-comparison-not-real-world-validation",
+            "frames": 6,
+            "tp": 20,
+            "fp": 0,
+            "fn": 10,
+            "precision": 1,
+            "recall": 0.6666666666666666,
+            "f1": 0.8,
+            "meanMatchedIoU": 0.7750239850075565,
+            "idSwitches": 0,
+            "duplicatePredictionPairs": 0,
+            "exitGhostFrames": 0,
+            "maxExitGhostSeconds": 0,
+            "perClass": {
+              "car": {
+                "tp": 14,
+                "fp": 0,
+                "fn": 10,
+                "precision": 1,
+                "recall": 0.5833333333333334,
+                "f1": 0.7368421052631579
+              },
+              "truck": {
+                "tp": 6,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1,
+                "recall": 1,
+                "f1": 1
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "after-replay-final": [
+      {
+        "startupMs": 5983.89999999851,
+        "ready": {
+          "type": "ready",
+          "provider": "wasm",
+          "startup": {
+            "downloadMs": 1798.6000000014901,
+            "modelBytes": 38012145,
+            "adapterMs": 21.600000001490116,
+            "runtimeImportMs": 210.40000000223517,
+            "sessionMs": 3529.2000000029802,
+            "validationMs": 0.09999999776482582,
+            "wasmThreads": 1
+          },
+          "fallbackReason": "No hardware adapter was available."
+        },
+        "isolated": false,
+        "firstFrameMs": 4434.20000000298,
+        "warmWorkerMs": {
+          "p50": 3684.3,
+          "p95": 4731.9
+        },
+        "captureMs": {
+          "p50": 77.4,
+          "p95": 106.6
+        },
+        "replayAccuracy": [
+          {
+            "anchor": 6.44,
+            "evaluationType": "annotation-comparison-not-real-world-validation",
+            "frames": 6,
+            "tp": 18,
+            "fp": 0,
+            "fn": 12,
+            "precision": 1,
+            "recall": 0.6,
+            "f1": 0.7499999999999999,
+            "meanMatchedIoU": 0.5812603424686199,
+            "idSwitches": 0,
+            "duplicatePredictionPairs": 0,
+            "exitGhostFrames": 0,
+            "maxExitGhostSeconds": 0,
+            "perClass": {
+              "car": {
+                "tp": 12,
+                "fp": 0,
+                "fn": 12,
+                "precision": 1,
+                "recall": 0.5,
+                "f1": 0.6666666666666666
+              },
+              "truck": {
+                "tp": 6,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1,
+                "recall": 1,
+                "f1": 1
+              }
+            }
+          },
+          {
+            "anchor": 6.92,
+            "evaluationType": "annotation-comparison-not-real-world-validation",
+            "frames": 6,
+            "tp": 18,
+            "fp": 6,
+            "fn": 12,
+            "precision": 0.75,
+            "recall": 0.6,
+            "f1": 0.6666666666666665,
+            "meanMatchedIoU": 0.6499659227020885,
+            "idSwitches": 0,
+            "duplicatePredictionPairs": 0,
+            "exitGhostFrames": 0,
+            "maxExitGhostSeconds": 0,
+            "perClass": {
+              "car": {
+                "tp": 12,
+                "fp": 6,
+                "fn": 12,
+                "precision": 0.6666666666666666,
+                "recall": 0.5,
+                "f1": 0.5714285714285715
+              },
+              "truck": {
+                "tp": 6,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1,
+                "recall": 1,
+                "f1": 1
+              }
+            }
+          },
+          {
+            "anchor": 7.4,
+            "evaluationType": "annotation-comparison-not-real-world-validation",
+            "frames": 6,
+            "tp": 18,
+            "fp": 0,
+            "fn": 12,
+            "precision": 1,
+            "recall": 0.6,
+            "f1": 0.7499999999999999,
+            "meanMatchedIoU": 0.7761571031067906,
+            "idSwitches": 0,
+            "duplicatePredictionPairs": 0,
+            "exitGhostFrames": 0,
+            "maxExitGhostSeconds": 0,
+            "perClass": {
+              "car": {
+                "tp": 12,
+                "fp": 0,
+                "fn": 12,
+                "precision": 1,
+                "recall": 0.5,
+                "f1": 0.6666666666666666
+              },
+              "truck": {
+                "tp": 6,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1,
+                "recall": 1,
+                "f1": 1
+              }
+            }
+          },
+          {
+            "anchor": 7.64,
+            "evaluationType": "annotation-comparison-not-real-world-validation",
+            "frames": 6,
+            "tp": 20,
+            "fp": 0,
+            "fn": 10,
+            "precision": 1,
+            "recall": 0.6666666666666666,
+            "f1": 0.8,
+            "meanMatchedIoU": 0.8035919114511898,
+            "idSwitches": 0,
+            "duplicatePredictionPairs": 0,
+            "exitGhostFrames": 0,
+            "maxExitGhostSeconds": 0,
+            "perClass": {
+              "car": {
+                "tp": 14,
+                "fp": 0,
+                "fn": 10,
+                "precision": 1,
+                "recall": 0.5833333333333334,
+                "f1": 0.7368421052631579
+              },
+              "truck": {
+                "tp": 6,
+                "fp": 0,
+                "fn": 0,
+                "precision": 1,
+                "recall": 1,
+                "f1": 1
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "isolatedHighwayPlayback": {
+    "base": {
+      "start": {
+        "time": 9716.334999997169,
+        "frames": 4,
+        "dropped": 0,
+        "memory": 46683958
+      },
+      "frames": 482,
+      "dropped": 23,
+      "end": 30495.169999998063,
+      "memory": 57791903,
+      "mediaTime": 19.0665
+    },
+    "after": {
+      "start": {
+        "time": 5838.745000001043,
+        "frames": 4,
+        "dropped": 0,
+        "memory": 48103974
+      },
+      "frames": 480,
+      "dropped": 20,
+      "end": 24938.859999999404,
+      "memory": 60319420,
+      "mediaTime": 19.05
+    }
+  },
+  "isolatedAfterAppTrace": {
+    "provider": "wasm",
+    "crossOriginIsolated": true,
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+    "startup": {
+      "downloadMs": 343.78999999910593,
+      "modelBytes": 38012145,
+      "adapterMs": 50.62999999895692,
+      "runtimeImportMs": 128.9349999986589,
+      "sessionMs": 1415.550000000745,
+      "validationMs": 0.08500000089406967,
+      "wasmThreads": 2,
+      "totalMs": 2079.815000001341
+    },
+    "busyFrames": 217,
+    "inferenceCount": 10,
+    "playMs": 18843.875,
+    "droppedVideoFrames": 20,
+    "presentedVideoFrames": 452,
+    "pageJsHeapStartBytes": 50138822,
+    "pageJsHeapBytes": 62450184,
+    "firstWorkerFrameMs": 2272.630000002682,
+    "sampledWorkerFrames": 10,
+    "inferenceFps": 0.5306764134234598,
+    "playbackFps": 23.986573886740384,
+    "workerMs": {
+      "p50": 1679.7,
+      "p95": 2272.6
+    },
+    "warmWorkerMs": {
+      "p50": 1679.7,
+      "p95": 1868
+    },
+    "preprocessMs": {
+      "p50": 10,
+      "p95": 45.4
+    },
+    "modelRunMs": {
+      "p50": 1667.3,
+      "p95": 2203.8
+    },
+    "postprocessMs": {
+      "p50": 0.9,
+      "p95": 47.1
+    },
+    "captureMs": {
+      "p50": 11.7,
+      "p95": 82.3
+    },
+    "resultAgeMs": {
+      "p50": 1720,
+      "p95": 2200
+    },
+    "replayMs": {
+      "p50": 14.7,
+      "p95": 50.9
+    },
+    "overlayAgeMs": {
+      "p50": 0,
+      "p95": 40
+    }
+  }
+}

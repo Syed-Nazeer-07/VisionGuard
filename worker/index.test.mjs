@@ -52,3 +52,15 @@ test('unrelated routes continue to serve the original Vite single-page applicati
   } });
   assert.equal(await result.text(), 'ok');
 });
+
+test('revalidates a cached ONNX file with the host ETag and keeps a bodyless 304', async () => {
+  const request = new Request(address, { headers: { 'if-none-match': '"current"' } });
+  const result = await modelResponse(request, async (_url, options) => {
+    assert.equal(options.headers.get('if-none-match'), '"current"');
+    return new Response(null, { status: 304, headers: { etag: '"current"' } });
+  });
+  assert.equal(result.status, 304);
+  assert.equal(result.body, null);
+  assert.equal(result.headers.get('etag'), '"current"');
+  assert.equal(result.headers.get('cache-control'), 'public, max-age=3600');
+});

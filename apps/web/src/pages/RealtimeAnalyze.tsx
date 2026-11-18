@@ -18,6 +18,8 @@ import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
+import type { DetectorEvent, DetectorProvider, DetectorStartup } from '../pipeline/worker/detectorProtocol';
+import { describeBenchmark, pageJsHeapBytes, type FrameTiming } from '../services/detectorBenchmark';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
 import { hasAdvancedVideoFrame, isLiveFrameDiscontinuity, isStreamStalled, shouldPaintLiveOverlay } from '../services/streamRecovery';
@@ -37,13 +39,7 @@ const HISTORY_WINDOW = 3.5;
 const MAX_CAPTURE_WIDTH = 640;
 const WORKER_TIMEOUT_MS = 20_000;
 
-type WorkerEvent =
-  | { type: 'ready'; provider: string; fallbackReason?: string }
-  | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
-  | { type: 'skipped'; requestId: number; generation: number }
-  | { type: 'error'; requestId: number; generation: number; message: string };
-
-type DetectorState = 'idle' | 'loading' | 'ready' | 'error';
+type DetectorState = 'idle' | 'downloading' | 'initializing' | 'ready' | 'error';
 type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecting' | 'ended' | 'error';
 const STREAM_STALL_MS = 15_000;
 const BROWSER_CAMERA_SOURCE = 'visionguard:browser-camera';
@@ -60,10 +56,28 @@ type Observation = { time: number; tracks: LiveTrack[] };
 export default function RealtimeAnalyze({ active = true }: { active?: boolean }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const qualityEnabled = new URLSearchParams(location.search).get('quality') === '1';
-  const qualityEnabledRef = useRef(false);
-  qualityEnabledRef.current = qualityEnabled;
+  const search = new URLSearchParams(location.search);
+  const qualityEnabled = search.get('quality') === '1';
+  const preferredProvider = qualityEnabled && search.get('engine') === 'wasm' ? 'wasm' : 'auto';
+  const preferredProviderRef = useRef<DetectorProvider>(preferredProvider);
+  const recoverWithWasmRef = useRef(false);
+  const qualityEnabledRef = useRef(qualityEnabled);
+  useEffect(() => {
+    preferredProviderRef.current = preferredProvider;
+    qualityEnabledRef.current = qualityEnabled;
+  }, [preferredProvider, qualityEnabled]);
   const qualityFramesRef = useRef<QualityFrame[]>([]);
+  const timingsRef = useRef<FrameTiming[]>([]);
+  const benchmarkRef = useRef({
+    start: null as { frames: number; dropped: number; heap: number | null } | null,
+    previousMediaTime: null as number | null, lastFrameAt: null as number | null,
+    playMs: 0, busyFrames: 0, inferenceCount: 0
+  });
+  const startupWallRef = useRef(0);
+  const [startup, setStartup] = useState<(DetectorStartup & { totalMs: number }) | null>(null);
+  const previewRef = useRef<Observation | null>(null);
+  const [inspection, setInspection] = useState<'idle' | 'pending' | { candidates: number }>('idle');
+  const requestDetailsRef = useRef<{ preview: boolean; captureMs: number } | null>(null);
   const ownerId = useAuthStore(state => state.user?.id ?? null);
   const activeRunRef = useRef('');
   const currentFileRef = useRef<File | null>(null);
@@ -161,7 +175,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
     if (!frames.length || !currentFileRef.current) return;
-    const blob = new Blob([serializeQualityTrace(frames)], { type: 'application/json' });
+    const playback = videoRef.current?.getVideoPlaybackQuality();
+    const { start, busyFrames, inferenceCount, playMs } = benchmarkRef.current;
+    const droppedVideoFrames = playback && start ? playback.droppedVideoFrames - start.dropped : 0;
+    const presentedVideoFrames = playback && start ? playback.totalVideoFrames - start.frames - droppedVideoFrames : 0;
+    const report = describeBenchmark(startup, provider, timingsRef.current, frames, {
+      busyFrames, inferenceCount, playMs, droppedVideoFrames, presentedVideoFrames,
+      pageJsHeapStartBytes: start?.heap ?? null, pageJsHeapBytes: pageJsHeapBytes()
+    });
+    const blob = new Blob([serializeQualityTrace(frames, report)], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = href;
@@ -214,6 +236,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     speedHistoryRef.current.clear();
     autoIncidentDetectorRef.current.reset();
     qualityFramesRef.current = []; // A seek/source change invalidates timestamp alignment.
+    timingsRef.current = [];
+    benchmarkRef.current = { start: null, previousMediaTime: null, lastFrameAt: null, playMs: 0, busyFrames: 0, inferenceCount: 0 };
+    previewRef.current = null;
+    setInspection('idle');
     detectorToStableIdRef.current.clear();
     // Preserve increasing stable IDs within this run. A seek/reconnect must
     // not reuse #1 for an entirely different vehicle in the saved ledger.
@@ -238,7 +264,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (workerRef.current) return;
     inferenceErrorsRef.current = 0;
     captureErrorRef.current = false;
-    setDetector('loading');
+    setInspection('idle');
+    setDetector('downloading');
+    setStartup(null);
+    setProvider('');
+    setFallbackReason('');
+    startupWallRef.current = performance.now();
     setError('');
     let worker: Worker;
     try {
@@ -255,24 +286,32 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       worker.terminate();
       workerRef.current = null;
       clearInFlight();
+      recoverWithWasmRef.current = true;
       setDetector('error');
       setError('YOLO11s initialization timed out. Video playback remains available; retry detector.');
-    }, 45_000);
+    }, 90_000);
     initTimeoutRef.current = initTimeout;
 
-    worker.onmessage = (event: MessageEvent<WorkerEvent>) => {
+    worker.onmessage = (event: MessageEvent<DetectorEvent>) => {
       if (workerRef.current !== worker) return;
       const message = event.data;
+      if (message.type === 'loading') {
+        setDetector(message.stage);
+        return;
+      }
       if (message.type === 'ready') {
         clearTimeout(initTimeout);
+        initTimeoutRef.current = null;
         readyRef.current = true;
         setDetector('ready');
         setProvider(message.provider);
+        setStartup({ ...message.startup, totalMs: performance.now() - startupWallRef.current });
         setFallbackReason(message.fallbackReason || '');
         return;
       }
       if (message.type === 'error' && message.requestId === -1) {
         clearTimeout(initTimeout);
+        initTimeoutRef.current = null;
         worker.terminate();
         workerRef.current = null;
         readyRef.current = false;
@@ -282,13 +321,45 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         return;
       }
       if (!('requestId' in message) || !matchesFrameRequest(inFlightIdRef.current, message.requestId)) return;
+      const details = requestDetailsRef.current;
+      requestDetailsRef.current = null;
       clearInFlight();
       if (message.generation !== generationRef.current) return;
+      const video = videoRef.current;
+      if (details?.preview) {
+        setInspection('idle');
+        if (message.type === 'error') setError('Could not inspect frame: ' + message.message);
+        if (message.type !== 'result' || !video?.paused || video.seeking ||
+            Math.abs(message.mediaTime - video.currentTime) > .025 || !activeRef.current) return;
+        previewRef.current = {
+          time: message.mediaTime,
+          tracks: (message.detections ?? []).map((box, index): PersistentTrack => ({
+            ...box, id: -index - 1, confidence: box.prob, vx: 0, vy: 0,
+            motionPxPerSec: null, speedKmh: null, speedIsEstimate: true, lastDetectedAt: message.mediaTime
+          }))
+        };
+        setInspection({ candidates: message.detectionCount });
+        return;
+      }
       if (message.type === 'result') {
         inferenceErrorsRef.current = 0;
         setError(previous => previous.startsWith('Frame inference error:') ? '' : previous);
-        const video = videoRef.current;
         if (!video || video.seeking || !activeRef.current) return;
+        let sample: FrameTiming | null = null;
+        if (qualityEnabledRef.current) {
+          const stats = benchmarkRef.current;
+          stats.inferenceCount++;
+          if (timingsRef.current.length < 1200) {
+            sample = {
+              inferenceMs: message.inferenceMs, modelRunMs: message.modelRunMs,
+              preprocessMs: message.preprocessMs, postprocessMs: message.postprocessMs,
+              captureMs: details?.captureMs ?? 0,
+              resultAgeMs: Math.max(0, ((presentedMediaTimeRef.current ?? video.currentTime) - message.mediaTime) * 1000),
+              replayMs: null
+            };
+            timingsRef.current.push(sample);
+          }
+        }
         // Results belong to the exact original media time, not wall-clock time.
         const completions = completionTimesRef.current;
         completions.push(performance.now());
@@ -335,6 +406,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }
         // Catch delayed YOLO results up to the present video frame. One weak
         // optical sample must not delete the entire vehicle trajectory.
+        const replayStarted = sample ? performance.now() : 0;
         let corrected: PersistentTrack[] = message.tracks.map(t => ({
           ...t, lastDetectedAt: message.mediaTime, lastOpticalAt: message.mediaTime,
           speedKmh: null, speedIsEstimate: true
@@ -346,10 +418,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             history[i].sourceWidth, history[i].sourceHeight
           );
         }
+        if (sample) sample.replayMs = performance.now() - replayStarted;
         const latestTime = history[history.length - 1].time;
         const merged = reconcileVehicles(
           flowTracksRef.current, corrected, latestTime, nextStableIdRef.current,
-          detectorToStableIdRef.current
+          detectorToStableIdRef.current, message.mediaTime
         );
         nextStableIdRef.current = merged.nextId;
         const assignments = detectorToStableIdRef.current;
@@ -388,6 +461,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       } else if (message.type === 'error') {
         inferenceErrorsRef.current += 1;
         if (shouldStopAfterInferenceErrors(inferenceErrorsRef.current)) {
+          recoverWithWasmRef.current = true;
           worker.terminate();
           workerRef.current = null;
           readyRef.current = false;
@@ -401,14 +475,80 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     worker.onerror = event => {
       clearTimeout(initTimeout);
       if (workerRef.current !== worker) return;
+      initTimeoutRef.current = null;
       worker.terminate();
       workerRef.current = null;
       readyRef.current = false;
       clearInFlight();
+      requestDetailsRef.current = null;
+      recoverWithWasmRef.current = true;
+      latestRef.current = null;
+      flowTracksRef.current = [];
+      setInspection('idle');
       setDetector('error');
       setError('Detector worker crashed: ' + (event.message || 'unknown error'));
     };
-    worker.postMessage({ type: 'init', modelPath: MODEL_PATH });
+    worker.postMessage({
+      type: 'init', modelPath: MODEL_PATH,
+      provider: recoverWithWasmRef.current ? 'wasm' : preferredProviderRef.current
+    });
+  }, [clearInFlight]);
+
+  const submitFrame = useCallback((video: HTMLVideoElement, mediaTime: number, preview = false) => {
+    const worker = workerRef.current;
+    if (!worker || !readyRef.current || busyRef.current) return false;
+    busyRef.current = true;
+    const generation = generationRef.current;
+    const requestId = ++messageIdRef.current;
+    inFlightIdRef.current = requestId;
+    requestDetailsRef.current = { preview, captureMs: 0 };
+    const captureStarted = performance.now();
+    const sourceWidth = video.videoWidth;
+    const sourceHeight = video.videoHeight;
+    inFlightTimeoutRef.current = window.setTimeout(() => {
+      if (inFlightIdRef.current !== requestId) return;
+      clearInFlight();
+      requestDetailsRef.current = null;
+      recoverWithWasmRef.current = true;
+      if (preview) setInspection('idle');
+      worker.terminate();
+      if (workerRef.current === worker) workerRef.current = null;
+      readyRef.current = false;
+      setDetector('error');
+      latestRef.current = null;
+      flowTracksRef.current = [];
+      setError('Detector stalled for 20 seconds. Playback continues; use Retry detector.');
+    }, WORKER_TIMEOUT_MS);
+    void captureInferenceBitmap(video, MAX_CAPTURE_WIDTH).then(bitmap => {
+      if (generation !== generationRef.current || video.seeking || videoRef.current !== video ||
+          !activeRef.current || video.paused !== preview || workerRef.current !== worker) {
+        bitmap.close();
+        if (inFlightIdRef.current === requestId) {
+          requestDetailsRef.current = null;
+          clearInFlight();
+          if (preview) setInspection('idle');
+        }
+        return;
+      }
+      if (requestDetailsRef.current) requestDetailsRef.current.captureMs = performance.now() - captureStarted;
+      try {
+        worker.postMessage({
+          type: 'frame', bitmap, requestId, generation, mediaTime, sourceWidth, sourceHeight, preview
+        }, [bitmap]);
+      } catch (error) {
+        bitmap.close();
+        throw error;
+      }
+    }).catch(error => {
+      if (inFlightIdRef.current !== requestId) return;
+      clearInFlight();
+      requestDetailsRef.current = null;
+      if (preview) setInspection('idle');
+      else captureErrorRef.current = true;
+      setError('Could not capture a decoded video frame for AI: ' + String(error));
+      if (webcamRef.current) setStreamHealth('error');
+    });
+    return true;
   }, [clearInFlight]);
 
   const attachVideo = useCallback((
@@ -812,6 +952,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     readyRef.current = false;
     setDetector('idle');
     setProvider('');
+    setStartup(null);
     setFallbackReason('');
     setAnalyzedFrames(0);
     setInferenceMs(null);
@@ -1206,6 +1347,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           !video.videoWidth || !video.videoHeight || video.paused || video.seeking ||
           video.ended || video.readyState < 2 || !Number.isFinite(mediaTime)) return;
 
+      if (qualityEnabledRef.current && readyRef.current) {
+        const stats = benchmarkRef.current;
+        if (!stats.start) {
+          const quality = video.getVideoPlaybackQuality();
+          stats.start = { frames: quality.totalVideoFrames, dropped: quality.droppedVideoFrames, heap: pageJsHeapBytes() };
+        }
+        const now = performance.now();
+        if (stats.lastFrameAt !== null) stats.playMs += now - stats.lastFrameAt;
+        if (stats.previousMediaTime !== mediaTime && busyRef.current) stats.busyFrames++;
+        stats.lastFrameAt = now;
+        stats.previousMediaTime = mediaTime;
+      }
       const canInfer = readyRef.current && !busyRef.current &&
         mediaTime - lastCapturedTimeRef.current >= MIN_CAPTURE_INTERVAL;
       // Sample the exact media frame submitted to the worker as well as
@@ -1290,46 +1443,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
       if (!canInfer || captureErrorRef.current) return;
       lastCapturedTimeRef.current = mediaTime;
-      const worker = workerRef.current;
-      if (!worker) return;
-      busyRef.current = true;
-      const generation = generationRef.current;
-      const requestId = ++messageIdRef.current;
-      inFlightIdRef.current = requestId;
-      const sourceWidth = video.videoWidth;
-      const sourceHeight = video.videoHeight;
-      void captureInferenceBitmap(video, MAX_CAPTURE_WIDTH).then(bitmap => {
-        if (stopped || generation !== generationRef.current || video.seeking ||
-            !activeRef.current || video.paused || workerRef.current !== worker) {
-          bitmap.close();
-          if (inFlightIdRef.current === requestId) clearInFlight();
-          return;
-        }
-        inFlightTimeoutRef.current = window.setTimeout(() => {
-          if (inFlightIdRef.current !== requestId) return;
-          clearInFlight();
-          worker.terminate();
-          if (workerRef.current === worker) workerRef.current = null;
-          readyRef.current = false;
-          setDetector('error');
-          latestRef.current = null;
-          setError('Detector stalled for 20 seconds. Playback continues; use Retry detector.');
-        }, WORKER_TIMEOUT_MS);
-        try {
-          worker.postMessage({
-            type: 'frame', bitmap, requestId, generation, mediaTime, sourceWidth, sourceHeight
-          }, [bitmap]);
-        } catch (error) {
-          bitmap.close();
-          throw error;
-        }
-      }).catch(error => {
-        if (inFlightIdRef.current !== requestId) return;
-        clearInFlight();
-        captureErrorRef.current = true;
-        setError('Could not capture a decoded video frame for AI: ' + String(error));
-        if (webcamRef.current) setStreamHealth('error');
-      });
+      submitFrame(video, mediaTime);
     };
 
     const schedule = () => {
@@ -1357,7 +1471,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   // Rebind callbacks when the media element is recreated for a HLS retry or
   // a different saved source with the same URL. Otherwise AI continues
   // sampling an orphaned video node while the new video plays untracked.
-  }, [url, webcamActive, tabCaptureActive, clearInFlight]);
+  }, [url, webcamActive, tabCaptureActive, submitFrame]);
 
   // Paint each display frame using optical positions from the most recent
   // decoded video frame; hide boxes immediately when tracking loses them.
@@ -1383,7 +1497,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         const height = canvas.clientHeight;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const staticFrame = video.paused && !video.seeking && !captureKindRef.current;
-        const observation = latestRef.current;
+        const preview = staticFrame && previewRef.current !== null;
+        const observation = preview ? previewRef.current : latestRef.current;
         if (staticFrame && pausedFrame?.time === video.currentTime && pausedFrame.observation === observation &&
             pausedFrame.width === width && pausedFrame.height === height && pausedFrame.dpr === dpr) {
           animation = requestAnimationFrame(render);
@@ -1402,23 +1517,23 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (context) {
           context.clearRect(0, 0, canvas.width, canvas.height);
           if (observation && video.videoWidth && video.videoHeight &&
-              !video.seeking && !video.ended &&
-              shouldPaintLiveOverlay(
+              !video.seeking && (preview || !video.ended) &&
+              (preview || shouldPaintLiveOverlay(
                 captureKindRef.current, time, lastPresentedAtRef.current,
                 { paused: video.paused, ended: video.ended, seeking: video.seeking },
                 captureStalledRef.current
-              )) {
+              ))) {
             const frameWidth = video.videoWidth;
             const frameHeight = video.videoHeight;
             const displayedTime = displayedVideoMediaTime(
               video.currentTime, presentedMediaTimeRef.current, video.paused, video.seeking
             );
-            const tracks = projectLiveTracks(
+            const tracks = preview ? observation.tracks as PersistentTrack[] : projectLiveTracks(
               observation.tracks, observation.time, displayedTime, frameWidth, frameHeight
             ) as PersistentTrack[];
             visibleTracks = paintLiveOverlay(context, tracks,
               { width: frameWidth, height: frameHeight }, { width, height, dpr },
-              labelAnchorsRef.current, time, { boxes: showBoxes, labels: showLabels });
+              labelAnchorsRef.current, time, { boxes: showBoxes, labels: showLabels, candidates: preview });
             if (showBoxes && visibleTracks.length) overlayAgeMs = Math.round(Math.max(0, displayedTime - observation.time) * 1000);
           }
         }
@@ -1437,7 +1552,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           setPosition(video.currentTime);
           const latestSpeed = fastestVisibleEstimate(visibleTracks);
           setLiveMaxSpeed(previous => previous === latestSpeed ? previous : latestSpeed);
-          const observed = visibleTracks.filter(track => !track.isPredicted);
+          const observed = preview ? [] : visibleTracks.filter(track => !track.isPredicted);
           if (paintCountRef.current !== observed.length) {
             paintCountRef.current = observed.length;
             setVisibleCount(observed.length);
@@ -1585,9 +1700,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="vg-analysis-stage-head">
           <span><ScanLine size={15} aria-hidden="true" /> Video and tracking</span>
           <span className="vg-analysis-engine-state" role="status">
-            <i aria-hidden="true" data-state={detector} />
+            <i aria-hidden="true" data-state={detector === 'downloading' || detector === 'initializing' ? 'loading' : detector} />
             {detector === 'ready' ? 'Detector ready' :
-              detector === 'loading' ? 'Loading YOLO11s' :
+              detector === 'downloading' ? 'Downloading model…' :
+              detector === 'initializing' ? 'Initializing detector…' :
               detector === 'error' ? 'Detector unavailable' : 'Awaiting inference'}
           </span>
         </div>
@@ -1618,6 +1734,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   startDetector();
                 }}
                 onPlay={() => {
+                  previewRef.current = null;
+                  setInspection('idle');
                   setPlaying(true);
                   startDetector();
                 }}
@@ -1642,6 +1760,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   }
                 }}
                 onPause={event => {
+                  benchmarkRef.current.previousMediaTime = null;
+                  benchmarkRef.current.lastFrameAt = null;
                   setPlaying(false);
                   setPerformanceStats(previous => ({ ...previous, inferenceFps: null, playbackFps: null }));
                   if (!webcamActive && !tabCaptureActive && !cloudPlaybackActive && ownerId)
@@ -1698,12 +1818,27 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <div className="vg-analysis-player-footer flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="vg-analysis-source-title truncate">{filename}</div>
+              {typeof inspection === 'object' && <p className="vg-analysis-source-meta" role="status">
+                Frame inspection · {inspection.candidates} detector candidates
+              </p>}
               <div className="vg-analysis-source-meta">
                 {tabCaptureActive ? 'Live browser tab' :
                   webcamActive ? 'Live camera' : readableTime(position) + ' / ' + readableTime(duration)}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {!playing && !webcamActive && !tabCaptureActive && readyVideo && detector === 'ready' &&
+                <button type="button" className="vg-analysis-player-button" disabled={inspection === 'pending'}
+                  onClick={() => {
+                    const video = videoRef.current;
+                    if (!video?.paused || video.seeking) return;
+                    if (submitFrame(video, video.currentTime, true)) {
+                      setInspection('pending');
+                      setError('');
+                    } else setError('The detector is finishing the previous frame. Try again in a moment.');
+                  }}>
+                  <ScanLine size={14}/> {inspection === 'pending' ? 'Inspecting…' : 'Inspect frame'}
+                </button>}
               <button type="button" onClick={() => void toggleFullscreen()}
                 className="vg-analysis-player-button" aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
                 {isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
@@ -1727,7 +1862,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
       {showTelemetry && <LiveTelemetry detections={detectionCount} tracks={visibleCount}
         classes={visibleClasses} fastest={liveMaxSpeed} frames={analyzedFrames}
-        provider={provider} fallbackReason={fallbackReason} latency={inferenceMs} {...performanceStats}/>}
+        provider={provider} fallbackReason={fallbackReason} latency={inferenceMs} startup={startup} {...performanceStats}/>}
       </div>
 
       <fieldset className="vg-analysis-display vg-panel">

@@ -116,3 +116,6 @@ speed measurements without the corresponding model, data and validation.
 
 See the [overhaul verification](VISIONGUARD_OVERHAUL_QA.md) for model validation,
 paired browser excerpts, runtime measurements, and remaining release gates.
+
+For fixed-frame detection, controlled optical replay, startup timing, and
+Windows ARM reproduction, use the [browser detector verification](VISIONGUARD_DETECTOR_QA.md).
