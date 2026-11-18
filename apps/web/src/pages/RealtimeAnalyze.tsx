@@ -152,6 +152,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [syncedPlayback, setSyncedPlayback] = useState(false);
   const [analysisRate, setAnalysisRate] = useState(1);
   const syncedPlaybackRef = useRef(false);
+  const resumeSyncedPlaybackRef = useRef(false);
   syncedPlaybackRef.current = syncedPlayback;
   const [visibleClasses, setVisibleClasses] = useState<Record<string, number>>({});
   const completionTimesRef = useRef<number[]>([]);
@@ -189,6 +190,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       ? INITIAL_SYNC_PLAYBACK_RATE : 1;
     video.playbackRate = rate;
     setAnalysisRate(rate);
+    if (!syncedPlayback && resumeSyncedPlaybackRef.current) {
+      // The user chose native playback while waiting for model readiness.
+      resumeSyncedPlaybackRef.current = false;
+      void video.play().catch(() => {});
+    }
   }, [syncedPlayback, url, webcamActive, tabCaptureActive]);
 
   const downloadQualityTrace = () => {
@@ -324,6 +330,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         initTimeoutRef.current = null;
         readyRef.current = true;
         setDetector('ready');
+        // A recorded source in Sync mode should not run ahead of a cold
+        // model download. Resume exactly once after real ONNX readiness.
+        if (resumeSyncedPlaybackRef.current) {
+          resumeSyncedPlaybackRef.current = false;
+          const recordedVideo = videoRef.current;
+          if (syncedPlaybackRef.current && !captureKindRef.current && recordedVideo &&
+              !recordedVideo.ended && !recordedVideo.seeking) {
+            void recordedVideo.play().catch(() => {});
+          }
+        }
         setProvider(message.provider);
         setStartup({ ...message.startup, totalMs: performance.now() - startupWallRef.current });
         setFallbackReason(message.fallbackReason || '');
@@ -337,6 +353,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         readyRef.current = false;
         clearInFlight();
         setDetector('error');
+        resumeSyncedPlaybackRef.current = false;
         setError('YOLO11s could not start: ' + message.message);
         return;
       }
@@ -1757,9 +1774,18 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   }
                   startDetector();
                 }}
-                onPlay={() => {
+                onPlay={event => {
                   previewRef.current = null;
                   setInspection('idle');
+                  if (syncedPlaybackRef.current && !readyRef.current && !captureKindRef.current) {
+                    // Keep the opening frames available while a large ONNX
+                    // model downloads. User can turn Sync off to play normally.
+                    resumeSyncedPlaybackRef.current = true;
+                    event.currentTarget.pause();
+                    setPlaying(false);
+                    startDetector();
+                    return;
+                  }
                   setPlaying(true);
                   startDetector();
                 }}
@@ -1904,7 +1930,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             Sync video to AI {syncedPlayback && <span>({analysisRate.toFixed(2)}×)</span>}
           </label>}
         {syncedPlayback && url && !webcamActive && !tabCaptureActive &&
-          <small role="status">Recorded playback slows to match the detector. Turn off Sync for normal speed.</small>}
+          <small role="status">Recorded playback waits for detector readiness, then slows to match inference. Turn off Sync for normal speed.</small>}
         {showBoxes && <small>Dashed boxes indicate predicted positions.</small>}
       </fieldset>
 
