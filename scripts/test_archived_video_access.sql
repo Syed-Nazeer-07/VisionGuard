@@ -69,6 +69,8 @@ begin
   if not exists (select 1 from storage.objects where bucket_id = 'videos' and name = 'qa/owner.mp4') then
     raise exception 'Operator cannot access archived footage for review';
   end if;
+  update public.video_assets set filename = 'fixture-modified.mp4' where id = '325cacab-24c6-4ba6-b720-6ad618000011';
+  if found then raise exception 'Operator updated another owner''s asset'; end if;
   delete from storage.objects where bucket_id = 'videos' and name = 'qa/owner.mp4';
   if found then raise exception 'Operator deleted another owner''s object'; end if;
   delete from public.video_assets where id = '325cacab-24c6-4ba6-b720-6ad618000011';

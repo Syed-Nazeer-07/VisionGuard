@@ -4,6 +4,10 @@ drop policy if exists "Authenticated users can read video_assets" on public.vide
 drop policy if exists "Authenticated users can insert video_assets" on public.video_assets;
 drop policy if exists "Authenticated users can update video_assets" on public.video_assets;
 drop policy if exists "Owners and supervisors can delete video_assets" on public.video_assets;
+-- Staging already has some owner scoping under different policy names.
+-- Permissive PostgreSQL policies combine with OR, so replace both variants.
+drop policy if exists "Video asset creation requires ownership" on public.video_assets;
+drop policy if exists "Video asset updates require ownership or staff" on public.video_assets;
 
 create policy "Owners and staff can read video assets"
   on public.video_assets for select to authenticated
@@ -32,6 +36,10 @@ drop policy if exists "Videos are publicly accessible" on storage.objects;
 drop policy if exists "Authenticated users can upload videos" on storage.objects;
 drop policy if exists "Authenticated users can update their videos" on storage.objects;
 drop policy if exists "Authenticated users can delete their videos" on storage.objects;
+drop policy if exists "Videos require authorized reader" on storage.objects;
+drop policy if exists "Video storage inserts require asset owner" on storage.objects;
+drop policy if exists "Video storage updates require asset owner" on storage.objects;
+drop policy if exists "Video storage deletions require asset owner" on storage.objects;
 
 -- Storage's recorded owner is independent of editable video metadata.
 -- Ownerless historical objects remain available to authorized review staff.
