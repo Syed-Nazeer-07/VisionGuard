@@ -17,7 +17,7 @@ import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
-import { INITIAL_SYNC_PLAYBACK_RATE, recommendedSyncPlaybackRate, shouldHoldRecordedPlayback } from '../services/syncedPlayback';
+import { INITIAL_SYNC_PLAYBACK_RATE, recommendedSyncPlaybackRate, shouldHoldRecordedPlayback, shouldLockRecordedInference } from '../services/syncedPlayback';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import type { DetectorEvent, DetectorProvider, DetectorStartup } from '../pipeline/worker/detectorProtocol';
 import { describeBenchmark, pageJsHeapBytes, recentInferenceFps, type FrameTiming } from '../services/detectorBenchmark';
@@ -80,7 +80,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [startup, setStartup] = useState<(DetectorStartup & { totalMs: number }) | null>(null);
   const previewRef = useRef<Observation | null>(null);
   const [inspection, setInspection] = useState<'idle' | 'pending' | { candidates: number }>('idle');
-  const requestDetailsRef = useRef<{ preview: boolean; captureMs: number } | null>(null);
+  const requestDetailsRef = useRef<{ preview: boolean; captureMs: number; locked: boolean } | null>(null);
   const ownerId = useAuthStore(state => state.user?.id ?? null);
   const activeRunRef = useRef('');
   const currentFileRef = useRef<File | null>(null);
@@ -151,6 +151,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [showTelemetry, setShowTelemetry] = useState(true);
   const [syncedPlayback, setSyncedPlayback] = useState(false);
   const [analysisRate, setAnalysisRate] = useState(1);
+  const [frameLocked, setFrameLocked] = useState(false);
+  const [frameHeld, setFrameHeld] = useState(false);
+  const frameLockedRef = useRef(false);
+  const frameHoldRef = useRef(false);
+  frameLockedRef.current = frameLocked;
   const syncedPlaybackRef = useRef(false);
   const resumeSyncedPlaybackRef = useRef(false);
   syncedPlaybackRef.current = syncedPlayback;
@@ -186,23 +191,30 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    const rate = syncedPlayback && !webcamActive && !tabCaptureActive
+    const rate = syncedPlayback && !frameLocked && !webcamActive && !tabCaptureActive
       ? INITIAL_SYNC_PLAYBACK_RATE : 1;
     video.playbackRate = rate;
     setAnalysisRate(rate);
-    if (syncedPlayback && !readyRef.current && !webcamActive && !tabCaptureActive &&
+    if ((syncedPlayback || frameLocked) && !readyRef.current && !webcamActive && !tabCaptureActive &&
         !video.paused && !video.ended) {
       // Sync may be enabled AFTER playback has already started; stop the
       // source clock until the detector can inspect its current frame.
       resumeSyncedPlaybackRef.current = true;
       video.pause();
     }
-    if (!syncedPlayback && resumeSyncedPlaybackRef.current) {
+    if (!frameLocked && frameHoldRef.current) {
+      frameHoldRef.current = false;
+      setFrameHeld(false);
+      if (activeRef.current && video.paused && !video.ended && !video.seeking) {
+        void video.play().catch(() => {});
+      }
+    }
+    if (!syncedPlayback && !frameLocked && resumeSyncedPlaybackRef.current) {
       // The user chose native playback while waiting for model readiness.
       resumeSyncedPlaybackRef.current = false;
       void video.play().catch(() => {});
     }
-  }, [syncedPlayback, url, webcamActive, tabCaptureActive]);
+  }, [syncedPlayback, frameLocked, url, webcamActive, tabCaptureActive]);
 
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
@@ -257,6 +269,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   const resetTracks = useCallback(() => {
     generationRef.current += 1;
+    frameHoldRef.current = false;
+    setFrameHeld(false);
     resumeSyncedPlaybackRef.current = false;
     lastDecodedMediaTimeRef.current = null;
     presentedMediaTimeRef.current = null;
@@ -292,6 +306,22 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     // Do not release an in-flight request here. It must finish or time out;
     // otherwise two GPU sessions could infer concurrently on different frames.
     workerRef.current?.postMessage({ type: 'reset' });
+  }, []);
+
+  const releaseFrameHold = useCallback((resume: boolean, capturedGeneration: number) => {
+    if (!frameHoldRef.current) return;
+    frameHoldRef.current = false;
+    setFrameHeld(false);
+    if (!resume || !frameLockedRef.current) return;
+    // Keep the detected frame visible briefly before advancing. A seek,
+    // source switch, route change or mode change cancels delayed autoplay.
+    window.setTimeout(() => {
+      const video = videoRef.current;
+      if (!frameLockedRef.current || !activeRef.current || !readyRef.current ||
+          captureKindRef.current || generationRef.current !== capturedGeneration ||
+          !video || video.seeking || video.ended) return;
+      if (video.paused) void video.play().catch(() => {});
+    }, 160);
   }, []);
 
   const startDetector = useCallback(() => {
