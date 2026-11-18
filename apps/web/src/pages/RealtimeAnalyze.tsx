@@ -1814,7 +1814,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 className="h-full w-full object-contain"
                 onLoadedMetadata={event => {
                   setDuration(event.currentTarget.duration);
-                  event.currentTarget.playbackRate = syncedPlayback && !webcamActive && !tabCaptureActive
+                  event.currentTarget.playbackRate = syncedPlayback && !frameLocked && !webcamActive && !tabCaptureActive
                      ? INITIAL_SYNC_PLAYBACK_RATE : 1;
                 }}
                 onLoadedData={event => {
@@ -1832,10 +1832,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   startDetector();
                 }}
                 onPlay={event => {
+                  if (frameHoldRef.current) {
+                    event.currentTarget.pause();
+                    return;
+                  }
                   previewRef.current = null;
                   setInspection('idle');
                   if (shouldHoldRecordedPlayback(
-                    syncedPlaybackRef.current, readyRef.current, Boolean(captureKindRef.current)
+                    syncedPlaybackRef.current || frameLockedRef.current,
+                    readyRef.current, Boolean(captureKindRef.current)
                   )) {
                     // Keep the opening frames available while a large ONNX
                     // model downloads. User can turn Sync off to play normally.
@@ -1845,6 +1850,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                     startDetector();
                     return;
                   }
+                  setFrameHeld(false);
                   setPlaying(true);
                   startDetector();
                 }}
@@ -1869,6 +1875,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   }
                 }}
                 onPause={event => {
+                  // Frame locking is not a user-initiated pause. Keep inference
+                  // counters intact while YOLO processes this same frame.
+                  if (frameHoldRef.current) return;
                   benchmarkRef.current.previousMediaTime = null;
                   benchmarkRef.current.lastFrameAt = null;
                   completionTimesRef.current = [];
@@ -1905,7 +1914,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   ) : webcamActive ? (
                     streamHealth === 'playing' ? 'CAMERA LIVE' :
                     streamHealth === 'buffering' ? 'CAMERA BUFFERING' : 'STARTING CAMERA'
-                  ) : readyVideo ? (playing ? 'PLAYING VIDEO' : 'PAUSED') : 'OPENING VIDEO'}
+                  ) : frameHeld ? 'ANALYZING FRAME' : readyVideo ? (playing ? 'PLAYING VIDEO' : 'PAUSED') : 'OPENING VIDEO'}
                 </span>
               </div>
               <button type="button" onClick={() => void toggleFullscreen()}
@@ -1985,9 +1994,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <label><input type="checkbox" checked={showTelemetry} onChange={event => setShowTelemetry(event.target.checked)}/> Telemetry</label>
         {url && !webcamActive && !tabCaptureActive &&
           <label title="Trade playback speed for more detector updates on recorded footage. Live camera and browser tabs are unaffected.">
-            <input type="checkbox" checked={syncedPlayback} onChange={event => setSyncedPlayback(event.target.checked)}/>
+            <input type="checkbox" checked={syncedPlayback} onChange={event => {
+              setSyncedPlayback(event.target.checked);
+              if (event.target.checked) setFrameLocked(false);
+            }}/>
             Sync video to AI {syncedPlayback && <span>({analysisRate.toFixed(2)}×)</span>}
           </label>}
+        {url && !webcamActive && !tabCaptureActive &&
+          <label title="Hold recorded frames while the detector runs. Much slower than normal playback but prevents stale results caused by slow inference.">
+            <input type="checkbox" checked={frameLocked} onChange={event => {
+              setFrameLocked(event.target.checked);
+              if (event.target.checked) setSyncedPlayback(false);
+            }}/> Frame-locked analysis
+          </label>}
+        {frameLocked && url && !webcamActive && !tabCaptureActive &&
+          <small role="status">Accuracy-first: hold each recorded frame during inference, then advance. This is slower and cannot correct model classification errors.</small>}
         {syncedPlayback && url && !webcamActive && !tabCaptureActive &&
           <small role="status">Recorded playback waits for detector readiness, then slows to match inference. Turn off Sync for normal speed.</small>}
         {showBoxes && <small>Dashed boxes indicate predicted positions.</small>}
