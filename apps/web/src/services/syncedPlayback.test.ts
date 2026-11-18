@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   INITIAL_SYNC_PLAYBACK_RATE, MIN_SYNC_PLAYBACK_RATE,
-  recommendedSyncPlaybackRate, shouldHoldRecordedPlayback,
+  recommendedSyncPlaybackRate, shouldHoldRecordedPlayback, shouldLockRecordedInference,
 } from './syncedPlayback';
 
 describe('recorded-video detector-synchronized playback', () => {
@@ -27,6 +27,14 @@ describe('recorded-video detector-synchronized playback', () => {
     expect(shouldHoldRecordedPlayback(false, false, false)).toBe(false);
     expect(shouldHoldRecordedPlayback(true, true, false)).toBe(false);
     expect(shouldHoldRecordedPlayback(true, false, true)).toBe(false);
+  });
+
+  it('locks only active recorded-video inference, never live capture or frame inspection', () => {
+    expect(shouldLockRecordedInference(true, false, false, false)).toBe(true);
+    expect(shouldLockRecordedInference(false, false, false, false)).toBe(false);
+    expect(shouldLockRecordedInference(true, true, false, false)).toBe(false);
+    expect(shouldLockRecordedInference(true, false, true, false)).toBe(false);
+    expect(shouldLockRecordedInference(true, false, false, true)).toBe(false);
   });
 
   it('uses a safe bounded rate when timing is invalid', () => {
