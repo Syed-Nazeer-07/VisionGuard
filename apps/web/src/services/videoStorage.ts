@@ -61,6 +61,7 @@ function errorText(e: unknown): string {
 // -----------------------------------------------------------------------------------------------
 const SUPABASE_BUCKET = 'videos'
 const TUS_CHUNK_SIZE = 6 * 1024 * 1024 // required by Supabase resumable uploads
+const ARCHIVE_PLAYBACK_TTL_SECONDS = 6 * 60 * 60
 
 const supabaseProvider: VideoStorageProvider = {
   id: 'supabase',
@@ -115,12 +116,18 @@ const supabaseProvider: VideoStorageProvider = {
 
   async getVideoUrl(asset) {
     if (!asset.storage_path) throw new VideoUnavailableError('not_uploaded', 'This video has no stored file.')
-    const { data } = supabase.storage.from(SUPABASE_BUCKET).getPublicUrl(asset.storage_path)
-    if (!data?.publicUrl) throw new VideoUnavailableError('object_missing', 'Could not resolve the stored file URL.')
-    return data.publicUrl
+    const { data, error } = await supabase.storage.from(SUPABASE_BUCKET)
+      .createSignedUrl(asset.storage_path, ARCHIVE_PLAYBACK_TTL_SECONDS)
+    if (error || !data?.signedUrl) {
+      throw new VideoUnavailableError('object_missing', 'The archived video is missing or your account cannot access it.')
+    }
+    return data.signedUrl
   },
 
   async deleteVideo(asset) {
+    if (asset.storage_path && !asset.storage_path.startsWith(asset.id + '/')) {
+      throw new Error('The archived file path does not belong to this video. Ask an administrator to review it.')
+    }
     const { data, error } = await supabase.from('video_assets').delete().eq('id', asset.id).select('id')
     if (error) throw new Error(error.message)
     if (!data || data.length === 0) throw new Error('not permitted (only the uploader or a Supervisor/Admin can delete)')
@@ -332,20 +339,18 @@ export function uploadStorageProvider(): VideoStorageProvider {
  * Deletes a video asset with cascade cleanup of its durable analysis artifacts.
  */
 export async function deleteVideoWithArtifacts(video: Pick<VideoAsset, 'id' | 'storage_path' | 'storage_provider' | 'metadata'>): Promise<void> {
-  const meta = (video.metadata && typeof video.metadata === 'object' && !Array.isArray(video.metadata) ? video.metadata : {}) as Record<string, any>;
-  const artifactPath = meta.artifact_storage_path;
-  const artifactBucket = meta.artifact_bucket || 'videos';
-  if (artifactPath && typeof artifactPath === 'string') {
-    try {
-      await supabase.storage.from(artifactBucket).remove([artifactPath]);
-    } catch (e) {
-      console.warn('Failed to remove artifact from storage:', e);
-    }
+  if (video.storage_provider === 'b2') {
+    await b2Provider.deleteVideo(video)
+    return
   }
-  try {
-    await supabase.storage.from('videos').remove([`artifacts/${video.id}/results.json.gz`]);
-  } catch {}
-
-  // Delete via provider (which deletes video file + deletes video_assets row cascading everything)
-  await storageProviderFor(video).deleteVideo(video);
+  const meta = (video.metadata && typeof video.metadata === 'object' && !Array.isArray(video.metadata) ? video.metadata : {}) as Record<string, any>;
+  const directory = `artifacts/${video.id}/`;
+  const artifacts = new Set([directory + 'results.json.gz']);
+  if ((!meta.artifact_bucket || meta.artifact_bucket === SUPABASE_BUCKET) &&
+      typeof meta.artifact_storage_path === 'string' && meta.artifact_storage_path.startsWith(directory)) {
+    artifacts.add(meta.artifact_storage_path);
+  }
+  await supabaseProvider.deleteVideo(video);
+  const { error } = await supabase.storage.from(SUPABASE_BUCKET).remove([...artifacts]);
+  if (error) console.warn('Archived analysis artifact cleanup was incomplete.');
 }

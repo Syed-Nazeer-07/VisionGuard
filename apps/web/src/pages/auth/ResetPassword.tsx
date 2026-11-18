@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { CheckCircle2, LockKeyhole } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase, supabaseConfig } from '../../lib/supabase';
 import { AuthCardLayout } from '../../components/auth/AuthCardLayout';
 
@@ -17,6 +17,7 @@ const resetSchema = z.object({
 type ResetForm = z.infer<typeof resetSchema>;
 
 export function ResetPassword() {
+  const navigate = useNavigate();
   const [ready, setReady] = useState(false);
   const [verifying, setVerifying] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -66,6 +67,22 @@ export function ResetPassword() {
     }
   };
 
+  const continueToSignIn = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      // A recovery callback creates a real session. End only that browser's
+      // session before navigation so /login doesn't redirect to the workspace.
+      const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' });
+      if (signOutError) throw signOutError;
+      navigate('/login', { replace: true });
+    } catch {
+      setError('Your password was saved, but this browser could not sign out. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return <AuthCardLayout title="Choose a new password"
     subtitle="Secure your account with a new password. The reset link must still be valid.">
     {error && <div role="alert" className="mb-5 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
@@ -73,7 +90,9 @@ export function ResetPassword() {
       <div role="status" className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
         <CheckCircle2 size={20}/> Your password has been updated successfully.
       </div>
-      <Link to="/login" className="vg-primary w-full">Continue to sign in</Link>
+      <button type="button" className="vg-primary w-full" disabled={loading} onClick={() => void continueToSignIn()}>
+        {loading ? 'Signing out…' : 'Continue to sign in'}
+      </button>
     </div> : verifying ?
       <p role="status" className="text-sm text-slate-500">Checking your reset link…</p> :
       !ready ? <div className="space-y-4">
