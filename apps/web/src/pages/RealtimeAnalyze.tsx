@@ -17,7 +17,7 @@ import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
-import { INITIAL_SYNC_PLAYBACK_RATE, recommendedSyncPlaybackRate } from '../services/syncedPlayback';
+import { INITIAL_SYNC_PLAYBACK_RATE, recommendedSyncPlaybackRate, shouldHoldRecordedPlayback } from '../services/syncedPlayback';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import type { DetectorEvent, DetectorProvider, DetectorStartup } from '../pipeline/worker/detectorProtocol';
 import { describeBenchmark, pageJsHeapBytes, recentInferenceFps, type FrameTiming } from '../services/detectorBenchmark';
@@ -250,6 +250,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
 
   const resetTracks = useCallback(() => {
     generationRef.current += 1;
+    resumeSyncedPlaybackRef.current = false;
     lastDecodedMediaTimeRef.current = null;
     presentedMediaTimeRef.current = null;
     lastPresentedAtRef.current = 0;
@@ -335,7 +336,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (resumeSyncedPlaybackRef.current) {
           resumeSyncedPlaybackRef.current = false;
           const recordedVideo = videoRef.current;
-          if (syncedPlaybackRef.current && !captureKindRef.current && recordedVideo &&
+          if (syncedPlaybackRef.current && !captureKindRef.current && activeRef.current && recordedVideo &&
               !recordedVideo.ended && !recordedVideo.seeking) {
             void recordedVideo.play().catch(() => {});
           }
@@ -1777,7 +1778,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 onPlay={event => {
                   previewRef.current = null;
                   setInspection('idle');
-                  if (syncedPlaybackRef.current && !readyRef.current && !captureKindRef.current) {
+                  if (shouldHoldRecordedPlayback(
+                    syncedPlaybackRef.current, readyRef.current, Boolean(captureKindRef.current)
+                  )) {
                     // Keep the opening frames available while a large ONNX
                     // model downloads. User can turn Sync off to play normally.
                     resumeSyncedPlaybackRef.current = true;
