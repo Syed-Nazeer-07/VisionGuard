@@ -17,6 +17,7 @@ import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
+import { startupTimeoutMs, shouldRetryStartupOnWasm } from '../services/detectorStartupPolicy';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
@@ -150,6 +151,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [playing, setPlaying] = useState(false);
   const [detector, setDetector] = useState<DetectorState>('idle');
   const [modelProgress, setModelProgress] = useState<{ receivedBytes: number; totalBytes: number | null } | null>(null);
+  const [usingCpuFallback, setUsingCpuFallback] = useState(false);
   const [provider, setProvider] = useState('');
   const [inferenceMs, setInferenceMs] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(0);
@@ -246,6 +248,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     readyRef.current = false;
     setDetector('downloading');
     setModelProgress(null);
+    setUsingCpuFallback(recoverWithWasmRef.current);
     setError('');
     let worker: Worker;
     try {
@@ -273,7 +276,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         workerRef.current = null;
         clearInFlight();
         initTimeoutRef.current = null;
-        if (stage === 'initializing' && !recoverWithWasmRef.current) {
+        if (shouldRetryStartupOnWasm(stage, recoverWithWasmRef.current)) {
           recoverWithWasmRef.current = true;
           setError('WebGPU initialization was unresponsive. Retrying with CPU/WASM.');
           restartDetectorRef.current();
@@ -283,7 +286,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         setError(stage === 'downloading'
           ? 'YOLO model download did not finish. Check your connection and retry.'
           : 'YOLO initialization timed out even with CPU/WASM. Retry or check browser console errors.');
-      }, stage === 'downloading' ? 70_000 : 30_000);
+      }, startupTimeoutMs(stage));
     };
     armStartupTimeout('downloading');
 
@@ -1645,7 +1648,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 ? 'Downloading YOLO11s ' + (modelProgress.receivedBytes / 1048576).toFixed(1) + ' MB' +
                   (modelProgress.totalBytes ? ' / ' + (modelProgress.totalBytes / 1048576).toFixed(1) + ' MB' : '')
                 : 'Connecting to YOLO11s model…') :
-              detector === 'initializing' ? 'Initializing YOLO11s…' :
+              detector === 'initializing' ? (usingCpuFallback ? 'Initializing YOLO11s on CPU…' : 'Initializing YOLO11s with GPU…') :
               detector === 'error' ? 'Detector unavailable' : 'Awaiting inference'}
           </span>
         </div>
