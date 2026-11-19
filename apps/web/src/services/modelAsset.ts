@@ -24,7 +24,7 @@ export async function downloadModelAsset(
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
   if (contentType.includes('text/html') || contentType.includes('application/json')) {
     void response.body?.cancel().catch(() => {});
-    throw new Error('The model URL returned an HTML page or JSON response instead of ONNX weights.');
+    throw new Error('The model URL returned a web page or API response instead of ONNX weights.');
   }
 
   const sizeHeader = Number(response.headers.get('content-length'));
