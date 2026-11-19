@@ -25,6 +25,26 @@ describe('detector model download', () => {
       .rejects.toThrow('API response');
   });
 
+  it('reports actual streamed bytes without assuming Content-Length is provided', async () => {
+    const chunks = [new Uint8Array(1024).fill(8), new Uint8Array(1024).fill(8)];
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) { for (const chunk of chunks) controller.enqueue(chunk); controller.close(); }
+    });
+    const updates: Array<[number, number | null]> = [];
+    const result = await downloadModelAsset(model,
+      async () => new Response(stream, { headers: { 'content-type': 'application/octet-stream' } }),
+      (received, total) => updates.push([received, total]));
+    expect(result.byteLength).toBe(2048);
+    expect(updates).toEqual([[1024, null], [2048, null]]);
+  });
+
+  it('refuses oversized model responses before buffering the weights', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(null, { headers: { 'content-length': String(129 * 1024 * 1024) } })
+    );
+    await expect(downloadModelAsset(model, fetcher)).rejects.toThrow('maximum size');
+  });
+
   it('distinguishes connectivity failures and interrupted response bodies', async () => {
     await expect(downloadModelAsset(model, async () => { throw new TypeError('network'); }))
       .rejects.toThrow('connection');
