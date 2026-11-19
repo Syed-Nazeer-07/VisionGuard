@@ -1639,7 +1639,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="vg-analysis-stage-head">
           <span><ScanLine size={15} aria-hidden="true" /> Video and tracking</span>
           <span className="vg-analysis-engine-state" role="status">
-            <i aria-hidden="true" data-state={detector} />
+            <i aria-hidden="true" data-state={detector === 'downloading' || detector === 'initializing' ? 'loading' : detector} />
             {detector === 'ready' ? 'Detector ready' :
               detector === 'downloading' ? (modelProgress
                 ? 'Downloading YOLO11s ' + (modelProgress.receivedBytes / 1048576).toFixed(1) + ' MB' +
