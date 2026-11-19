@@ -37,8 +37,18 @@ async function initialize(message: Extract<DetectorRequest, { type: 'init' }>) {
   if (runtime || initializing) return;
   initializing = true;
   try {
-    runtime = await openTrafficSession(message.modelPath, message.provider ?? 'auto', stage =>
-      send({ type: 'loading', stage }));
+    let lastNotified = 0;
+    runtime = await openTrafficSession(message.modelPath, message.provider ?? 'auto',
+      stage => send({ type: 'loading', stage }),
+      (receivedBytes, totalBytes) => {
+        // 1 MiB increments keep cross-thread telemetry light while exposing
+        // genuine download activity instead of an endless spinner.
+        if (receivedBytes - lastNotified >= 1024 * 1024 ||
+            (totalBytes !== null && receivedBytes >= totalBytes)) {
+          lastNotified = receivedBytes;
+          send({ type: 'progress', receivedBytes, totalBytes });
+        }
+      });
     const { provider, startup, fallbackReason } = runtime;
     send({ type: 'ready', provider, startup, fallbackReason });
   } catch (error) {
