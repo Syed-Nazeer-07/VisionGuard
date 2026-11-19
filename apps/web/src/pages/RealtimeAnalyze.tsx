@@ -858,21 +858,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
   }, [clearInFlight]);
 
-  useEffect(() => {
-    if (url || !workerRef.current) return;
-    if (initTimeoutRef.current !== null) clearTimeout(initTimeoutRef.current);
-    initTimeoutRef.current = null;
-    clearInFlight();
-    workerRef.current.terminate();
-    workerRef.current = null;
-    readyRef.current = false;
-    setDetector('idle');
-    setModelProgress(null);
-    setProvider('');
-    setFallbackReason('');
-    setAnalyzedFrames(0);
-    setInferenceMs(null);
-  }, [url, clearInFlight]);
+  // Keep the initialized ONNX worker alive while this analysis workspace is
+  // mounted, even when its current video is closed. The prior url='' effect
+  // terminated it on every source change, forcing a fresh 36 MB model download.
+  // resetTracks() already clears per-video tracking state; the unconditional
+  // unmount cleanup above still terminates the worker on navigation/sign-out.
 
   const acceptFile = async (file: File) => {
     if (!/\.(mp4|m4v|webm|mov|mkv)$/i.test(file.name) && !file.type.startsWith('video/')) {
