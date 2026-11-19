@@ -13,6 +13,10 @@ const require = createRequire(import.meta.url)
 const ortPackagePath = path.resolve(path.dirname(require.resolve('onnxruntime-web')), '..', 'package.json')
 const ortVersion = JSON.parse(fs.readFileSync(ortPackagePath, 'utf8')).version as string
 const ortWasmCdnBase = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVersion}/dist/`
+const benchmarkHeaders = process.env.VISIONGUARD_BENCH_ISOLATION === '1' ? {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+} : undefined
 
 /**
  * Dev server: serves ONNX Runtime Web's WebAssembly artifacts straight from the installed
@@ -21,9 +25,7 @@ const ortWasmCdnBase = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ortVersio
  * index.html (which is what produced "expected magic word 00 61 73 6d, found 3c 21 64 6f").
  * The worker points `env.wasm.wasmPaths` at '/' in dev only.
  *
- * Production builds need no plugin: Vite resolves ORT's own
- * `new URL('ort-wasm-simd-threaded.jsep.wasm', import.meta.url)` and emits the matching binary as a
- * hashed asset under /assets.
+ * The production CPU runtime uses its bundled, hashed WASM asset.
  */
 function onnxRuntimeWasmDevPlugin(): Plugin {
   // The package entry Node resolves (dist/ort.node.min.js) lives alongside the runtime artifacts.
@@ -52,6 +54,10 @@ function onnxRuntimeWasmDevPlugin(): Plugin {
         res.setHeader('Content-Length', fs.statSync(filePath).size)
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
         res.setHeader('Cache-Control', 'no-cache')
+        // The WASM module is also the entry point for Emscripten's nested workers.
+        for (const [header, value] of Object.entries(benchmarkHeaders ?? {})) {
+          res.setHeader(header, value)
+        }
         fs.createReadStream(filePath).pipe(res)
       })
     },
@@ -66,15 +72,19 @@ export default defineConfig({
   plugins: [onnxRuntimeWasmDevPlugin(), react(), tailwindcss()],
   optimizeDeps: {
     // Pre-bundling relocates ORT's module and breaks its import.meta.url-relative loading.
-    exclude: ['onnxruntime-web', 'onnxruntime-web/webgpu'],
+    exclude: ['onnxruntime-web', 'onnxruntime-web/webgpu', 'onnxruntime-web/wasm'],
   },
+  worker: { format: 'es' },
   server: {
     host: '0.0.0.0',
     port: 3000,
     strictPort: true,
     allowedHosts: true,
     hmr: false,
+    // Opt-in parity with the production headers for local WASM thread benchmarks.
+    headers: benchmarkHeaders,
   },
+  preview: { headers: benchmarkHeaders },
   test: {
     environment: 'happy-dom',
     // Run both logic tests and React component (.tsx) smoke tests.
