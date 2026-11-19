@@ -498,7 +498,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const inspectPausedFrame = async () => {
     const video = videoRef.current;
     const worker = workerRef.current;
-    if (!video || !worker || !readyRef.current || busyRef.current ||
+    if (busyRef.current) {
+      setError('The detector is finishing its previous frame. Try inspecting again shortly.');
+      return;
+    }
+    if (!video || !worker || !readyRef.current ||
         captureKindRef.current || !video.paused || video.seeking ||
         !video.videoWidth || !video.videoHeight || !activeRef.current) return;
 
