@@ -27,6 +27,7 @@ async function getAdapter(provider: DetectorProvider) {
 export async function openTrafficSession(
   path: string, preferredProvider: DetectorProvider,
   onStage: (stage: 'downloading' | 'initializing') => void,
+  onProgress?: (receivedBytes: number, totalBytes: number | null) => void,
 ): Promise<{
   session: InferenceSession; Tensor: typeof Tensor;
   provider: 'webgpu' | 'wasm'; startup: DetectorStartup; fallbackReason: string;
@@ -34,7 +35,7 @@ export async function openTrafficSession(
   onStage('downloading');
   const downloadStarted = clock();
   const [asset, selection] = await Promise.all([
-    downloadModelAsset(path).then(bytes => {
+    downloadModelAsset(path, fetch, onProgress).then(bytes => {
       onStage('initializing');
       return { bytes, downloadMs: clock() - downloadStarted };
     }),
