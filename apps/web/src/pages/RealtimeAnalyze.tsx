@@ -17,6 +17,7 @@ import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
+import { startupTimeoutMs, shouldRetryStartupOnWasm } from '../services/detectorStartupPolicy';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
@@ -38,12 +39,14 @@ const MAX_CAPTURE_WIDTH = 640;
 const WORKER_TIMEOUT_MS = 20_000;
 
 type WorkerEvent =
+  | { type: 'loading'; stage: 'downloading' | 'initializing' }
+  | { type: 'progress'; receivedBytes: number; totalBytes: number | null }
   | { type: 'ready'; provider: string; fallbackReason?: string }
   | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
   | { type: 'skipped'; requestId: number; generation: number }
   | { type: 'error'; requestId: number; generation: number; message: string };
 
-type DetectorState = 'idle' | 'loading' | 'ready' | 'error';
+type DetectorState = 'idle' | 'downloading' | 'initializing' | 'ready' | 'error';
 type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecting' | 'ended' | 'error';
 const STREAM_STALL_MS = 15_000;
 const BROWSER_CAMERA_SOURCE = 'visionguard:browser-camera';
@@ -105,6 +108,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const workerRef = useRef<Worker | null>(null);
   const readyRef = useRef(false);
   const initTimeoutRef = useRef<number | null>(null);
+  const recoverWithWasmRef = useRef(false);
+  const restartDetectorRef = useRef<() => void>(() => {});
   const busyRef = useRef(false);
   const inFlightIdRef = useRef<number | null>(null);
   const inFlightTimeoutRef = useRef<number | null>(null);
@@ -145,6 +150,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [position, setPosition] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [detector, setDetector] = useState<DetectorState>('idle');
+  const [modelProgress, setModelProgress] = useState<{ receivedBytes: number; totalBytes: number | null } | null>(null);
+  const [usingCpuFallback, setUsingCpuFallback] = useState(false);
   const [provider, setProvider] = useState('');
   const [inferenceMs, setInferenceMs] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(0);
@@ -238,7 +245,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (workerRef.current) return;
     inferenceErrorsRef.current = 0;
     captureErrorRef.current = false;
-    setDetector('loading');
+    readyRef.current = false;
+    setDetector('downloading');
+    setModelProgress(null);
+    setUsingCpuFallback(recoverWithWasmRef.current);
     setError('');
     let worker: Worker;
     try {
@@ -249,22 +259,55 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       return;
     }
     workerRef.current = worker;
-    const initTimeout = window.setTimeout(() => {
+    // Separate network/model-download timeout from ONNX runtime initialization.
+    // On browsers whose WebGPU initialization stalls (including some ARM
+    // systems), automatically retry once with the CPU/WASM execution provider.
+    let startupStage: 'downloading' | 'initializing' = 'downloading';
+    const stopStartupTimer = () => {
+      if (initTimeoutRef.current !== null) window.clearTimeout(initTimeoutRef.current);
       initTimeoutRef.current = null;
-      if (readyRef.current || workerRef.current !== worker) return;
-      worker.terminate();
-      workerRef.current = null;
-      clearInFlight();
-      setDetector('error');
-      setError('YOLO11s initialization timed out. Video playback remains available; retry detector.');
-    }, 45_000);
-    initTimeoutRef.current = initTimeout;
+    };
+    const armStartupTimeout = (stage: 'downloading' | 'initializing') => {
+      startupStage = stage;
+      stopStartupTimer();
+      initTimeoutRef.current = window.setTimeout(() => {
+        if (workerRef.current !== worker || readyRef.current) return;
+        worker.terminate();
+        workerRef.current = null;
+        clearInFlight();
+        initTimeoutRef.current = null;
+        if (shouldRetryStartupOnWasm(stage, recoverWithWasmRef.current)) {
+          recoverWithWasmRef.current = true;
+          setError('WebGPU initialization was unresponsive. Retrying with CPU/WASM.');
+          restartDetectorRef.current();
+          return;
+        }
+        setDetector('error');
+        setError(stage === 'downloading'
+          ? 'YOLO model download did not finish. Check your connection and retry.'
+          : 'YOLO initialization timed out even with CPU/WASM. Retry or check browser console errors.');
+      }, startupTimeoutMs(stage));
+    };
+    armStartupTimeout('downloading');
 
     worker.onmessage = (event: MessageEvent<WorkerEvent>) => {
       if (workerRef.current !== worker) return;
       const message = event.data;
+      if (message.type === 'loading') {
+        setDetector(message.stage);
+        if (message.stage !== startupStage) armStartupTimeout(message.stage);
+        return;
+      }
+      if (message.type === 'progress') {
+        setModelProgress({ receivedBytes: message.receivedBytes, totalBytes: message.totalBytes });
+        // Only abort a download after *no* progress, not while it is slowly
+        // transferring. The model is tens of megabytes on first visit.
+        if (startupStage === 'downloading') armStartupTimeout('downloading');
+        return;
+      }
       if (message.type === 'ready') {
-        clearTimeout(initTimeout);
+        stopStartupTimer();
+        setModelProgress(null);
         readyRef.current = true;
         setDetector('ready');
         setProvider(message.provider);
@@ -272,7 +315,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         return;
       }
       if (message.type === 'error' && message.requestId === -1) {
-        clearTimeout(initTimeout);
+        stopStartupTimer();
         worker.terminate();
         workerRef.current = null;
         readyRef.current = false;
@@ -399,7 +442,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       }
     };
     worker.onerror = event => {
-      clearTimeout(initTimeout);
+      stopStartupTimer();
       if (workerRef.current !== worker) return;
       worker.terminate();
       workerRef.current = null;
@@ -408,8 +451,21 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       setDetector('error');
       setError('Detector worker crashed: ' + (event.message || 'unknown error'));
     };
-    worker.postMessage({ type: 'init', modelPath: MODEL_PATH });
+    worker.postMessage({ type: 'init', modelPath: MODEL_PATH,
+      provider: recoverWithWasmRef.current ? 'wasm' : 'auto' });
   }, [clearInFlight]);
+  restartDetectorRef.current = startDetector;
+
+  const retryDetectorOnCpu = () => {
+    if (initTimeoutRef.current !== null) clearTimeout(initTimeoutRef.current);
+    initTimeoutRef.current = null;
+    workerRef.current?.terminate();
+    workerRef.current = null;
+    readyRef.current = false;
+    clearInFlight();
+    recoverWithWasmRef.current = true;
+    startDetector();
+  };
 
   const attachVideo = useCallback((
     file: Blob, name: string, savedPosition = 0, restoredRunId?: string
@@ -811,6 +867,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     workerRef.current = null;
     readyRef.current = false;
     setDetector('idle');
+    setModelProgress(null);
     setProvider('');
     setFallbackReason('');
     setAnalyzedFrames(0);
@@ -1585,9 +1642,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <div className="vg-analysis-stage-head">
           <span><ScanLine size={15} aria-hidden="true" /> Video and tracking</span>
           <span className="vg-analysis-engine-state" role="status">
-            <i aria-hidden="true" data-state={detector} />
+            <i aria-hidden="true" data-state={detector === 'downloading' || detector === 'initializing' ? 'loading' : detector} />
             {detector === 'ready' ? 'Detector ready' :
-              detector === 'loading' ? 'Loading YOLO11s' :
+              detector === 'downloading' ? (modelProgress
+                ? 'Downloading YOLO11s ' + (modelProgress.receivedBytes / 1048576).toFixed(1) + ' MB' +
+                  (modelProgress.totalBytes ? ' / ' + (modelProgress.totalBytes / 1048576).toFixed(1) + ' MB' : '')
+                : 'Connecting to YOLO11s model…') :
+              detector === 'initializing' ? (usingCpuFallback ? 'Initializing YOLO11s on CPU…' : 'Initializing YOLO11s with GPU…') :
               detector === 'error' ? 'Detector unavailable' : 'Awaiting inference'}
           </span>
         </div>
@@ -1709,10 +1770,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 {isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
                 {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
               </button>
-              {detector === 'error' && <button type="button" onClick={startDetector}
+              {detector === 'error' && <button type="button" onClick={() => startDetector()}
                 className="vg-analysis-player-button">
                 <RefreshCw size={14} /> Retry detector
               </button>}
+              {(detector === 'downloading' || detector === 'initializing' || detector === 'error') &&
+                <button type="button" onClick={retryDetectorOnCpu}
+                  className="vg-analysis-player-button">
+                  <RefreshCw size={14} /> Use CPU fallback
+                </button>}
               {!webcamActive && !tabCaptureActive && <button type="button" onClick={() => {
                 const video = videoRef.current;
                 if (video?.paused) void video.play().catch(e => setError(String(e)));
