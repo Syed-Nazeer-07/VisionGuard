@@ -15,7 +15,7 @@ export async function downloadModelAsset(
   try {
     response = await fetcher(path, { credentials: 'omit', mode: 'cors' });
   } catch (cause) {
-    throw new Error('Could not download the ONNX model. Check connectivity and the model URL/CORS settings.', { cause });
+    throw new Error('Could not download the ONNX model. Check your connection and the model URL/CORS settings.', { cause });
   }
   if (!response.ok || response.status === 206) {
     void response.body?.cancel().catch(() => {});
