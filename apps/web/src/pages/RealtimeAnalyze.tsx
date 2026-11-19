@@ -41,6 +41,7 @@ const WORKER_TIMEOUT_MS = 20_000;
 type WorkerEvent =
   | { type: 'loading'; stage: 'downloading' | 'initializing' }
   | { type: 'progress'; receivedBytes: number; totalBytes: number | null }
+  | { type: 'cache-hit'; modelBytes: number }
   | { type: 'ready'; provider: string; fallbackReason?: string }
   | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
   | { type: 'skipped'; requestId: number; generation: number }
@@ -151,6 +152,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [playing, setPlaying] = useState(false);
   const [detector, setDetector] = useState<DetectorState>('idle');
   const [modelProgress, setModelProgress] = useState<{ receivedBytes: number; totalBytes: number | null } | null>(null);
+  const [modelCacheHit, setModelCacheHit] = useState(false);
   const [usingCpuFallback, setUsingCpuFallback] = useState(false);
   const [provider, setProvider] = useState('');
   const [inferenceMs, setInferenceMs] = useState<number | null>(null);
@@ -248,6 +250,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     readyRef.current = false;
     setDetector('downloading');
     setModelProgress(null);
+    setModelCacheHit(false);
     setUsingCpuFallback(recoverWithWasmRef.current);
     setError('');
     let worker: Worker;
@@ -296,6 +299,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (message.type === 'loading') {
         setDetector(message.stage);
         if (message.stage !== startupStage) armStartupTimeout(message.stage);
+        return;
+      }
+      if (message.type === 'cache-hit') {
+        setModelCacheHit(true);
         return;
       }
       if (message.type === 'progress') {
@@ -858,21 +865,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
   }, [clearInFlight]);
 
-  useEffect(() => {
-    if (url || !workerRef.current) return;
-    if (initTimeoutRef.current !== null) clearTimeout(initTimeoutRef.current);
-    initTimeoutRef.current = null;
-    clearInFlight();
-    workerRef.current.terminate();
-    workerRef.current = null;
-    readyRef.current = false;
-    setDetector('idle');
-    setModelProgress(null);
-    setProvider('');
-    setFallbackReason('');
-    setAnalyzedFrames(0);
-    setInferenceMs(null);
-  }, [url, clearInFlight]);
+  // Keep the initialized ONNX worker alive while this analysis workspace is
+  // mounted, even when its current video is closed. The prior url='' effect
+  // terminated it on every source change, forcing a fresh 36 MB model download.
+  // resetTracks() already clears per-video tracking state; the unconditional
+  // unmount cleanup above still terminates the worker on navigation/sign-out.
 
   const acceptFile = async (file: File) => {
     if (!/\.(mp4|m4v|webm|mov|mkv)$/i.test(file.name) && !file.type.startsWith('video/')) {
@@ -1648,7 +1645,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 ? 'Downloading YOLO11s ' + (modelProgress.receivedBytes / 1048576).toFixed(1) + ' MB' +
                   (modelProgress.totalBytes ? ' / ' + (modelProgress.totalBytes / 1048576).toFixed(1) + ' MB' : '')
                 : 'Connecting to YOLO11s model…') :
-              detector === 'initializing' ? (usingCpuFallback ? 'Initializing YOLO11s on CPU…' : 'Initializing YOLO11s with GPU…') :
+              detector === 'initializing' ? (modelCacheHit ? 'Initializing cached YOLO11s…' :
+                usingCpuFallback ? 'Initializing YOLO11s on CPU…' : 'Initializing YOLO11s with GPU…') :
               detector === 'error' ? 'Detector unavailable' : 'Awaiting inference'}
           </span>
         </div>

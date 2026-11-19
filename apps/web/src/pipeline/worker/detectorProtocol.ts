@@ -33,6 +33,7 @@ export type DetectorRequest =
 export type DetectorEvent =
   | { type: 'loading'; stage: 'downloading' | 'initializing' }
   | { type: 'progress'; receivedBytes: number; totalBytes: number | null }
+  | { type: 'cache-hit'; modelBytes: number }
   | { type: 'ready'; provider: string; fallbackReason?: string; startup: DetectorStartup }
   | {
       type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[];

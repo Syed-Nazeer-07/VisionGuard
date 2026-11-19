@@ -48,7 +48,8 @@ async function initialize(message: Extract<DetectorRequest, { type: 'init' }>) {
           lastNotified = receivedBytes;
           send({ type: 'progress', receivedBytes, totalBytes });
         }
-      });
+      },
+      modelBytes => send({ type: 'cache-hit', modelBytes }));
     const { provider, startup, fallbackReason } = runtime;
     send({ type: 'ready', provider, startup, fallbackReason });
   } catch (error) {

@@ -1,3 +1,5 @@
+import { readCachedModel, writeCachedModel, type ModelCacheStorageLike } from './modelCache';
+
 /**
  * Fetch an ONNX model once with observable download progress. Do not issue a
  * separate HEAD or byte-range probe: some model hosts reject them, and model
@@ -10,7 +12,14 @@ export async function downloadModelAsset(
   path: string,
   fetcher: typeof fetch = fetch,
   onProgress?: ModelProgress,
+  onCacheHit?: (modelBytes: number) => void,
+  cacheStorage: ModelCacheStorageLike | null = typeof caches !== 'undefined' ? caches : null,
 ): Promise<Uint8Array<ArrayBuffer>> {
+  const cached = await readCachedModel(path, cacheStorage);
+  if (cached) {
+    onCacheHit?.(cached.byteLength);
+    return cached;
+  }
   let response: Response;
   try {
     response = await fetcher(path, { credentials: 'omit', mode: 'cors' });
@@ -74,5 +83,8 @@ export async function downloadModelAsset(
   if (bytes.length < 1024 || header.startsWith('<') || header.startsWith('{')) {
     throw new Error('The model download is incomplete or is not an ONNX binary.');
   }
+  // Save once per browser/model version, not once per uploaded video. Cache
+  // writes may fail (private browsing/storage quota) without blocking YOLO.
+  await writeCachedModel(path, bytes, cacheStorage);
   return bytes;
 }
