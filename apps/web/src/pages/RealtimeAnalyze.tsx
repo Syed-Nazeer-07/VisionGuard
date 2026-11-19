@@ -16,6 +16,8 @@ import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
+import { inspectionTracks, isCurrentPausedInspection } from '../services/frameInspection';
+import type { BoundingBox } from '../pipeline/types';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
 import { startupTimeoutMs, shouldRetryStartupOnWasm } from '../services/detectorStartupPolicy';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
@@ -43,7 +45,7 @@ type WorkerEvent =
   | { type: 'progress'; receivedBytes: number; totalBytes: number | null }
   | { type: 'cache-hit'; modelBytes: number }
   | { type: 'ready'; provider: string; fallbackReason?: string }
-  | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
+  | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string; detections?: BoundingBox[] }
   | { type: 'skipped'; requestId: number; generation: number }
   | { type: 'error'; requestId: number; generation: number; message: string };
 
@@ -119,6 +121,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const generationRef = useRef(0);
   const lastCapturedTimeRef = useRef(-Infinity);
   const latestRef = useRef<Observation | null>(null);
+  const previewRef = useRef<Observation | null>(null);
+  const requestDetailsRef = useRef<{ preview: boolean } | null>(null);
+  const [inspection, setInspection] = useState<'idle' | 'pending' | { candidates: number }>('idle');
   const grayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const grayHistoryRef = useRef<GrayFrame[]>([]);
   const flowTracksRef = useRef<PersistentTrack[]>([]);
@@ -217,6 +222,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     lastPresentedAtRef.current = 0;
     captureStalledRef.current = false;
     latestRef.current = null;
+    previewRef.current = null;
+    setInspection('idle');
     captureErrorRef.current = false;
     flowTracksRef.current = [];
     labelAnchorsRef.current.clear();
@@ -332,8 +339,22 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         return;
       }
       if (!('requestId' in message) || !matchesFrameRequest(inFlightIdRef.current, message.requestId)) return;
+      const requestDetails = requestDetailsRef.current;
+      requestDetailsRef.current = null;
       clearInFlight();
       if (message.generation !== generationRef.current) return;
+      if (requestDetails?.preview) {
+        setInspection('idle');
+        const video = videoRef.current;
+        if (message.type === 'error') setError('Could not inspect frame: ' + message.message);
+        if (message.type !== 'result' || !video ||
+            !isCurrentPausedInspection(message.mediaTime, video.currentTime,
+              video.paused, video.seeking, activeRef.current)) return;
+        const tracks = inspectionTracks(message.detections ?? [], message.mediaTime);
+        previewRef.current = { time: message.mediaTime, tracks };
+        setInspection({ candidates: tracks.length });
+        return;
+      }
       if (message.type === 'result') {
         inferenceErrorsRef.current = 0;
         setError(previous => previous.startsWith('Frame inference error:') ? '' : previous);
@@ -472,6 +493,72 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     clearInFlight();
     recoverWithWasmRef.current = true;
     startDetector();
+  };
+
+  const inspectPausedFrame = async () => {
+    const video = videoRef.current;
+    const worker = workerRef.current;
+    if (busyRef.current) {
+      setError('The detector is finishing its previous frame. Try inspecting again shortly.');
+      return;
+    }
+    if (!video || !worker || !readyRef.current ||
+        captureKindRef.current || !video.paused || video.seeking ||
+        !video.videoWidth || !video.videoHeight || !activeRef.current) return;
+
+    const mediaTime = video.currentTime;
+    const generation = generationRef.current;
+    const requestId = ++messageIdRef.current;
+    const sourceWidth = video.videoWidth;
+    const sourceHeight = video.videoHeight;
+    busyRef.current = true;
+    inFlightIdRef.current = requestId;
+    requestDetailsRef.current = { preview: true };
+    previewRef.current = null;
+    setInspection('pending');
+    setError('');
+
+    let bitmap: ImageBitmap | null = null;
+    try {
+      bitmap = await captureInferenceBitmap(video, MAX_CAPTURE_WIDTH);
+      if (inFlightIdRef.current !== requestId ||
+          generation !== generationRef.current ||
+          workerRef.current !== worker || videoRef.current !== video ||
+          !isCurrentPausedInspection(mediaTime, video.currentTime,
+            video.paused, video.seeking, activeRef.current)) {
+        bitmap.close();
+        if (inFlightIdRef.current === requestId) {
+          requestDetailsRef.current = null;
+          clearInFlight();
+          setInspection('idle');
+        }
+        return;
+      }
+      inFlightTimeoutRef.current = window.setTimeout(() => {
+        if (inFlightIdRef.current !== requestId) return;
+        clearInFlight();
+        requestDetailsRef.current = null;
+        setInspection('idle');
+        worker.terminate();
+        if (workerRef.current === worker) workerRef.current = null;
+        readyRef.current = false;
+        setDetector('error');
+        setError('Frame inspection timed out. Retry the detector; the video remains available.');
+      }, WORKER_TIMEOUT_MS);
+      worker.postMessage({
+        type: 'frame', bitmap, requestId, generation, mediaTime,
+        sourceWidth, sourceHeight, preview: true
+      }, [bitmap]);
+      bitmap = null;
+    } catch (error) {
+      bitmap?.close();
+      if (inFlightIdRef.current !== requestId) return;
+      requestDetailsRef.current = null;
+      clearInFlight();
+      setInspection('idle');
+      setError('Could not inspect the paused frame: ' +
+        (error instanceof Error ? error.message : String(error)));
+    }
   };
 
   const attachVideo = useCallback((
@@ -1437,7 +1524,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         const height = canvas.clientHeight;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const staticFrame = video.paused && !video.seeking && !captureKindRef.current;
-        const observation = latestRef.current;
+        const observation = staticFrame && previewRef.current !== null
+          ? previewRef.current : latestRef.current;
         if (staticFrame && pausedFrame?.time === video.currentTime && pausedFrame.observation === observation &&
             pausedFrame.width === width && pausedFrame.height === height && pausedFrame.dpr === dpr) {
           animation = requestAnimationFrame(render);
@@ -1677,6 +1765,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   startDetector();
                 }}
                 onPlay={() => {
+                  previewRef.current = null;
+                  setInspection('idle');
                   setPlaying(true);
                   startDetector();
                 }}
@@ -1711,6 +1801,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 onSeeking={resetTracks}
                 onEnded={() => {
                   setPlaying(false);
+                  previewRef.current = null;
+                  setInspection('idle');
                   latestRef.current = null;
                   setVisibleCount(0);
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
@@ -1757,12 +1849,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <div className="vg-analysis-player-footer flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="vg-analysis-source-title truncate">{filename}</div>
+              {typeof inspection === 'object' && <p className="vg-analysis-source-meta" role="status">
+                Paused frame · {inspection.candidates} raw YOLO candidates (not tracked or saved)
+              </p>}
               <div className="vg-analysis-source-meta">
                 {tabCaptureActive ? 'Live browser tab' :
                   webcamActive ? 'Live camera' : readableTime(position) + ' / ' + readableTime(duration)}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {!playing && !webcamActive && !tabCaptureActive && readyVideo && detector === 'ready' &&
+                <button type="button" className="vg-analysis-player-button"
+                  disabled={inspection === 'pending'} onClick={() => void inspectPausedFrame()}>
+                  <ScanLine size={14}/> {inspection === 'pending' ? 'Inspecting…' : 'Inspect frame'}
+                </button>}
               <button type="button" onClick={() => void toggleFullscreen()}
                 className="vg-analysis-player-button" aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
                 {isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
