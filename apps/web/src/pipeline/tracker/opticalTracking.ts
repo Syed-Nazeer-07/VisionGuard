@@ -17,8 +17,9 @@ export function takeGrayFrame(
 ): GrayFrame | null {
   if (!video.videoWidth || !video.videoHeight || !Number.isFinite(time)) return null;
   // 448px preserves distant motorcycles that become <7 pixels at 320px.
-  const width = 448;
-  const height = Math.max(1, Math.round(width * video.videoHeight / video.videoWidth));
+  const factor = Math.min(448 / video.videoWidth, 896 / video.videoHeight);
+  const width = Math.max(1, Math.round(video.videoWidth * factor));
+  const height = Math.max(1, Math.round(video.videoHeight * factor));
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -38,7 +39,47 @@ function median(values: number[]) {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
-type MotionMatch = { dx: number; dy: number; error: number };
+type MotionMatch = { dx: number; dy: number; x: number; y: number; error: number };
+
+const FEATURE_OFFSETS = [
+  [0, 0], [-.19, -.19], [.19, -.19], [-.19, .19], [.19, .19], [0, -.24], [0, .24]
+];
+const EDGE_OFFSETS = [
+  [-.34, -.34], [.34, -.34], [-.34, .34], [.34, .34], [0, -.38], [0, .38]
+];
+
+/** Fit uniform expansion to agreeing, spatially separated image patches.
+ * Pixel rounding and local motion can imitate small changes. Keep translation
+ * alone when zoom fails to explain the patches substantially better. */
+function measuredScale(matches: readonly MotionMatch[], dt: number): number {
+  if (matches.length < 4) return 1;
+  const sum = matches.reduce((result, match) => ({
+    x: result.x + match.x, y: result.y + match.y,
+    dx: result.dx + match.dx, dy: result.dy + match.dy
+  }), { x: 0, y: 0, dx: 0, dy: 0 });
+  const n = matches.length;
+  let spread = 0, covariance = 0, translationError = 0;
+  for (const match of matches) {
+    const x = match.x - sum.x / n, y = match.y - sum.y / n;
+    const dx = match.dx - sum.dx / n, dy = match.dy - sum.dy / n;
+    spread += x * x + y * y;
+    covariance += x * dx + y * dy;
+    translationError += dx * dx + dy * dy;
+  }
+  if (spread < 24 * n || translationError < 1) return 1;
+  const improvement = covariance * covariance / spread;
+  const delta = covariance / spread;
+  if (improvement < .65 * translationError ||
+      translationError - improvement > .80 * n ||
+      Math.abs(delta) < .025 || Math.abs(delta) > .22) return 1;
+  const bound = Math.min(.14, dt * 1.25);
+  return 1 + Math.min(bound, Math.max(-bound, delta));
+}
+
+function subpixelOffset(before: number, center: number, after: number): number {
+  const curvature = before + after - 2 * center;
+  return curvature > 0 ? Math.max(-.5, Math.min(.5, (before - after) / (2 * curvature))) : 0;
+}
 
 function matchFeature(
   previous: GrayFrame,
@@ -77,27 +118,28 @@ function matchFeature(
   const cx = Math.round(predictedDx);
   const cy = Math.round(predictedDy);
   const radius = Math.min(13, search);
+  const sampleCount = (patchRadius + 1) ** 2;
 
+  const patchError = (tx: number, ty: number, limit = Infinity) => {
+    let sum = 0;
+    for (let py = -patchRadius; py <= patchRadius; py += 2) {
+      const rowOld = (top + py) * width + left;
+      const rowNew = (ty + py) * width + tx;
+      for (let px = -patchRadius; px <= patchRadius; px += 2) {
+        sum += Math.abs(previous.pixels[rowOld + px] - current.pixels[rowNew + px]);
+      }
+      // Remaining absolute differences cannot improve a losing candidate.
+      if (sum >= limit) return sum;
+    }
+    return sum;
+  };
   for (let dy = cy - radius; dy <= cy + radius; dy++) {
     const ty = top + dy;
     if (ty - patchRadius < 0 || ty + patchRadius >= height) continue;
     for (let dx = cx - radius; dx <= cx + radius; dx++) {
       const tx = left + dx;
       if (tx - patchRadius < 0 || tx + patchRadius >= width) continue;
-      let sum = 0;
-      let count = 0;
-      for (let py = -patchRadius; py <= patchRadius; py += 2) {
-        const rowOld = (top + py) * width;
-        const rowNew = (ty + py) * width;
-        for (let px = -patchRadius; px <= patchRadius; px += 2) {
-          sum += Math.abs(
-            previous.pixels[rowOld + left + px] -
-            current.pixels[rowNew + tx + px]
-          );
-          count++;
-        }
-      }
-      const error = sum / count;
+      const error = patchError(tx, ty, best);
       if (error < best) {
         best = error;
         bestDx = dx;
@@ -105,8 +147,17 @@ function matchFeature(
       }
     }
   }
-  if (best > maxError || !Number.isFinite(best)) return null;
-  return { dx: bestDx, dy: bestDy, error: best };
+  if (best > maxError * sampleCount) return null;
+  // One grayscale pixel can span several source pixels. Interpolating the
+  // local minimum reduces quantization error on approaching vehicles.
+  const tx = left + bestDx, ty = top + bestDy;
+  if (tx - patchRadius > 0 && tx + patchRadius < width - 1 && Math.abs(bestDx - cx) < radius) {
+    bestDx += subpixelOffset(patchError(tx - 1, ty), best, patchError(tx + 1, ty));
+  }
+  if (ty - patchRadius > 0 && ty + patchRadius < height - 1 && Math.abs(bestDy - cy) < radius) {
+    bestDy += subpixelOffset(patchError(tx, ty - 1), best, patchError(tx, ty + 1));
+  }
+  return { dx: bestDx, dy: bestDy, x: left, y: top, error: best / sampleCount };
 }
 
 /**
@@ -128,10 +179,6 @@ export function advanceOpticalTracks<T extends LiveTrack>(
   const sx = previous.width / previous.sourceWidth;
   const sy = previous.height / previous.sourceHeight;
   const output: T[] = [];
-  const featureOffsets = [
-    [0, 0], [-.19, -.19], [.19, -.19], [-.19, .19], [.19, .19],
-    [0, -.24], [0, .24]
-  ];
 
   for (const track of tracks) {
     // A predicted bridge may be rescued by genuinely matching new pixels.
@@ -155,7 +202,7 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     const search = Math.max(5, Math.min(12, Math.ceil(5 + dt * 45)));
     const features: MotionMatch[] = [];
 
-    for (const [ox, oy] of featureOffsets) {
+    for (const [ox, oy] of FEATURE_OFFSETS) {
       const x = centerX + track.w * sx * ox;
       const y = centerY + track.h * sy * oy;
       const match = matchFeature(
@@ -171,11 +218,7 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     // tracks qualify, and the existing multi-feature motion-consensus checks
     // below still reject inconsistent/background movement.
     if (!reacquiring && features.length < 2) {
-      const edgeOffsets = [
-        [-.34, -.34], [.34, -.34], [-.34, .34], [.34, .34],
-        [0, -.38], [0, .38]
-      ];
-      for (const [ox, oy] of edgeOffsets) {
+      for (const [ox, oy] of EDGE_OFFSETS) {
         const x = centerX + track.w * sx * ox;
         const y = centerY + track.h * sy * oy;
         const match = matchFeature(
@@ -228,12 +271,14 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     const newX = track.x + moveX;
     const newY = track.y + moveY;
 
-    const x1 = newX - track.w / 2, y1 = newY - track.h / 2;
-    const x2 = newX + track.w / 2, y2 = newY + track.h / 2;
+    const scale = reacquiring ? 1 : measuredScale(consistent, dt);
+    const w = track.w * scale, h = track.h * scale;
+    const x1 = newX - w / 2, y1 = newY - h / 2;
+    const x2 = newX + w / 2, y2 = newY + h / 2;
     const visibleW = Math.max(0, Math.min(x2, current.sourceWidth) - Math.max(0, x1));
     const visibleH = Math.max(0, Math.min(y2, current.sourceHeight) - Math.max(0, y1));
     // A 30% remnant frequently tracked the road after a vehicle left.
-    if (visibleW * visibleH < track.w * track.h * .60) continue;
+    if (visibleW * visibleH < w * h * .60) continue;
 
     const instantaneousX = moveX / dt;
     const instantaneousY = moveY / dt;
@@ -243,7 +288,7 @@ export function advanceOpticalTracks<T extends LiveTrack>(
     const vx = track.vx * .6 + instantaneousX * .4;
     const vy = track.vy * .6 + instantaneousY * .4;
     const moved = {
-      ...track, x: newX, y: newY,
+      ...track, x: newX, y: newY, w, h,
       vx, vy, motionPxPerSec: Math.hypot(vx, vy),
       // This frame supplied fresh consistent pixel matches, not a guess.
       isPredicted: false, lastOpticalAt: current.time
