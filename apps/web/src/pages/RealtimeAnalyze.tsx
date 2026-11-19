@@ -1520,7 +1520,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         const height = canvas.clientHeight;
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
         const staticFrame = video.paused && !video.seeking && !captureKindRef.current;
-        const observation = latestRef.current;
+        const observation = staticFrame && previewRef.current !== null
+          ? previewRef.current : latestRef.current;
         if (staticFrame && pausedFrame?.time === video.currentTime && pausedFrame.observation === observation &&
             pausedFrame.width === width && pausedFrame.height === height && pausedFrame.dpr === dpr) {
           animation = requestAnimationFrame(render);
@@ -1760,6 +1761,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   startDetector();
                 }}
                 onPlay={() => {
+                  previewRef.current = null;
+                  setInspection('idle');
                   setPlaying(true);
                   startDetector();
                 }}
@@ -1794,6 +1797,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 onSeeking={resetTracks}
                 onEnded={() => {
                   setPlaying(false);
+                  previewRef.current = null;
+                  setInspection('idle');
                   latestRef.current = null;
                   setVisibleCount(0);
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
@@ -1840,12 +1845,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <div className="vg-analysis-player-footer flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="vg-analysis-source-title truncate">{filename}</div>
+              {typeof inspection === 'object' && <p className="vg-analysis-source-meta" role="status">
+                Paused frame · {inspection.candidates} raw YOLO candidates (not tracked or saved)
+              </p>}
               <div className="vg-analysis-source-meta">
                 {tabCaptureActive ? 'Live browser tab' :
                   webcamActive ? 'Live camera' : readableTime(position) + ' / ' + readableTime(duration)}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {!playing && !webcamActive && !tabCaptureActive && readyVideo && detector === 'ready' &&
+                <button type="button" className="vg-analysis-player-button"
+                  disabled={inspection === 'pending'} onClick={() => void inspectPausedFrame()}>
+                  <ScanLine size={14}/> {inspection === 'pending' ? 'Inspecting…' : 'Inspect frame'}
+                </button>}
               <button type="button" onClick={() => void toggleFullscreen()}
                 className="vg-analysis-player-button" aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
                 {isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
