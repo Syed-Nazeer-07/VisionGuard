@@ -16,6 +16,8 @@ import { supabase } from '../lib/supabase';
 import { activityLedger } from '../services/activityLedger';
 import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
+import { inspectionTracks, isCurrentPausedInspection } from '../services/frameInspection';
+import type { BoundingBox } from '../pipeline/types';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
 import { startupTimeoutMs, shouldRetryStartupOnWasm } from '../services/detectorStartupPolicy';
 import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
@@ -43,7 +45,7 @@ type WorkerEvent =
   | { type: 'progress'; receivedBytes: number; totalBytes: number | null }
   | { type: 'cache-hit'; modelBytes: number }
   | { type: 'ready'; provider: string; fallbackReason?: string }
-  | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
+  | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string; detections?: BoundingBox[] }
   | { type: 'skipped'; requestId: number; generation: number }
   | { type: 'error'; requestId: number; generation: number; message: string };
 
@@ -119,6 +121,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const generationRef = useRef(0);
   const lastCapturedTimeRef = useRef(-Infinity);
   const latestRef = useRef<Observation | null>(null);
+  const previewRef = useRef<Observation | null>(null);
+  const requestDetailsRef = useRef<{ preview: boolean } | null>(null);
+  const [inspection, setInspection] = useState<'idle' | 'pending' | { candidates: number }>('idle');
   const grayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const grayHistoryRef = useRef<GrayFrame[]>([]);
   const flowTracksRef = useRef<PersistentTrack[]>([]);
@@ -217,6 +222,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     lastPresentedAtRef.current = 0;
     captureStalledRef.current = false;
     latestRef.current = null;
+    previewRef.current = null;
+    setInspection('idle');
     captureErrorRef.current = false;
     flowTracksRef.current = [];
     labelAnchorsRef.current.clear();
@@ -332,8 +339,22 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         return;
       }
       if (!('requestId' in message) || !matchesFrameRequest(inFlightIdRef.current, message.requestId)) return;
+      const requestDetails = requestDetailsRef.current;
+      requestDetailsRef.current = null;
       clearInFlight();
       if (message.generation !== generationRef.current) return;
+      if (requestDetails?.preview) {
+        setInspection('idle');
+        const video = videoRef.current;
+        if (message.type === 'error') setError('Could not inspect frame: ' + message.message);
+        if (message.type !== 'result' || !video ||
+            !isCurrentPausedInspection(message.mediaTime, video.currentTime,
+              video.paused, video.seeking, activeRef.current)) return;
+        const tracks = inspectionTracks(message.detections ?? [], message.mediaTime);
+        previewRef.current = { time: message.mediaTime, tracks };
+        setInspection({ candidates: tracks.length });
+        return;
+      }
       if (message.type === 'result') {
         inferenceErrorsRef.current = 0;
         setError(previous => previous.startsWith('Frame inference error:') ? '' : previous);
