@@ -39,6 +39,7 @@ const WORKER_TIMEOUT_MS = 20_000;
 
 type WorkerEvent =
   | { type: 'loading'; stage: 'downloading' | 'initializing' }
+  | { type: 'progress'; receivedBytes: number; totalBytes: number | null }
   | { type: 'ready'; provider: string; fallbackReason?: string }
   | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
   | { type: 'skipped'; requestId: number; generation: number }
@@ -148,6 +149,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [position, setPosition] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [detector, setDetector] = useState<DetectorState>('idle');
+  const [modelProgress, setModelProgress] = useState<{ receivedBytes: number; totalBytes: number | null } | null>(null);
   const [provider, setProvider] = useState('');
   const [inferenceMs, setInferenceMs] = useState<number | null>(null);
   const [visibleCount, setVisibleCount] = useState(0);
@@ -243,6 +245,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     captureErrorRef.current = false;
     readyRef.current = false;
     setDetector('downloading');
+    setModelProgress(null);
     setError('');
     let worker: Worker;
     try {
@@ -292,8 +295,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (message.stage !== startupStage) armStartupTimeout(message.stage);
         return;
       }
+      if (message.type === 'progress') {
+        setModelProgress({ receivedBytes: message.receivedBytes, totalBytes: message.totalBytes });
+        // Only abort a download after *no* progress, not while it is slowly
+        // transferring. The model is tens of megabytes on first visit.
+        if (startupStage === 'downloading') armStartupTimeout('downloading');
+        return;
+      }
       if (message.type === 'ready') {
         stopStartupTimer();
+        setModelProgress(null);
         readyRef.current = true;
         setDetector('ready');
         setProvider(message.provider);
@@ -853,6 +864,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     workerRef.current = null;
     readyRef.current = false;
     setDetector('idle');
+    setModelProgress(null);
     setProvider('');
     setFallbackReason('');
     setAnalyzedFrames(0);
@@ -1629,7 +1641,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <span className="vg-analysis-engine-state" role="status">
             <i aria-hidden="true" data-state={detector} />
             {detector === 'ready' ? 'Detector ready' :
-              detector === 'downloading' ? 'Downloading YOLO11s model…' :
+              detector === 'downloading' ? (modelProgress
+                ? 'Downloading YOLO11s ' + (modelProgress.receivedBytes / 1048576).toFixed(1) + ' MB' +
+                  (modelProgress.totalBytes ? ' / ' + (modelProgress.totalBytes / 1048576).toFixed(1) + ' MB' : '')
+                : 'Connecting to YOLO11s model…') :
               detector === 'initializing' ? 'Initializing YOLO11s…' :
               detector === 'error' ? 'Detector unavailable' : 'Awaiting inference'}
           </span>
