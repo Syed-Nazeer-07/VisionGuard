@@ -151,6 +151,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [playing, setPlaying] = useState(false);
   const [detector, setDetector] = useState<DetectorState>('idle');
   const [modelProgress, setModelProgress] = useState<{ receivedBytes: number; totalBytes: number | null } | null>(null);
+  const [modelCacheHit, setModelCacheHit] = useState(false);
   const [usingCpuFallback, setUsingCpuFallback] = useState(false);
   const [provider, setProvider] = useState('');
   const [inferenceMs, setInferenceMs] = useState<number | null>(null);
@@ -248,6 +249,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     readyRef.current = false;
     setDetector('downloading');
     setModelProgress(null);
+    setModelCacheHit(false);
     setUsingCpuFallback(recoverWithWasmRef.current);
     setError('');
     let worker: Worker;
@@ -296,6 +298,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       if (message.type === 'loading') {
         setDetector(message.stage);
         if (message.stage !== startupStage) armStartupTimeout(message.stage);
+        return;
+      }
+      if (message.type === 'cache-hit') {
+        setModelCacheHit(true);
         return;
       }
       if (message.type === 'progress') {
@@ -1638,7 +1644,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 ? 'Downloading YOLO11s ' + (modelProgress.receivedBytes / 1048576).toFixed(1) + ' MB' +
                   (modelProgress.totalBytes ? ' / ' + (modelProgress.totalBytes / 1048576).toFixed(1) + ' MB' : '')
                 : 'Connecting to YOLO11s model…') :
-              detector === 'initializing' ? (usingCpuFallback ? 'Initializing YOLO11s on CPU…' : 'Initializing YOLO11s with GPU…') :
+              detector === 'initializing' ? (modelCacheHit ? 'Initializing cached YOLO11s…' :
+                usingCpuFallback ? 'Initializing YOLO11s on CPU…' : 'Initializing YOLO11s with GPU…') :
               detector === 'error' ? 'Detector unavailable' : 'Awaiting inference'}
           </span>
         </div>
