@@ -37,6 +37,39 @@ describe('persistent crowded vehicle tracking', () => {
     expect(next.tracks[0].w).toBeLessThan(60);
   });
 
+  it('corrects approaching car box scale on a genuine detector update', () => {
+    const before: PersistentTrack = {
+      ...car(100, 120, 7), lastDetectedAt: 1,
+      lastOpticalAt: 1.1, speedKmh: null, speedIsEstimate: true,
+    };
+    const observed: LiveTrack = { ...car(101, 120, 22), w: 66, h: 42 };
+    const next = reconcileVehicles([before], [observed], 2, 8);
+    expect(next.tracks).toHaveLength(1);
+    expect(next.tracks[0].id).toBe(7);
+    // A moderate 20% measured size change should be corrected promptly,
+    // not constrained to the previous ~6%-per-observation growth limit.
+    expect(next.tracks[0].w).toBeGreaterThan(60);
+    expect(next.tracks[0].w).toBeLessThan(66);
+    expect(next.tracks[0].h).toBeGreaterThan(38);
+    expect(next.tracks[0].h).toBeLessThan(42);
+  });
+
+  it('does not snap a confirmed box to an extreme outlier size', () => {
+    const before: PersistentTrack = {
+      ...car(100, 120, 7), lastDetectedAt: 1,
+      lastOpticalAt: 1.1, speedKmh: null, speedIsEstimate: true,
+    };
+    const observed: LiveTrack = { ...car(100, 120, 22), w: 110, h: 70 };
+    const next = reconcileVehicles([before], [observed], 2, 8);
+    // An extreme scale jump may fail geometric association entirely,
+    // which is also safer than resizing an existing tracked identity.
+    const retained = next.tracks.find(track => track.id === 7);
+    if (retained) {
+      expect(retained.w).toBeLessThanOrEqual(before.w * 1.22);
+      expect(retained.h).toBeLessThanOrEqual(before.h * 1.22);
+    }
+  });
+
   it('reports exact zero for stationary car after a 0.5s observation window', () => {
     const history = { points: [], smoothedKmh: null };
     const first = updateScreenSpeed(history, car(100), 0);
