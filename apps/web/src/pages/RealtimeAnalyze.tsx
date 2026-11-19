@@ -495,6 +495,68 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     startDetector();
   };
 
+  const inspectPausedFrame = async () => {
+    const video = videoRef.current;
+    const worker = workerRef.current;
+    if (!video || !worker || !readyRef.current || busyRef.current ||
+        captureKindRef.current || !video.paused || video.seeking ||
+        !video.videoWidth || !video.videoHeight || !activeRef.current) return;
+
+    const mediaTime = video.currentTime;
+    const generation = generationRef.current;
+    const requestId = ++messageIdRef.current;
+    const sourceWidth = video.videoWidth;
+    const sourceHeight = video.videoHeight;
+    busyRef.current = true;
+    inFlightIdRef.current = requestId;
+    requestDetailsRef.current = { preview: true };
+    previewRef.current = null;
+    setInspection('pending');
+    setError('');
+
+    let bitmap: ImageBitmap | null = null;
+    try {
+      bitmap = await captureInferenceBitmap(video, MAX_CAPTURE_WIDTH);
+      if (inFlightIdRef.current !== requestId ||
+          generation !== generationRef.current ||
+          workerRef.current !== worker || videoRef.current !== video ||
+          !isCurrentPausedInspection(mediaTime, video.currentTime,
+            video.paused, video.seeking, activeRef.current)) {
+        bitmap.close();
+        if (inFlightIdRef.current === requestId) {
+          requestDetailsRef.current = null;
+          clearInFlight();
+          setInspection('idle');
+        }
+        return;
+      }
+      inFlightTimeoutRef.current = window.setTimeout(() => {
+        if (inFlightIdRef.current !== requestId) return;
+        clearInFlight();
+        requestDetailsRef.current = null;
+        setInspection('idle');
+        worker.terminate();
+        if (workerRef.current === worker) workerRef.current = null;
+        readyRef.current = false;
+        setDetector('error');
+        setError('Frame inspection timed out. Retry the detector; the video remains available.');
+      }, WORKER_TIMEOUT_MS);
+      worker.postMessage({
+        type: 'frame', bitmap, requestId, generation, mediaTime,
+        sourceWidth, sourceHeight, preview: true
+      }, [bitmap]);
+      bitmap = null;
+    } catch (error) {
+      bitmap?.close();
+      if (inFlightIdRef.current !== requestId) return;
+      requestDetailsRef.current = null;
+      clearInFlight();
+      setInspection('idle');
+      setError('Could not inspect the paused frame: ' +
+        (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
   const attachVideo = useCallback((
     file: Blob, name: string, savedPosition = 0, restoredRunId?: string
   ) => {
