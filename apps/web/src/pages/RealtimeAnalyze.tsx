@@ -41,6 +41,7 @@ const WORKER_TIMEOUT_MS = 20_000;
 type WorkerEvent =
   | { type: 'loading'; stage: 'downloading' | 'initializing' }
   | { type: 'progress'; receivedBytes: number; totalBytes: number | null }
+  | { type: 'cache-hit'; modelBytes: number }
   | { type: 'ready'; provider: string; fallbackReason?: string }
   | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
   | { type: 'skipped'; requestId: number; generation: number }
