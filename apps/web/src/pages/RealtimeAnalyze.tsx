@@ -7,6 +7,7 @@ import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from 
 import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
+import { LiveBoxSmoother } from '../pipeline/rendering/liveBoxSmoother';
 import { paintLiveOverlay, type LiveLabelAnchor } from '../pipeline/rendering/liveOverlay';
 import { displayedVideoMediaTime, matchesFrameRequest, shouldStopAfterInferenceErrors } from '../pipeline/worker/frameSync';
 import { canReanalyzeStoredVideo } from '../lib/videoAssets';
@@ -122,6 +123,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const grayCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const grayHistoryRef = useRef<GrayFrame[]>([]);
   const flowTracksRef = useRef<PersistentTrack[]>([]);
+  const boxSmootherRef = useRef(new LiveBoxSmoother());
   const nextStableIdRef = useRef(1);
   const detectorToStableIdRef = useRef<Map<number, number>>(new Map());
   const speedHistoryRef = useRef<Map<number, SpeedHistory>>(new Map());
@@ -219,6 +221,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     latestRef.current = null;
     captureErrorRef.current = false;
     flowTracksRef.current = [];
+    boxSmootherRef.current.clear();
     labelAnchorsRef.current.clear();
     speedHistoryRef.current.clear();
     autoIncidentDetectorRef.current.reset();
@@ -1237,6 +1240,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           generationRef.current += 1;
           latestRef.current = null;
           flowTracksRef.current = [];
+          boxSmootherRef.current.clear();
           grayHistoryRef.current = [];
           speedHistoryRef.current.clear();
           autoIncidentDetectorRef.current.reset();
@@ -1470,12 +1474,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             const tracks = projectLiveTracks(
               observation.tracks, observation.time, displayedTime, frameWidth, frameHeight
             ) as PersistentTrack[];
-            visibleTracks = paintLiveOverlay(context, tracks,
+            // A pause can advance currentTime without presenting new pixels.
+            const boxTime = presentedMediaTimeRef.current ?? displayedTime;
+            const displayTracks = boxSmootherRef.current.update(tracks, boxTime);
+            visibleTracks = paintLiveOverlay(context, displayTracks,
               { width: frameWidth, height: frameHeight }, { width, height, dpr },
               labelAnchorsRef.current, time, { boxes: showBoxes, labels: showLabels });
             if (showBoxes && visibleTracks.length) overlayAgeMs = Math.round(Math.max(0, displayedTime - observation.time) * 1000);
           }
         }
+        if (!visibleTracks.length) boxSmootherRef.current.clear();
         // Include empty video frames as well as tracked ones: these are vital
         // for measuring false positives and ghost boxes after scene exits.
         if (qualityEnabledRef.current && currentFileRef.current && readyRef.current &&
