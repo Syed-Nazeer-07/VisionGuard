@@ -61,3 +61,19 @@ test('threshold gates give an explicit failure, not a false success',()=>{
   assert.equal(gateFailures(score,{minRecall:.8,maxGhostFrames:0}).length,1);
   assert.throws(()=>gateFailures(score,{minPrecision:4}),/Invalid quality/);
 });
+
+test('crowded frames use maximum-cardinality matching instead of greedy overlap',()=>{
+  const score=evaluateTracking(trace(f(0,[gt('A',40),gt('B',34)],[pred(1,40),pred(2,46)])));
+  assert.equal(score.tp,2);assert.equal(score.fp,0);assert.equal(score.fn,0);
+  assert.equal(score.f1,1);
+});
+test('duplicate tracker IDs are measured even when boxes do not overlap',()=>{
+  const score=evaluateTracking(trace(f(0,[gt('A',20),gt('B',95)],[pred(1,20),pred(1,95)])));
+  assert.equal(score.duplicatePredictionPairs,0);assert.equal(score.duplicateIdFrames,1);
+  assert.equal(gateFailures(score,{maxDuplicateIdFrames:0}).length,1);
+});
+test('quality gates include localization, F1 and duplicate predictions',()=>{
+  const score=evaluateTracking(trace(f(0,[gt('A',20),gt('B',95)],[pred(1,25),pred(2,25)])));
+  assert.equal(gateFailures(score,{minF1:.8,minMeanMatchedIoU:.8,maxDuplicatePairs:0}).length,3);
+  assert.throws(()=>gateFailures(score,{maxGhostFrames:.5}),/Invalid quality/);
+});

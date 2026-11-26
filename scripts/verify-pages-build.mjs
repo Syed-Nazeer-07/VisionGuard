@@ -12,9 +12,16 @@ export const PAGES_MAX_FILE_BYTES = 25 * 1024 * 1024;
 export const PAGES_MAX_FILES_FREE = 20_000;
 
 function isRealPublicKey(key) {
-  return Boolean(key && key.length >= 12 &&
-    !/(placeholder|your[_-]|your-|replace|example|<|>)/i.test(key) &&
-    !key.startsWith('sb_secret_') && !key.startsWith('sb_service_role_'));
+  if (!key || key.length < 12 || /placeholder|your[_-]|your-|replace|example|<|>/i.test(key)) return false;
+  // Modern public keys and legacy anon JWTs are the only browser credentials.
+  // Decoding a legacy JWT is a configuration check, not signature validation.
+  if (/^sb_publishable_[A-Za-z0-9_-]+$/.test(key)) return true;
+  const parts = key.split('.');
+  if (parts.length !== 3 || parts.some(part => !/^[A-Za-z0-9_-]+$/.test(part))) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+    return payload !== null && typeof payload === 'object' && payload.role === 'anon';
+  } catch { return false; }
 }
 
 function isValidPublicModelUrl(source) {
