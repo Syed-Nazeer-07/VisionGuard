@@ -82,13 +82,13 @@ export default function Settings() {
 
   const sectionButtons = [
     {id:'profile' as const,label:'Profile',description:'Your account details',icon:UserRound},
-    {id:'workspace' as const,label:'Workspace',description:'Starting page and storage',icon:SlidersHorizontal},
+    {id:'workspace' as const,label:'Workspace',description:'Default starting page',icon:SlidersHorizontal},
     {id:'security' as const,label:'Security',description:'Password and account access',icon:ShieldCheck},
     {id:'storage' as const,label:'Storage',description:'Originals and backup controls',icon:HardDrive},
     {id:'about' as const,label:'About',description:'Processing and support',icon:LockKeyhole}
   ];
 
-  return <main className="vg-page">
+  return <div className="vg-page">
     <header className="vg-page-header">
       <div><span className="vg-page-kicker">ACCOUNT / PREFERENCES</span><h1>Settings</h1><p>Manage your profile, workspace defaults and account security.</p></div>
     </header>
@@ -204,5 +204,5 @@ export default function Settings() {
         </div>
       </section>
     </div>
-  </main>;
+  </div>;
 }

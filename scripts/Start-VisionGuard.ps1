@@ -7,10 +7,10 @@ if (-not $ProjectRoot) {
 }
 
 Write-Host "================================================================" -ForegroundColor Cyan
-Write-Host "        VISIONGUARD - LOCAL FIRST VIDEO ANALYSIS" -ForegroundColor Cyan
+Write-Host "        VISIONGUARD / WORKSPACE LAUNCHER     " -ForegroundColor Cyan
 Write-Host "================================================================" -ForegroundColor Cyan
 Write-Host "Project: $ProjectRoot"
-Write-Host "One engine: YOLO11s in the browser. Python and Supabase Storage are not required for local video analysis."
+Write-Host "Browser-first traffic analysis | YOLO11s ONNX | Local development"
 Write-Host ""
 
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -37,11 +37,11 @@ if (Test-Path $frontendEnvFile) {
     }
 }
 if (-not ($cloudUrlConfigured -and $cloudKeyConfigured)) {
-    Write-Host "[CLOUD SETUP] Local YOLO analysis is available, but B2 uploads and sign-in require Supabase Auth." -ForegroundColor Yellow
+    Write-Host "[CONFIGURATION] Sign-in and the protected analysis workspace require Supabase Auth. B2 backup is optional." -ForegroundColor Yellow
     Write-Host "  Copy apps\web\.env.example to apps\web\.env.local and fill in the PUBLIC project URL and publishable key." -ForegroundColor Yellow
     Write-Host "  Restart this Vite process after changing .env.local. Do not put B2 secrets in client files." -ForegroundColor Yellow
 } else {
-    Write-Host "[OK] Frontend cloud connection variables found (not displaying keys)." -ForegroundColor Green
+    Write-Host "[OK] Public authentication variables found. Connection is not yet verified." -ForegroundColor Green
 }
 
 $modelsDir = Join-Path $ProjectRoot "apps\web\public\models"
@@ -92,8 +92,8 @@ if (-not $ready) {
     exit 1
 }
 
-Write-Host "[OK] Web application is responding at http://localhost:3000/app/analyze" -ForegroundColor Green
-Write-Host "Upload a video, select Analyze, and review the saved results." -ForegroundColor White
+Write-Host "[READY] Web server responding at http://localhost:3000/app/analyze" -ForegroundColor Green
+Write-Host "Sign in if required, choose authorized footage, then review the analysis. Detector readiness is checked inside the workspace." -ForegroundColor White
 Start-Process "http://localhost:3000/app/analyze"
 Write-Host "Press Enter to leave the launcher open in the background, or type Q to stop." -ForegroundColor Gray
 $choice = Read-Host "Choice"

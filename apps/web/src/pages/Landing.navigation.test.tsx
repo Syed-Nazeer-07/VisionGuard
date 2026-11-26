@@ -50,6 +50,18 @@ function expectNativeRouteClick(selector: string, destination: string) {
 }
 
 describe('native browser navigation from the public landing page', () => {
+  it('changes the illustrative workflow without claiming live inference', () => {
+    const { host, dispose } = mountLanding();
+    try {
+      const tabs = [...host.querySelectorAll<HTMLButtonElement>('.vgn-stage-tab')];
+      expect(tabs).toHaveLength(3);
+      act(() => tabs[1].click());
+      expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
+      expect(tabs[0].getAttribute('aria-pressed')).toBe('false');
+      expect(host.querySelector('.vgn-stage-image img')?.getAttribute('src')).toBe('/traffic_flow_analysis.jpg');
+      expect(host.textContent).toContain('ILLUSTRATIVE SCENE — NO LIVE INFERENCE');
+    } finally { dispose(); }
+  });
   it('does not intercept the header Get started link', () => {
     expectNativeRouteClick('.vgn-nav-actions a[href="/register"]', '/register');
   });

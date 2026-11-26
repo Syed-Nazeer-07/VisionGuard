@@ -199,8 +199,7 @@ export function AppLayout() {
     </aside>
 
     <div className="flex min-w-0 flex-1 flex-col" inert={smallViewport && mobileOpen}>
-      {/* Minimal mobile navigation only. Desktop pages already carry their
-          own titles; repeating a global toolbar wastes vertical space. */}
+      {/* Shared route breadcrumb and signed-in role. */}
       <div className="vg-mobile-bar vg-product-topbar flex h-12 shrink-0 items-center gap-3 border-b px-3">
         <button ref={menuButtonRef} type="button" aria-label="Open navigation"
           className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"

@@ -43,3 +43,8 @@
 .vg-shell .vg-admin-page :is(th,td){border-color:#e0e7ea}.vg-shell .vg-admin-page th{background:#f4f7f8;color:#394f5c}
 @media(max-width:1023px){.vg-first-run{grid-template-columns:1fr 1fr}.vg-first-run>.vg-primary{justify-self:start}}
 @media(max-width:639px){.vg-shell .vg-product-topbar{height:52px;padding-inline:12px}.vg-shell .vg-overview-header{grid-template-columns:minmax(0,1fr)}.vg-shell .vg-overview-copy{padding:20px}.vg-shell .vg-overview-image{min-height:112px;max-height:140px}.vg-first-run{grid-template-columns:1fr;gap:14px;padding:17px}.vg-shell .vg-settings-navigation{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}.vg-shell .vg-settings-navigation>button{min-height:44px}.vg-product-section-label{align-items:flex-start;flex-wrap:wrap}.vg-player-welcome-art{display:none}.vg-player-welcome p:last-child{display:none}.vg-player-welcome{gap:4px}.vg-player-welcome p{font-size:11px}.vg-player-welcome .text-lg{font-size:14px}}
+
+.vg-shell .vg-product-topbar{display:flex}
+@media(min-width:1024px){.vg-shell .vg-product-topbar>button{display:none}}
+.vg-shell .vg-settings-layout .vg-section-head{flex-wrap:wrap}
+.vg-shell .vg-settings-layout .vg-section-head .vg-metadata-chip{white-space:normal}
