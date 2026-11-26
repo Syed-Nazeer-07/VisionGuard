@@ -33,7 +33,7 @@ function normalize(record, name) {
 export function evaluateTracking(data) {
   if (!data || data.format !== FORMAT || !Array.isArray(data.frames) || !data.frames.length)
     throw Error('Expected ' + FORMAT + ' with at least one annotated frame.');
-  let tp=0,fp=0,fn=0,idSwitches=0,duplicates=0,exitGhostFrames=0;
+  let tp=0,fp=0,fn=0,idSwitches=0,duplicates=0,duplicateIdFrames=0,exitGhostFrames=0;
   let maxExitGhostSeconds=0,matchedIoU=0,previousTime=-Infinity;
   const classes=new Map(), ids=new Map(), exited=new Map();
   const classTotals = name => {
@@ -51,6 +51,7 @@ export function evaluateTracking(data) {
     const gt=frame.groundTruth.map((v,i)=>normalize(v,'groundTruth['+i+']'));
     const pred=frame.predictions.map((v,i)=>normalize(v,'predictions['+i+']'));
     const gtIds=new Set(gt.map(x=>x.id));
+    if(new Set(pred.map(x=>x.id)).size!==pred.length) duplicateIdFrames++;
     if(gtIds.size!==gt.length) throw Error('Duplicate ground-truth IDs at frame '+frameIndex);
     for(const id of frame.exitedIds || []) {
       const key=String(id);
@@ -65,10 +66,28 @@ export function evaluateTracking(data) {
       const overlap=boxIoU(gt[a].box,pred[b].box);
       if(overlap>=IOU_THRESHOLD)pairs.push({a,b,overlap});
     }
-    pairs.sort((x,y)=>y.overlap-x.overlap);
+    // Maximize the number of valid one-to-one matches before scoring overlap.
+    // A greedy highest-IoU choice can block two valid matches in dense traffic.
+    // Prefer stronger overlaps deterministically; this is not a global IoU optimizer.
+    const edges = Array.from({length:gt.length},()=>[]);
+    for(const pair of pairs) edges[pair.a].push(pair);
+    for(const options of edges) options.sort((a,b)=>b.overlap-a.overlap || a.b-b.b);
+    const assignment = new Map();
+    function augment(a, visited) {
+      for(const pair of edges[a]) {
+        if(visited.has(pair.b)) continue;
+        visited.add(pair.b);
+        const previous = assignment.get(pair.b);
+        if(!previous || augment(previous.a,visited)) {
+          assignment.set(pair.b,pair);
+          return true;
+        }
+      }
+      return false;
+    }
+    for(const a of gt.keys()) augment(a,new Set());
     const matchedGt=new Set(),matchedPred=new Set();
-    for(const {a,b,overlap} of pairs) {
-      if(matchedGt.has(a)||matchedPred.has(b))continue;
+    for(const {a,b,overlap} of assignment.values()) {
       matchedGt.add(a);matchedPred.add(b);
       tp++;matchedIoU+=overlap;classTotals(gt[a].className).tp++;
       const previous=ids.get(gt[a].id);
@@ -99,21 +118,48 @@ export function evaluateTracking(data) {
     evaluationType:'annotation-comparison-not-real-world-validation',
     frames:data.frames.length,tp,fp,fn,...metrics(tp,fp,fn),
     meanMatchedIoU:rate(matchedIoU,tp),idSwitches,
-    duplicatePredictionPairs:duplicates,exitGhostFrames,maxExitGhostSeconds,
+    matchingPolicy:'maximum-cardinality-class-aware-iou-0.5',
+    duplicatePredictionPairs:duplicates,duplicateIdFrames,exitGhostFrames,maxExitGhostSeconds,
     perClass:Object.fromEntries([...classes].sort(([a],[b])=>a.localeCompare(b))
       .map(([name,c])=>[name,{...c,...metrics(c.tp,c.fp,c.fn)}])),
   };
 }
+/** Paired evaluation: both revisions must use the same human annotations and exact media frames.
+ * Never silently interpolate, discard difficult frames, or compare different ground truth. */
+export function compareTracking(baseline, candidate) {
+  const before = evaluateTracking(baseline);
+  const after = evaluateTracking(candidate);
+  const fingerprint = frame => JSON.stringify({
+    time: frame.time, width: frame.width, height: frame.height,
+    groundTruth: frame.groundTruth.map(item => {
+      const normalized = normalize(item,'groundTruth');
+      const {x,y,w,h}=normalized.box;
+      return {id:normalized.id,className:normalized.className,box:{x,y,w,h}};
+    }).sort((a,b)=>a.id.localeCompare(b.id)),
+    exitedIds: (frame.exitedIds || []).map(String).sort()
+  });
+  if(baseline.frames.length !== candidate.frames.length ||
+    baseline.frames.some((frame,index)=>fingerprint(frame)!==fingerprint(candidate.frames[index])))
+    throw Error('Paired evaluation requires identical media times, dimensions, ground truth and exit annotations.');
+  const keys=['precision','recall','f1','meanMatchedIoU','idSwitches',
+    'duplicatePredictionPairs','duplicateIdFrames','exitGhostFrames','maxExitGhostSeconds'];
+  const delta=Object.fromEntries(keys.map(key=>[key,after[key]-before[key]]));
+  return {comparisonType:'paired-annotation-comparison-not-real-world-validation',
+    frames:before.frames,baseline:before,candidate:after,delta};
+}
 export function gateFailures(result, gates={}) {
   const rules=[
     ['minPrecision','precision',false],['minRecall','recall',false],
-    ['maxIdSwitches','idSwitches',true],['maxGhostFrames','exitGhostFrames',true]
+    ['minF1','f1',false],['minMeanMatchedIoU','meanMatchedIoU',false],
+    ['maxIdSwitches','idSwitches',true],['maxGhostFrames','exitGhostFrames',true],
+    ['maxDuplicatePairs','duplicatePredictionPairs',true],['maxDuplicateIdFrames','duplicateIdFrames',true]
   ];
   const failures=[];
   for(const [flag,field,maximum] of rules) {
     if(gates[flag]===undefined)continue;
     const limit=gates[flag];
-    if(!Number.isFinite(limit)||limit<0||(!maximum&&limit>1))
+    if(!Number.isFinite(limit)||limit<0||(!maximum&&limit>1)||
+      (maximum&&!Number.isSafeInteger(limit))||!Number.isFinite(result[field]))
       throw Error('Invalid quality threshold: '+flag);
     if(maximum?result[field]>limit:result[field]<limit)
       failures.push(field+'='+result[field]+' failed '+flag+'='+limit);
@@ -127,18 +173,29 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1]
       'Usage: node scripts/evaluate-tracking.mjs annotated-trace.json [--min-precision=0.8] [--max-ghost-frames=0]');
     const supported={
       '--min-precision':'minPrecision','--min-recall':'minRecall',
-      '--max-id-switches':'maxIdSwitches','--max-ghost-frames':'maxGhostFrames'
+      '--min-f1':'minF1','--min-mean-matched-iou':'minMeanMatchedIoU',
+      '--max-id-switches':'maxIdSwitches','--max-ghost-frames':'maxGhostFrames',
+      '--max-duplicate-pairs':'maxDuplicatePairs','--max-duplicate-id-frames':'maxDuplicateIdFrames'
     };
     const gates={};
+    let candidatePath;
     for(const arg of args.slice(1)) {
+      if(arg.startsWith('--compare=')) {
+        if(candidatePath || !arg.slice('--compare='.length)) throw Error('Expected one candidate trace path.');
+        candidatePath=arg.slice('--compare='.length);
+        continue;
+      }
       const pieces=arg.split('=');
       if(pieces.length!==2||!Object.hasOwn(supported,pieces[0])||pieces[1]==='')
         throw Error('Invalid quality gate: '+arg);
       gates[supported[pieces[0]]]=Number(pieces[1]);
     }
-    const report=evaluateTracking(JSON.parse(readFileSync(args[0],'utf8')));
+    const source=JSON.parse(readFileSync(args[0],'utf8'));
+    const report=candidatePath
+      ? compareTracking(source,JSON.parse(readFileSync(candidatePath,'utf8')))
+      : evaluateTracking(source);
     console.log(JSON.stringify(report,null,2));
-    const failures=gateFailures(report,gates);
+    const failures=gateFailures(candidatePath ? report.candidate : report,gates);
     if(failures.length){console.error(failures.join('\n'));process.exitCode=2;}
   }catch(error){console.error(error.message);process.exitCode=1;}
 }

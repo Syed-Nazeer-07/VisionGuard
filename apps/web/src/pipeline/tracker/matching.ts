@@ -3,6 +3,8 @@ import munkres from 'munkres-js';
 import type { BoundingBox } from '../types';
 
 export function getIOU(box1: {x: number, y: number, w: number, h: number}, box2: {x: number, y: number, w: number, h: number}): number {
+  if (![box1.x, box1.y, box1.w, box1.h, box2.x, box2.y, box2.w, box2.h].every(Number.isFinite) ||
+      box1.w <= 0 || box1.h <= 0 || box2.w <= 0 || box2.h <= 0) return 0;
   const x1 = Math.max(box1.x - box1.w / 2, box2.x - box2.w / 2);
   const y1 = Math.max(box1.y - box1.h / 2, box2.y - box2.h / 2);
   const x2 = Math.min(box1.x + box1.w / 2, box2.x + box2.w / 2);
@@ -15,7 +17,8 @@ export function getIOU(box1: {x: number, y: number, w: number, h: number}, box2:
   const area1 = box1.w * box1.h;
   const area2 = box2.w * box2.h;
 
-  return intersection / (area1 + area2 - intersection + 1e-6);
+  const union = area1 + area2 - intersection;
+  return Number.isFinite(union) && union > 0 ? intersection / union : 0;
 }
 
 /**
@@ -48,6 +51,14 @@ export function matchDetectionsToTracks(
     };
   }
 
+  if (!Number.isFinite(iouThreshold) || iouThreshold < 0 || iouThreshold > 1)
+    throw new RangeError('IoU threshold must be between zero and one');
+  // Optimize valid association count first, then overlap. A threshold applied
+  // only after the Hungarian assignment can sacrifice a second valid match
+  // in favor of one perfect match plus an inadmissible one.
+  // Rectangular assignment still works: an invalid edge costs more than
+  // every possible change in the total of valid edge costs.
+  const invalidCost = Math.min(tracks.length, detections.length) + 1;
   const costMatrix: number[][] = [];
   for (let i = 0; i < tracks.length; i++) {
     const track = tracks[i];
@@ -57,7 +68,7 @@ export function matchDetectionsToTracks(
       const det = detections[j];
       // Class gating by group: tracks cannot associate with detections of a different object kind
       if (track.classId !== undefined && det.classId !== undefined && classGroup(track.classId) !== classGroup(det.classId)) {
-        row.push(1.0);
+        row.push(invalidCost);
         continue;
       }
       const iou = getIOU(
@@ -65,7 +76,7 @@ export function matchDetectionsToTracks(
         det
       );
       // Cost is 1 - IOU. Munkres minimizes cost.
-      row.push(1 - iou);
+      row.push(iou > 0 && iou >= iouThreshold ? 1 - iou : invalidCost);
     }
     costMatrix.push(row);
   }
@@ -76,9 +87,8 @@ export function matchDetectionsToTracks(
   const unmatchedDetections = new Set(detections.map((_, i) => i));
 
   for (const [trackIdx, detIdx] of assignments) {
-    const cost = costMatrix[trackIdx][detIdx];
-    const iou = 1 - cost;
-    if (iou >= iouThreshold) {
+    const cost = costMatrix[trackIdx]?.[detIdx];
+    if (cost !== undefined && cost < invalidCost) {
       matches.push([trackIdx, detIdx]);
       unmatchedTracks.delete(trackIdx);
       unmatchedDetections.delete(detIdx);

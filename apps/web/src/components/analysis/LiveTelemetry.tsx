@@ -32,7 +32,7 @@ export function LiveTelemetry({
       <div className="vg-live-speed">
         <span>Fastest visible estimate</span>
         <strong>{fastest === null ? '—' : '≈' + Math.round(fastest) + ' km/h'}</strong>
-        <small>Uncalibrated optical estimate</small>
+        <small>Uncalibrated optical estimate · Not an enforcement measurement</small>
       </div>
       <details className="vg-live-performance">
         <summary>Performance {provider && <span>{provider === 'wasm' ? 'WASM' : 'WebGPU'}</span>}</summary>

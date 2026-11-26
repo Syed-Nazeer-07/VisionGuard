@@ -84,3 +84,12 @@ describe('live playback projected vehicle overlays', () => {
     expect(p.motionPxPerSec).toBeCloseTo(30);
   });
 });
+
+it('rejects non-finite or out-of-range detection confidence', () => {
+  for (const confidence of [NaN, Infinity, 1.01]) {
+    expect(projectLiveTracks([{ ...vehicle, confidence }], 2, 2.1, 200, 100)).toEqual([]);
+  }
+});
+it('does not compute motion from a non-finite media timestamp', () => {
+  expect(calculateMotion({ x: 50, y: 60, h: 28, time: 1, vx: 0, vy: 0 }, vehicle, NaN).motionPxPerSec).toBeNull();
+});

@@ -7,6 +7,8 @@ const ANCHORS = 8400;
 // Do not change thresholds for cars, buses or trucks while recovering tiny bikes.
 const MOTORCYCLE_CONFIDENCE = 0.28;
 const BICYCLE_CONFIDENCE = 0.33;
+const MAX_SELECTED_VEHICLES = 80;
+const VEHICLE_CLASSES = [...VEHICLE_CLASS_IDS];
 
 export const YOLO_INPUT_SIZE = 640;
 export const YOLO_INPUT_SHAPE = [1, 3, YOLO_INPUT_SIZE, YOLO_INPUT_SIZE] as const;
@@ -78,15 +80,12 @@ export function decodeTrafficVehicles(
   for (let i = 0; i < ANCHORS; i++) {
     let bestClass = -1;
     let best = -Infinity;
-    let topClass = -1;
-    let topScore = -Infinity;
-    // Motorcycle and bicycle only: permit lower-confidence two-wheelers.
-    // This preserves the original car, bus and truck confidence behaviour.
-    for (let c = 0; c < NUM_CLASSES; c++) {
+    // Screen just the six supported classes first. Background anchors
+    // that cannot meet a vehicle threshold need no full COCO class scan.
+    for (const c of VEHICLE_CLASSES) {
       const confidence = data[(4 + c) * ANCHORS + i];
-      if (!Number.isFinite(confidence)) continue;
-      if (confidence > topScore) { topScore = confidence; topClass = c; }
-      if (VEHICLE_CLASS_IDS.has(c) && confidence > best) {
+      if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) continue;
+      if (confidence > best) {
         best = confidence;
         bestClass = c;
       }
@@ -95,6 +94,21 @@ export function decodeTrafficVehicles(
     const required = bestClass === 3 ? MOTORCYCLE_CONFIDENCE :
       bestClass === 1 ? BICYCLE_CONFIDENCE : 0.43;
     if (best < required) continue;
+    // Verify the overall winning class only for viable vehicle candidates.
+    // A non-probability score invalidates the anchor rather than masking a
+    // corrupted or incompatible model output.
+    let topClass = -1;
+    let topScore = -Infinity;
+    let validScores = true;
+    for (let c = 0; c < NUM_CLASSES; c++) {
+      const confidence = data[(4 + c) * ANCHORS + i];
+      if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) {
+        validScores = false;
+        break;
+      }
+      if (confidence > topScore) { topScore = confidence; topClass = c; }
+    }
+    if (!validScores) continue;
     // Don't turn pedestrians into motorcycles. Permit ambiguity with a rider
     // only when the two-wheeler score closely competes with the person score.
     if (topClass !== bestClass) {
@@ -133,21 +147,13 @@ export function decodeTrafficVehicles(
         : undefined
     });
   }
-  // Most anchors around large vehicles overlap. A global top-200 cutoff
-  // can spend its entire budget on repeated car boxes before NMS even sees
-  // smaller motorcycles. Preserve the original top-200 vehicle budget, but
-  // also consider the strongest 80 two-wheelers without lowering thresholds.
+  // Apply the output budget AFTER suppression, not to raw overlapping
+  // anchors. A single object can otherwise exhaust the candidate budget
+  // before a distinct vehicle of the same class is considered. This loop
+  // remains bounded by 8400 anchors × 80 accepted vehicles.
   candidates.sort((a, b) => b.prob - a.prob);
-  const candidatePool = new Set(candidates.slice(0, 200));
-  let extraTwoWheelers = 0;
-  for (const candidate of candidates) {
-    if (extraTwoWheelers >= 80) break;
-    if (candidate.classId !== 1 && candidate.classId !== 3) continue;
-    candidatePool.add(candidate);
-    extraTwoWheelers++;
-  }
   const selected: BoundingBox[] = [];
-  for (const candidate of [...candidatePool].sort((a, b) => b.prob - a.prob)) {
+  for (const candidate of candidates) {
     if (selected.some(existing => {
       const sameGroup = groupOf(existing.classId) === groupOf(candidate.classId);
       const competingTwoWheelers = isTwoWheeler(existing.classId) && isTwoWheeler(candidate.classId);
@@ -158,7 +164,7 @@ export function decodeTrafficVehicles(
       return sameGroup ? o.iou >= 0.43 || o.containment >= 0.82 : o.iou >= 0.72;
     })) continue;
     selected.push(candidate);
-    if (selected.length >= 80) break;
+    if (selected.length >= MAX_SELECTED_VEHICLES) break;
   }
   return selected;
 }

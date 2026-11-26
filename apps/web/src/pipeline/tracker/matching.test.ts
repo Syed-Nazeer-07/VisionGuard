@@ -65,3 +65,26 @@ describe('classGroup and matching gating', () => {
     expect(resPerson.unmatchedDetections).toEqual([0]);
   });
 });
+
+it('prioritizes two valid matches over a perfect match plus a rejected edge', () => {
+  const track = (cx: number) => ({ getState: () => ({ cx, cy: 100, w: 20, h: 20 }), classId: 2 });
+  const det = (x: number): BoundingBox => ({ x, y: 100, w: 20, h: 20, prob: .9, classId: 2, className: 'car' });
+  // Diagonal IoUs: 1 and .25. Cross IoUs: approximately .538 each.
+  const result = matchDetectionsToTracks([det(100), det(106)], [track(100), track(94)], .5);
+  expect(result.matches).toHaveLength(2);
+  expect(result.matches).toContainEqual([0, 1]);
+  expect(result.matches).toContainEqual([1, 0]);
+  expect(result.unmatchedTracks).toEqual([]);
+  expect(result.unmatchedDetections).toEqual([]);
+});
+it('never associates different classes even at a zero IoU threshold', () => {
+  const track = { getState: () => ({ cx: 100, cy: 100, w: 20, h: 20 }), classId: 2 };
+  const det: BoundingBox = { x: 100, y: 100, w: 20, h: 20, prob: .9, classId: 0, className: 'person' };
+  expect(matchDetectionsToTracks([det], [track], 0).matches).toEqual([]);
+});
+it('rejects invalid geometry and accepts exactly identical boxes at IoU 1', () => {
+  const track = { getState: () => ({ cx: 100, cy: 100, w: 20, h: 20 }), classId: 2 };
+  const det: BoundingBox = { x: 100, y: 100, w: 20, h: 20, prob: .9, classId: 2, className: 'car' };
+  expect(matchDetectionsToTracks([det], [track], 1).matches).toEqual([[0, 0]]);
+  expect(matchDetectionsToTracks([{ ...det, w: NaN }], [track], .1).matches).toEqual([]);
+});

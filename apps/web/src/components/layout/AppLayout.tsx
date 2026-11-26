@@ -11,6 +11,7 @@ import { supabase } from '../../lib/supabase';
 import '../../styles/workspace.css';
 import '../../styles/workspace-theme.css';
 import '../../styles/workspace-responsive.css';
+import '../../styles/product-experience.css';
 
 // Load the inference workspace only after requested, but preserve its state
 // once visited so playback and tab capture survive workspace navigation.
@@ -41,7 +42,7 @@ const MODERN_PATHS = new Set(['/app', '/app/analyze', '/app/videos',
 export function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, role } = useAuthStore();
+  const { user, role, profile } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [smallViewport, setSmallViewport] = useState(
@@ -58,7 +59,7 @@ export function AppLayout() {
   const [analysisMounted, setAnalysisMounted] = useState(activeAnalyze);
   const page = NAV.find(item => item.to === location.pathname);
   const title = page?.label || (location.pathname.includes('settings') ? 'Settings' : 'Workspace');
-  const displayName = (user?.user_metadata?.full_name as string | undefined) || user?.email || 'Member';
+  const displayName = profile?.name || (user?.user_metadata?.full_name as string | undefined) || user?.email || 'Member';
   const initial = displayName.trim().slice(0, 1).toUpperCase() || 'U';
 
   useEffect(() => { setMobileOpen(false); }, [location.pathname]);
@@ -198,14 +199,13 @@ export function AppLayout() {
     </aside>
 
     <div className="flex min-w-0 flex-1 flex-col" inert={smallViewport && mobileOpen}>
-      {/* Minimal mobile navigation only. Desktop pages already carry their
-          own titles; repeating a global toolbar wastes vertical space. */}
-      <div className="vg-mobile-bar flex h-12 shrink-0 items-center gap-3 border-b px-3 lg:hidden">
+      {/* Shared route breadcrumb and signed-in role. */}
+      <div className="vg-mobile-bar vg-product-topbar flex h-12 shrink-0 items-center gap-3 border-b px-3">
         <button ref={menuButtonRef} type="button" aria-label="Open navigation"
-          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+          className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
           aria-expanded={mobileOpen} aria-controls="vg-workspace-navigation"
           onClick={() => setMobileOpen(true)}><Menu size={20}/></button>
-        <span className="truncate text-sm font-semibold text-[#263950]">{title}</span>
+        <span className="vg-product-breadcrumb hidden lg:inline">Workspace /</span><span className="truncate text-sm font-semibold text-[#263950]">{title}</span><span className="vg-product-topbar-role ml-auto hidden sm:inline">{currentRole}</span>
       </div>
       {tabSharing && <div className="fixed right-3 top-3 z-50 flex items-center gap-2 rounded-xl border border-amber-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur-sm md:right-5 md:top-4"
         role="status" aria-label="Browser tab sharing is active">

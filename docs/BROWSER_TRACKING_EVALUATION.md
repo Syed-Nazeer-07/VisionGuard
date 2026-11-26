@@ -25,9 +25,28 @@ presented as browser YOLO11s accuracy.
    **null/unannotated**. It is not a benchmark and the evaluator intentionally
    refuses to score it until you supply honest manual annotations.
 
-Seeking, changing the source or reconnecting resets the trace because frame
-times would otherwise be inconsistent. Quality capture is in memory only;
-it neither uploads recordings nor syncs its trace to Supabase.
+Seeking, changing the source, reconnecting or toggling box visibility resets
+the trace because frame times or display conditions would otherwise be inconsistent.
+Keep boxes enabled during a complete sample; disabled overlays are not empty
+detector frames. Recorded footage supports slower review playback (0.25×, 0.5×,
+0.75×, 1× normal), giving slower hardware more wall-clock processing time per
+media second. The quality export records the actual playback rate; changing
+rate resets the sample. Compare runs at identical rates when assessing a
+model or tracking change, and report real-time and slowed review separately. Quality capture is in memory only; it neither uploads recordings
+nor syncs its trace to Supabase.
+
+The optional diagnostic export also includes bounded worker inference samples
+and p50/p95 timing summaries for worker latency, preprocessing, model execution,
+postprocessing, result age relative to the displayed video, and rendered overlay
+age. Each captured inference also includes its source dimensions and, when
+available, post-NMS detector boxes before association/replay. A null candidates
+field means unavailable evidence, not zero detections. Label the precise
+inference media time separately from overlay frame times to distinguish model/
+decoder misses from tracking/replay misses. Candidate counts are not recall. Replay-anchor misses distinguish
+late inference from a successfully replayed observation. Empty timing samples
+are reported as null, not zero; these are captured browser measurements, not
+hardware benchmarks or a substitute for independently labeled accuracy. Retain
+the same device, viewport, source clip, and display conditions when comparing runs.
 
 ## Label actual ground truth
 
@@ -71,7 +90,7 @@ node scripts/evaluate-tracking.mjs /path/to/labelled-browser-trace.json
 ~~~
 
 The evaluator produces class-aware precision, recall, F1 and mean box IoU
-at IoU@0.50; it also reports duplicate boxes, tracking ID switches
+at IoU@0.50 using maximum-cardinality class-aware one-to-one matching (not a global IoU optimizer); it also reports duplicate boxes, duplicate-ID frames, tracking ID switches
 (across annotated observations no more than 0.5s apart) and how many
 sampled frames a predicted ID lingered after a human-marked exit.
 
@@ -83,6 +102,27 @@ node scripts/evaluate-tracking.mjs /path/to/labelled-browser-trace.json --min-pr
 
 These thresholds are suggested examples, **not measured achievements**.
 The tool exits nonzero if a requested threshold is not met.
+
+## Compare two revisions on matched evidence
+
+Use the same permitted video and exact source-media frame times for both revisions.
+Copy only the independently created human annotations to the corresponding
+candidate frames; never alter predicted boxes. The comparison rejects mismatched
+times, frame dimensions, ground-truth geometry, class labels and exit annotations.
+It does not infer video identity from pixels; retain source checksums and run
+metadata separately. If the capture times differ, reacquire matched frames
+rather than silently dropping difficult frames.
+
+~~~bash
+node scripts/evaluate-tracking.mjs baseline.json --compare=candidate.json --min-f1=0.75 --min-mean-matched-iou=0.7 --max-duplicate-id-frames=0
+~~~
+
+The output includes both scorecards and candidate-minus-baseline deltas.
+Thresholds apply to the candidate. These are illustrative thresholds, not
+achieved model results. Higher precision/recall/F1 and mean IoU are better;
+lower ID switches, duplicate predictions and ghost metrics are better.
+Re-score the baseline using the new matching policy rather than comparing
+the revised score with old greedy-matcher results.
 
 ## Real-world validation plan for a 9/10 portfolio project
 

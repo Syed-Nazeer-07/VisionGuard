@@ -36,7 +36,8 @@ describe('VisionGuard public landing experience', () => {
 
   it('never displays a fake live dashboard, sample video player, or fabricated metrics', () => {
     const html = renderLanding();
-    expect(html).toContain('traffic_flow_analysis.jpg');
+    expect(html).toContain('scene-guide.svg');
+    expect(html).toContain('TRACKING CONCEPT / ILLUSTRATION');
     expect(html).not.toContain('<video');
     expect(html).not.toContain('car-detection.mp4');
     expect(html).not.toContain('platform_preview.png');

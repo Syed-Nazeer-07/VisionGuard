@@ -10,6 +10,7 @@ import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
 import { LiveBoxSmoother } from '../pipeline/rendering/liveBoxSmoother';
 import { paintLiveOverlay, type LiveLabelAnchor } from '../pipeline/rendering/liveOverlay';
 import { displayedVideoMediaTime, matchesFrameRequest, shouldStopAfterInferenceErrors } from '../pipeline/worker/frameSync';
+import type { DetectorEvent as WorkerEvent } from '../pipeline/worker/detectorProtocol';
 import { canReanalyzeStoredVideo } from '../lib/videoAssets';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { isB2UploadConfigured, storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
@@ -19,7 +20,7 @@ import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
 import { startupTimeoutMs, shouldRetryStartupOnWasm } from '../services/detectorStartupPolicy';
-import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
+import { appendQualityFrame, appendQualityInference, serializeQualityTrace, type QualityFrame, type QualityInference } from '../services/qualityTrace';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
 import { hasAdvancedVideoFrame, isLiveFrameDiscontinuity, isStreamStalled, shouldPaintLiveOverlay } from '../services/streamRecovery';
@@ -38,15 +39,6 @@ const OPTICAL_INTERVAL = 0.085;
 const HISTORY_WINDOW = 3.5;
 const MAX_CAPTURE_WIDTH = 640;
 const WORKER_TIMEOUT_MS = 20_000;
-
-type WorkerEvent =
-  | { type: 'loading'; stage: 'downloading' | 'initializing' }
-  | { type: 'progress'; receivedBytes: number; totalBytes: number | null }
-  | { type: 'cache-hit'; modelBytes: number }
-  | { type: 'ready'; provider: string; fallbackReason?: string }
-  | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
-  | { type: 'skipped'; requestId: number; generation: number }
-  | { type: 'error'; requestId: number; generation: number; message: string };
 
 type DetectorState = 'idle' | 'downloading' | 'initializing' | 'ready' | 'error';
 type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecting' | 'ended' | 'error';
@@ -69,6 +61,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const qualityEnabledRef = useRef(false);
   qualityEnabledRef.current = qualityEnabled;
   const qualityFramesRef = useRef<QualityFrame[]>([]);
+  const qualityInferencesRef = useRef<QualityInference[]>([]);
   const ownerId = useAuthStore(state => state.user?.id ?? null);
   const activeRunRef = useRef('');
   const currentFileRef = useRef<File | null>(null);
@@ -138,6 +131,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   // candidate reshuffling, disappearing speed text or floating labels.
   const labelAnchorsRef = useRef(new Map<number, LiveLabelAnchor>());
   const [showBoxes, setShowBoxes] = useState(true);
+  const showBoxesRef = useRef(true);
+  showBoxesRef.current = showBoxes;
   const [showLabels, setShowLabels] = useState(true);
   const [showTelemetry, setShowTelemetry] = useState(true);
   const [visibleClasses, setVisibleClasses] = useState<Record<string, number>>({});
@@ -152,6 +147,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [reviewRate, setReviewRate] = useState(1);
+  const qualityRateRef = useRef(1);
   const [detector, setDetector] = useState<DetectorState>('idle');
   const [modelProgress, setModelProgress] = useState<{ receivedBytes: number; totalBytes: number | null } | null>(null);
   const [modelCacheHit, setModelCacheHit] = useState(false);
@@ -172,7 +169,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
     if (!frames.length || !currentFileRef.current) return;
-    const blob = new Blob([serializeQualityTrace(frames)], { type: 'application/json' });
+    const blob = new Blob([serializeQualityTrace(frames, qualityInferencesRef.current, qualityRateRef.current)], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = href;
@@ -226,6 +223,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     speedHistoryRef.current.clear();
     autoIncidentDetectorRef.current.reset();
     qualityFramesRef.current = []; // A seek/source change invalidates timestamp alignment.
+    qualityInferencesRef.current = [];
     detectorToStableIdRef.current.clear();
     // Preserve increasing stable IDs within this run. A seek/reconnect must
     // not reuse #1 for an entirely different vehicle in the saved ledger.
@@ -363,6 +361,20 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             anchor = i;
             closestDistance = distance;
           }
+        }
+        if (qualityEnabledRef.current && currentFileRef.current && showBoxesRef.current) {
+          const displayedTime = displayedVideoMediaTime(
+            video.currentTime, presentedMediaTimeRef.current, video.paused, video.seeking
+          );
+          appendQualityInference(qualityInferencesRef.current, {
+            mediaTime: message.mediaTime, inferenceMs: message.inferenceMs,
+            resultAgeMs: Number.isFinite(displayedTime) ? Math.max(0, (displayedTime - message.mediaTime) * 1000) : null,
+            provider: message.provider, detectionCount: message.detectionCount,
+            replayAnchorAvailable: anchor >= 0 && closestDistance <= .14,
+            sourceWidth: video.videoWidth, sourceHeight: video.videoHeight,
+            preprocessMs: message.preprocessMs, modelRunMs: message.modelRunMs,
+            postprocessMs: message.postprocessMs, detections: message.detections ?? null
+          });
         }
         if (anchor < 0 || closestDistance > 0.14) {
           // One late inference result must not erase newer optically matched
@@ -1375,7 +1387,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }, WORKER_TIMEOUT_MS);
         try {
           worker.postMessage({
-            type: 'frame', bitmap, requestId, generation, mediaTime, sourceWidth, sourceHeight
+            type: 'frame', bitmap, requestId, generation, mediaTime, sourceWidth, sourceHeight,
+            diagnostics: qualityEnabledRef.current && !!currentFileRef.current && showBoxesRef.current
           }, [bitmap]);
         } catch (error) {
           bitmap.close();
@@ -1491,7 +1504,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             !video.paused && !video.ended && !video.seeking) {
           appendQualityFrame(qualityFramesRef.current,
             presentedMediaTimeRef.current ?? video.currentTime,
-            video.videoWidth, video.videoHeight, showBoxes ? visibleTracks : [], overlayAgeMs);
+            video.videoWidth, video.videoHeight, visibleTracks, overlayAgeMs, showBoxes);
         }
         if (time - lastUI > 250) {
           lastUI = time;
@@ -1562,7 +1575,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       </header>
 
       <section className="vg-analysis-sourcebar vg-panel" aria-labelledby="vg-sources-title">
-        <h2 id="vg-sources-title">Video source</h2>
+        <div className="vg-source-intro"><div className="vg-product-eyebrow">01 / Input</div><h2 id="vg-sources-title">Select a source</h2><p>Use footage you are authorized to analyze. Camera and tab permissions are requested only when selected.</p></div>
         <div className="vg-analysis-source-actions">
           <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
             onChange={event => {
@@ -1669,6 +1682,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 onLoadedMetadata={event => {
                   setDuration(event.currentTarget.duration);
                   event.currentTarget.playbackRate = 1;
+                  setReviewRate(1);
+                  qualityRateRef.current = 1;
                 }}
                 onLoadedData={event => {
                   setReadyVideo(true);
@@ -1683,6 +1698,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                     if (Number.isFinite(v.duration)) v.currentTime = Math.min(t, Math.max(0, v.duration - 0.05));
                   }
                   startDetector();
+                }}
+                onRateChange={event => {
+                  const rate = event.currentTarget.playbackRate;
+                  if (!Number.isFinite(rate) || rate <= 0) return;
+                  if (qualityRateRef.current !== rate) {
+                    qualityFramesRef.current = [];
+                    qualityInferencesRef.current = [];
+                    qualityRateRef.current = rate;
+                  }
+                  setReviewRate(rate);
                 }}
                 onPlay={() => {
                   setPlaying(true);
@@ -1753,14 +1778,33 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               </button>
             </>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
-              <Film size={42} className="text-[#f2a27e]" />
+            <div className="vg-player-welcome flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
+              <img src="/scene-guide.svg" alt="" aria-hidden="true" className="vg-player-welcome-art" />
               <div className="text-lg font-semibold">Select an analysis source</div>
-              <p className="max-w-md text-sm text-slate-300">Choose a local file or grant access to a camera or browser tab.</p>
-              <p className="max-w-md text-xs leading-5 text-slate-400">Detection runs on this device.</p>
+              <p className="max-w-md text-sm text-slate-300">Open a local video, or approve access to a camera or browser tab.</p>
+              <button type="button" onClick={() => void chooseVideo()} className="vg-primary"><Upload size={16}/> Select local video</button>
+              <p className="max-w-md text-xs leading-5 text-slate-400">Inference runs on this device. No source has been selected.</p>
             </div>
           )}
         </div>
+        {url && !webcamActive && !tabCaptureActive && <div className="vg-review-rate">
+          <div className="min-w-0">
+            <label htmlFor="vg-review-rate" className="text-sm font-semibold">Review playback speed</label>
+            <p className="mt-1 text-xs">Slow down recorded footage to give the detector more processing time per video second. This does not guarantee more accurate detections.</p>
+          </div>
+          <select id="vg-review-rate" value={reviewRate} onChange={event => {
+            const video = videoRef.current;
+            if (!video || captureKindRef.current) return;
+            try { video.playbackRate = Number(event.target.value); }
+            catch (error) { setError('This browser does not support the selected playback speed: ' + String(error)); }
+          }}>
+            {![.25,.5,.75,1].includes(reviewRate) && <option value={reviewRate}>{reviewRate}× (browser setting)</option>}
+            <option value={.25}>0.25× · slow review</option>
+            <option value={.5}>0.5×</option>
+            <option value={.75}>0.75×</option>
+            <option value={1}>1× · normal</option>
+          </select>
+        </div>}
         {url && (
           <div className="vg-analysis-player-footer flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -1805,10 +1849,19 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       <fieldset className="vg-analysis-display vg-panel">
         <legend className="sr-only">Display preferences</legend>
         <span aria-hidden="true"><SlidersHorizontal size={16}/> Display</span>
-        <label><input type="checkbox" checked={showBoxes} onChange={event => setShowBoxes(event.target.checked)}/> Boxes</label>
+        <label><input type="checkbox" checked={showBoxes} onChange={event => {
+          if (qualityEnabledRef.current) {
+            // A visibility change splits the evaluated segment. Never let a
+            // deliberately hidden overlay masquerade as a detector failure.
+            qualityFramesRef.current = [];
+            qualityInferencesRef.current = [];
+          }
+          setShowBoxes(event.target.checked);
+        }}/> Boxes</label>
         <label><input type="checkbox" checked={showLabels} disabled={!showBoxes} onChange={event => setShowLabels(event.target.checked)}/> Labels</label>
         <label><input type="checkbox" checked={showTelemetry} onChange={event => setShowTelemetry(event.target.checked)}/> Telemetry</label>
         {showBoxes && <small>Dashed boxes indicate predicted positions.</small>}
+        {qualityEnabled && <small>{showBoxes ? 'QA trace: keep boxes enabled for a continuous sample.' : 'QA trace paused: enable boxes to start a new sample.'}</small>}
       </fieldset>
 
       <details id="vg-analysis-details" className="vg-analysis-details vg-storage-disclosure">

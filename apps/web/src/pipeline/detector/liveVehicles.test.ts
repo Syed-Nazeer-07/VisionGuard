@@ -129,3 +129,49 @@ it('suppresses strongly overlapping bicycle and motorcycle candidates without su
   expect(decodeTrafficVehicles(data, trafficLetterbox(640, 640)).map(box => box.className))
     .toEqual(['motorcycle', 'bicycle']);
 });
+
+it('does not let duplicate high-confidence anchors hide a distinct lower-confidence car', () => {
+  const data = new Float32Array(84 * ANCHORS);
+  for (let anchor = 0; anchor < 350; anchor++) {
+    data[anchor] = 160;
+    data[ANCHORS + anchor] = 320;
+    data[2 * ANCHORS + anchor] = 80;
+    data[3 * ANCHORS + anchor] = 60;
+    data[6 * ANCHORS + anchor] = .92 - anchor * .0002;
+  }
+  const distinct = 400;
+  data[distinct] = 450;
+  data[ANCHORS + distinct] = 320;
+  data[2 * ANCHORS + distinct] = 40;
+  data[3 * ANCHORS + distinct] = 30;
+  data[6 * ANCHORS + distinct] = .65;
+  const boxes = decodeTrafficVehicles(data, trafficLetterbox(640, 640));
+  expect(boxes).toHaveLength(2);
+  expect(boxes.map(box => box.x)).toEqual([160,450]);
+});
+
+it('rejects malformed score vectors without interpreting corrupt scores as confidence', () => {
+  const invalid = outputFor(2, 1.2);
+  expect(decodeTrafficVehicles(invalid, trafficLetterbox(640, 640))).toEqual([]);
+  const malformed = outputFor(2, .9);
+  malformed[20 * ANCHORS] = NaN;
+  expect(decodeTrafficVehicles(malformed, trafficLetterbox(640, 640))).toEqual([]);
+  const competing = outputFor(2, .9);
+  competing[20 * ANCHORS] = .99;
+  expect(decodeTrafficVehicles(competing, trafficLetterbox(640, 640))).toEqual([]);
+});
+
+it('enforces the 80-vehicle output cap after eliminating duplicates', () => {
+  const data = new Float32Array(84 * ANCHORS);
+  for (let i = 0; i < 100; i++) {
+    data[i] = 30 + (i % 10) * 60;
+    data[ANCHORS + i] = 30 + Math.floor(i / 10) * 60;
+    data[2 * ANCHORS + i] = 20;
+    data[3 * ANCHORS + i] = 20;
+    data[6 * ANCHORS + i] = .9 - i * .001;
+  }
+  const boxes = decodeTrafficVehicles(data, trafficLetterbox(640, 640));
+  expect(boxes).toHaveLength(80);
+  expect(boxes[0].x).toBe(30);
+  expect(boxes[79].x).toBe(570);
+});

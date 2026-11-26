@@ -2,11 +2,11 @@
 
 :root {
   --vg-font: Inter, "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --vg-page-bg: #f4f5f0;
-  --vg-text: #172b28;
-  --vg-focus: #276958;
-  --vg-action: #235d51;
-  --vg-action-hover: #16493d;
+  --vg-page-bg: #f3f6f7;
+  --vg-text: #172831;
+  --vg-focus: #087d70;
+  --vg-action: #11685d;
+  --vg-action-hover: #0c5048;
   font-family: var(--vg-font);
   font-synthesis: none;
   -webkit-font-smoothing: antialiased;

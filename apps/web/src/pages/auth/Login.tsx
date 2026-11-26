@@ -224,12 +224,12 @@ export function Login() {
 
         {/* Center Editorial Content */}
         <div className="relative z-10 my-auto py-8">
-          <div className="max-w-[480px]">
+          <div className="max-w-[480px]"><img className="vg-auth-scene" src="/scene-guide.svg" alt="" aria-hidden="true" />
             <p className="vg-auth-headline text-4xl xl:text-[52px] font-semibold text-white leading-[1.11] mb-5 tracking-[-0.055em]">
-              Traffic analysis in your browser.
+              See the road. Understand the movement.
             </p>
             <p className="text-[15px] text-[#bec7ca] leading-[1.8] mb-8">
-              Analyze traffic footage, follow the movement, and return to the insights that matter—all from one workspace.
+              Open authorized footage, observe vehicle tracks, and review your saved sessions. Inference runs in your browser; original-video backup is optional.
             </p>
           </div>
           

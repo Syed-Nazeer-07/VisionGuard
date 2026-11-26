@@ -242,3 +242,54 @@ it('rejects prediction-only samples and extreme optical jumps instead of emittin
   expect(extreme.kmh).toBeNull();
   expect(extreme.history.points).toHaveLength(1);
 });
+
+it('does not turn detector correction at the same timestamp into a new speed reading', () => {
+  const start = updateScreenSpeed({ points: [], smoothedKmh: null }, car(100), 0);
+  const measured = updateScreenSpeed(start.history, car(130), .65);
+  const correction = updateScreenSpeed(measured.history, car(180), .65);
+  expect(correction.history).toBe(measured.history);
+  expect(correction.kmh).toBe(measured.kmh);
+});
+it('resets optical speed history after a backward seek or a vehicle-scale change', () => {
+  const start = updateScreenSpeed({ points: [], smoothedKmh: null }, car(100), 0);
+  const measured = updateScreenSpeed(start.history, car(130), .65);
+  const seek = updateScreenSpeed(measured.history, car(100), .2);
+  expect(seek.kmh).toBeNull();
+  expect(seek.history.points).toHaveLength(1);
+  const differentClass = updateScreenSpeed(measured.history, { ...car(150), className: 'truck' }, 1.2);
+  expect(differentClass.kmh).toBeNull();
+  expect(differentClass.history.points).toHaveLength(1);
+});
+it('does not invent a vehicle width for an unknown class', () => {
+  const unknown = { ...car(100), className: 'unknown' };
+  const start = updateScreenSpeed({ points: [], smoothedKmh: null }, unknown, 0);
+  expect(updateScreenSpeed(start.history, { ...unknown, x: 160 }, 1).kmh).toBeNull();
+});
+
+it('rejects conflicting detector IDs instead of creating duplicate persistent assignments', () => {
+  const first = reconcileVehicles([], [car(100, 120, 7), car(200, 120, 7)], 2, 1);
+  expect(first.tracks).toEqual([]);
+  expect(first.sourceAssignments.size).toBe(0);
+  const valid = reconcileVehicles([], [car(100, 120, 8), car(200, 120, 9)], 2, 1);
+  expect(valid.tracks).toHaveLength(2);
+  expect(valid.sourceAssignments.size).toBe(2);
+});
+it('does not promote non-finite or impossible confidence to a persistent vehicle', () => {
+  const result = reconcileVehicles([], [
+    { ...car(100, 120, 1), confidence: NaN },
+    { ...car(200, 120, 2), confidence: 1.1 }
+  ], 2, 1);
+  expect(result.tracks).toEqual([]);
+});
+
+it('corrects moderate observed growth and shrinkage without losing vehicle identity', () => {
+  const before: PersistentTrack = { ...car(100, 120, 9), w: 50, h: 40,
+    lastDetectedAt: 1, speedKmh: null, speedIsEstimate: true };
+  const larger = reconcileVehicles([before], [{ ...car(100, 120, 71), w: 65, h: 52 }], 1.3, 10);
+  expect(larger.tracks[0].id).toBe(9);
+  expect(larger.tracks[0].w).toBeCloseTo(59.75);
+  expect(larger.tracks[0].h).toBeCloseTo(47.8);
+  const smaller = reconcileVehicles([before], [{ ...car(100, 120, 72), w: 40, h: 32 }], 1.3, 10);
+  expect(smaller.tracks[0].id).toBe(9);
+  expect(smaller.tracks[0].w).toBeCloseTo(43.5);
+});

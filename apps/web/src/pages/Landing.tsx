@@ -158,8 +158,9 @@ export function Landing() {
         <section className="vgn-hero">
           <div className="vgn-shell vgn-hero-grid">
             <div className="vgn-hero-content">
-              <h1>Traffic video<br /><em>in focus.</em></h1>
-              <p>Analyze authorized footage on your device, track vehicles, and review what you observed.</p>
+              <span className="vgn-eyebrow"><span aria-hidden="true" /> Browser-first traffic intelligence</span>
+              <h1>Understand traffic.<br /><em>Frame by frame.</em></h1>
+              <p>Turn authorized video, camera and browser-tab footage into vehicle observations, session history and reviewable findings. Inference runs in your browser.</p>
               <div className="vgn-hero-actions">
                 <a href="/register" className="vgn-button vgn-button-accent">Create an account <ArrowUpRight size={18} /></a>
                 <a href="#platform" className="vgn-button vgn-button-ghost">Explore the platform <ArrowRight size={17} /></a>
@@ -203,7 +204,7 @@ export function Landing() {
                   </div>
                 </div>
               </div>
-              <p className="vgn-demo-caption"><MousePointer2 size={13} /> {selected.description} <span>Illustration only · Try real analysis after sign-in</span></p>
+              <p aria-live="polite" className="vgn-demo-caption"><MousePointer2 size={13} /> {selected.description} <span>Illustration only · Try real analysis after sign-in</span></p>
             </div>
           </div>
         </section>
@@ -218,7 +219,7 @@ export function Landing() {
         <section className="vgn-section vgn-intro" id="platform">
           <div className="vgn-shell">
             <div className="vgn-intro-heading">
-              <h2>From detection to <em>review.</em></h2>
+              <span className="vgn-eyebrow">01 / The platform</span><h2>From detection to <em>review.</em></h2>
               <div>
                 <p>Video analysis should help you understand what happened—not leave you with disconnected detections and numbers.</p>
                 <p>VisionGuard connects the visual moment to a broader workflow: track activity, explore results, and return to sessions later.</p>
@@ -228,8 +229,8 @@ export function Landing() {
             <div className="vgn-editorial-grid">
               <article className="vgn-editorial-main">
                 <div className="vgn-editorial-art">
-                  <img src="/traffic_flow_analysis.jpg" alt="Illustrative overhead view of road traffic" loading="lazy" />
-                  <span className="vgn-art-label">ORIGINAL FOOTAGE PROVIDES THE CONTEXT</span>
+                  <img src="/scene-guide.svg" alt="Concept diagram of vehicle localization and motion tracking, not actual inference" loading="lazy" />
+                  <span className="vgn-art-label">TRACKING CONCEPT / ILLUSTRATION</span>
                 </div>
                 <div className="vgn-editorial-copy">
                   <h3>Keep your eyes<br />on the whole story.</h3>
@@ -258,13 +259,13 @@ export function Landing() {
         <section className="vgn-section vgn-capabilities" id="capabilities">
           <div className="vgn-shell">
             <div className="vgn-capability-heading">
-              <h2>Analysis <em>capabilities.</em></h2>
+              <span className="vgn-eyebrow">02 / Capabilities</span><h2>Analysis <em>capabilities.</em></h2>
               <p>Four connected ways to turn moving pixels into something you can actually review.</p>
             </div>
             <div className="vgn-capability-grid">
               {capabilities.map(({ number, title, text, icon: Icon }) => (
                 <article className="vgn-capability" key={number}>
-                  <div className="vgn-capability-top"><Icon size={22} strokeWidth={1.5} aria-hidden="true"/></div>
+                  <div className="vgn-capability-top"><Icon size={22} strokeWidth={1.5} aria-hidden="true"/><span aria-hidden="true">{number}</span></div>
                   <h3>{title}</h3>
                   <p>{text}</p>
                 </article>
@@ -276,7 +277,7 @@ export function Landing() {
         <section className="vgn-section vgn-how" id="workflow">
           <div className="vgn-shell">
             <div className="vgn-how-heading">
-              <h2>How analysis <em>works.</em></h2>
+              <span className="vgn-eyebrow">03 / Workflow</span><h2>How analysis <em>works.</em></h2>
               <p>Bring the footage. Explore what's visible. Return when you need the context again.</p>
             </div>
             <div className="vgn-steps">

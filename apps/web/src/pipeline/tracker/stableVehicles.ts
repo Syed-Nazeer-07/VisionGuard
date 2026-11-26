@@ -15,6 +15,8 @@ export interface TrajectoryPoint { time: number; x: number; y: number }
 export interface SpeedHistory {
   points: TrajectoryPoint[];
   smoothedKmh: number | null;
+  /** Assumed physical width is class-dependent; do not mix incompatible scales. */
+  scaleClass?: string;
 }
 const PHYSICAL_WIDTH_METERS: Record<string, number> = {
   bicycle: 0.65,
@@ -91,7 +93,15 @@ export function reconcileVehicles(
   // Predicted boxes are display-only and must never be interpreted as a
   // fresh YOLO/optical observation during identity reconciliation. Otherwise
   // their extrapolated road positions can overwrite real vehicle locations.
-  const viable = candidates.filter(track => finiteTrack(track) && !track.isPredicted);
+  // One detector identity must not update two persistent vehicles. If a
+  // frame carries conflicting copies of an ID, preserve existing real
+  // optical observations rather than promote either ambiguous candidate.
+  const counts = new Map<number, number>();
+  for (const candidate of candidates) counts.set(candidate.id, (counts.get(candidate.id) ?? 0) + 1);
+  const viable = candidates.filter(track => counts.get(track.id) === 1 &&
+    Number.isSafeInteger(track.id) && track.id >= 0 &&
+    Number.isFinite(track.confidence) && track.confidence >= 0 && track.confidence <= 1 &&
+    finiteTrack(track) && !track.isPredicted);
   const options: { previous: number; current: number; score: number }[] = [];
   existing.forEach((old, previous) => {
     viable.forEach((candidate, current) => {
@@ -115,11 +125,14 @@ export function reconcileVehicles(
     // finishes the frame that optical flow has already advanced through.
     const correction = .55;
     const mix = (x: number, y: number) => x + correction * (y - x);
-    // Box-size observations are noisier than center positions: suppress
-    // abrupt jumps, while still allowing approach/perspective size changes.
+    // Correct moderate detector-confirmed size changes promptly, while
+    // retaining the original conservative limit for extreme box jumps.
+    const observedScale = Math.max(after.w / before.w, before.w / after.w,
+      after.h / before.h, before.h / after.h);
     const smoothSize = (oldValue: number, observed: number) => {
+      if (observedScale <= 1.5) return oldValue + .65 * (observed - oldValue);
       const bounded = Math.max(oldValue * .78, Math.min(oldValue * 1.22, observed));
-      return oldValue * .72 + bounded * .28;
+      return oldValue + .28 * (bounded - oldValue);
     };
     // For buses/trucks, smooth the actual class probabilities instead of
     // inventing a label from the colour of a vehicle's roof or trailer.
@@ -201,8 +214,24 @@ export function updateScreenSpeed(
   track: LiveTrack,
   mediaTime: number
 ): { history: SpeedHistory; kmh: number | null } {
-  if (track.isPredicted || !Number.isFinite(mediaTime) || !finiteTrack(track)) {
+  if (track.isPredicted || !Number.isFinite(mediaTime) || mediaTime < 0 || !finiteTrack(track)) {
     return { history, kmh: null };
+  }
+  const point = { time: mediaTime, x: track.x, y: track.y + track.h / 2 };
+  const scaleClass = track.className;
+  if (!Object.hasOwn(PHYSICAL_WIDTH_METERS, scaleClass)) {
+    return { history: { points: [], smoothedKmh: null }, kmh: null };
+  }
+  const previousPoint = history.points[history.points.length - 1];
+  if (previousPoint && (mediaTime < previousPoint.time ||
+      mediaTime - previousPoint.time > 2.4 ||
+      (history.scaleClass !== undefined && history.scaleClass !== scaleClass))) {
+    return { history: { points: [point], smoothedKmh: null, scaleClass }, kmh: null };
+  }
+  // Detector correction and optical sampling can refer to the same decoded
+  // frame. Never recompute motion from a changed box at an unchanged time.
+  if (previousPoint && mediaTime - previousPoint.time <= .035) {
+    return { history, kmh: history.smoothedKmh };
   }
   // Slow CPU/WASM inference can leave >1s between real observations.
   // Keep a bounded two-second trajectory for a *coarse optical estimate*,
@@ -211,12 +240,10 @@ export function updateScreenSpeed(
     mediaTime - p.time <= 2.4 && p.time <= mediaTime
   );
   const previousEstimate = points.length ? history.smoothedKmh : null;
-  if (!points.length || mediaTime - points[points.length - 1].time > 0.035) {
-    points.push({ time: mediaTime, x: track.x, y: track.y + track.h / 2 });
-  }
+  points.push(point);
   const minAge = .50;
   const past = points.find(p => mediaTime - p.time >= minAge);
-  if (!past) return { history: { points, smoothedKmh: previousEstimate }, kmh: previousEstimate };
+  if (!past) return { history: { points, smoothedKmh: previousEstimate, scaleClass }, kmh: previousEstimate };
   const elapsed = mediaTime - past.time;
   const dx = track.x - past.x;
   const dy = track.y + track.h / 2 - past.y;
@@ -226,20 +253,19 @@ export function updateScreenSpeed(
   if (relativeTravel < .07) {
     const next = previousEstimate === null ? 0 : Math.max(0, previousEstimate * .4);
     const kmh = next < 2 ? 0 : next;
-    return { history: { points, smoothedKmh: kmh }, kmh };
+    return { history: { points, smoothedKmh: kmh, scaleClass }, kmh };
   }
-  const assumedWidth = PHYSICAL_WIDTH_METERS[track.className] ?? 1.82;
+  const assumedWidth = PHYSICAL_WIDTH_METERS[scaleClass];
   const metersPerPixel = assumedWidth / Math.max(8, track.w);
   // Vertical component is foreshortened in typical elevated roadside footage.
   // This factor is a heuristic only. It MUST be labeled as estimated, not exact.
   const groundPixelPerSecond = Math.hypot(dx, dy * 2.0) / elapsed;
   const estimate = 3.6 * metersPerPixel * groundPixelPerSecond;
   if (!Number.isFinite(estimate) || estimate > 160) {
-    const point = { time: mediaTime, x: track.x, y: track.y + track.h / 2 };
-    return { history: { points: [point], smoothedKmh: null }, kmh: null };
+    return { history: { points: [point], smoothedKmh: null, scaleClass }, kmh: null };
   }
   const next = previousEstimate === null ? estimate : previousEstimate * .75 + estimate * .25;
-  return { history: { points, smoothedKmh: next }, kmh: next };
+  return { history: { points, smoothedKmh: next, scaleClass }, kmh: next };
 }
 
 /**

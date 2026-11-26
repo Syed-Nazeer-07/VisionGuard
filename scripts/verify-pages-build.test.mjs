@@ -68,3 +68,14 @@ test('existing Cloudflare Worker serves the Vite SPA assets on Node 22', () => {
   assert.deepEqual(config.assets.run_worker_first, ['/api/model/*']);
   assert.equal(readFileSync(path.resolve('.nvmrc'), 'utf8').trim(), '22');
 });
+
+// Synthetic token payloads only: never use an actual service-role credential.
+test('accepts legacy anon JWT format but rejects privileged, unknown and malformed credentials', () => {
+  const f = fixture();
+  const token = role => ['eyJhbGciOiJIUzI1NiJ9', Buffer.from(JSON.stringify({ role })).toString('base64url'), 'synthetic'].join('.');
+  const check = key => inspectPagesBuild({ ...f, env: { ...f.env, VITE_SUPABASE_ANON_KEY: key } });
+  assert.equal(check(token('anon')).model, 'external HTTPS');
+  for (const key of [token('service_role'), token('authenticated'), token(undefined), 'unrecognized-key-123456', 'abc.invalid.signature']) {
+    assert.throws(() => check(key), /PUBLIC/);
+  }
+});

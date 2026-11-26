@@ -7,13 +7,15 @@ export interface VehicleLabelSource {
   id: number;
   className: string;
   speedKmh: number | null;
+  isPredicted?: boolean;
 }
 
 export function vehicleOverlayLabels(track: VehicleLabelSource): readonly [string, string] {
   const vehicleClass = track.className.trim().toUpperCase() || 'VEHICLE';
-  const speed = track.speedKmh === null || !Number.isFinite(track.speedKmh)
+  const speed = track.isPredicted || track.speedKmh === null || !Number.isFinite(track.speedKmh) ||
+    track.speedKmh < 0 || track.speedKmh > 160
     ? '—'
-    : '≈' + Math.round(Math.max(0, track.speedKmh));
+    : '≈' + Math.round(track.speedKmh);
 
   return [
     '#' + track.id + ' ' + vehicleClass + ' ' + speed + ' km/h*',
