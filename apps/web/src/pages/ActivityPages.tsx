@@ -4,7 +4,7 @@ import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { Link } from 'react-router-dom';
 import { PaginatedRows } from '../components/ui/PaginatedRows';
-import { ArrowUpRight, Download, Film, Plus, Search, X } from 'lucide-react';
+import { ArrowUpRight, Download, Film, FileText, Plus, Search, Table2, X } from 'lucide-react';
 import type { jsPDF } from 'jspdf';
 import { useAuthStore } from '../store/auth';
 import { activityLedger, countRepeatedTracks, isRepeatedVehicleTrack, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
@@ -146,7 +146,7 @@ export function ActivityAnalytics() {
   const byClass = useMemo(() => distribution(counts.distribution), [counts.distribution]);
   return <div className="vg-page vg-data-page">
     <header className="vg-page-header">
-      <div><h1>Analytics</h1><p>Understand vehicle classes, activity volume and session history.</p></div>
+      <div><div className="vg-product-eyebrow">Intelligence / Recorded activity</div><h1>Analytics</h1><p>Understand vehicle classes, activity volume and session history.</p></div>
       <div role="group" aria-label="Analytics time range" className="vg-range-control">
         {([
           ['all', 'All time'], ['today', '24 hours'], ['week', '7 days'], ['month', '30 days'],
@@ -161,13 +161,13 @@ export function ActivityAnalytics() {
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     <div className="vg-metric-grid mb-5 grid gap-3 sm:grid-cols-3">
-      <Stat label="Repeated tracks" number={counts.vehicles} note="Observed on multiple frames"/>
-      <Stat label="Peak simultaneous tracks" number={counts.maximumVisible} note="Largest set of observed tracks in a detector frame"/>
-      <Stat label="Inference frames" number={counts.analyzedFrames} note="Completed observations"/>
+      <Stat label="Repeated tracks" number={loaded ? counts.vehicles : null} note="Observed on multiple frames"/>
+      <Stat label="Peak simultaneous tracks" number={loaded ? counts.maximumVisible : null} note="Largest set of observed tracks in a detector frame"/>
+      <Stat label="Inference frames" number={loaded ? counts.analyzedFrames : null} note="Completed observations"/>
     </div>
     <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
       <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><div><h2>Classification breakdown</h2><p className="vg-section-subtitle">Observed classes across recorded sessions</p></div><span className="vg-metadata-chip">{byClass.length} classes</span></div>
+        <div className="vg-section-head"><div><h2>Classification breakdown</h2><p className="vg-section-subtitle">Observed classes across recorded sessions</p></div><span className="vg-metadata-chip">{loaded ? byClass.length + ' classes' : 'Loading'}</span></div>
         {loaded && byClass.length ?
           <Suspense fallback={<p className="vg-empty-row" role="status">Loading chart…</p>}>
             <VehicleDistribution data={byClass}/>
@@ -175,8 +175,8 @@ export function ActivityAnalytics() {
           <p className="vg-empty-row">{loaded ? 'No classification data for this period.' : 'Loading data…'}</p>}
       </section>
       <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><div><h2>Sessions in range</h2><p className="vg-section-subtitle">Most recent first · Browse your full history</p></div><span className="vg-metadata-chip">{filtered.length} sessions</span></div>
-        {filtered.length ?
+        <div className="vg-section-head"><div><h2>Sessions in range</h2><p className="vg-section-subtitle">Most recent first · Browse your full history</p></div><span className="vg-metadata-chip">{loaded ? filtered.length + ' sessions' : 'Loading'}</span></div>
+        {!loaded ? <p className="vg-empty-row" role="status">Loading sessions…</p> : filtered.length ?
           <PaginatedRows items={[...filtered].sort((a, b) => b.updatedAt - a.updatedAt)}
             itemLabel="sessions" resetKey={range} className="vg-data-rows divide-y divide-slate-100" renderRow={run =>
               <div key={run.id} className="vg-data-row flex items-center justify-between gap-3 px-5 py-3.5 text-sm">
@@ -285,7 +285,7 @@ export function ActivityReports() {
   };
   return <div className="vg-page vg-data-page">
     <header className="vg-page-header">
-      <div><h1>Reports</h1><p>Create downloadable records from your saved traffic analysis sessions.</p></div>
+      <div><div className="vg-product-eyebrow">Intelligence / Export</div><h1>Reports</h1><p>Create downloadable records from your saved traffic analysis sessions.</p></div>
     </header>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     {exportError && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{exportError}</p>}
@@ -303,20 +303,24 @@ export function ActivityReports() {
           {records.map(r=><option key={r.id} value={r.id}>{r.sourceName} · {niceDate(r.createdAt)}</option>)}
         </select>
         <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <Stat label="Sessions" number={totals.runs} note="Included in report"/>
-          <Stat label="Repeated tracks" number={totals.vehicles} note="Raw CSV includes brief candidates"/>
-          <Stat label="Review flags" number={totals.violations}
-            note={totals.pendingReviews + ' pending · ' +
+          <Stat label="Sessions" number={loaded ? totals.runs : null} note="Included in report"/>
+          <Stat label="Repeated tracks" number={loaded ? totals.vehicles : null} note="Raw CSV includes brief candidates"/>
+          <Stat label="Review flags" number={loaded ? totals.violations : null}
+            note={!loaded ? 'Loading review flags' : totals.pendingReviews + ' pending · ' +
               (totals.reviewedFlags + totals.dismissedFlags) + ' handled'}/>
         </div>
-        <div className="vg-report-actions mt-6 flex flex-wrap gap-2">
+        <div className="vg-report-format-heading"><h3>Choose an export format</h3><p>Files contain saved observations for the selected scope.</p></div>
+        <div className="vg-report-format-grid">
+          <article><FileText size={22} aria-hidden="true"/><h4>Activity report</h4><p>Readable PDF with observations and review flags.</p>
           <button type="button" disabled={pdfBusy || !loaded || !filtered.length} onClick={() => void downloadPdf()}
-            className="vg-primary" aria-busy={pdfBusy}><Download size={15}/>{pdfBusy ? 'Preparing PDF…' : 'Download PDF'}</button>
+            className="vg-primary" aria-busy={pdfBusy}><Download size={15}/>{pdfBusy ? 'Preparing PDF…' : 'Download PDF'}</button></article>
+          <article><Table2 size={22} aria-hidden="true"/><h4>Vehicle observations</h4><p>Track-level CSV including confidence and speed estimates.</p>
           <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportCSV(filtered)}
-            className="vg-secondary"><Download size={15}/> Vehicle CSV</button>
+            className="vg-secondary"><Download size={15}/> Vehicle CSV</button></article>
+          <article><Table2 size={22} aria-hidden="true"/><h4>Incident review</h4><p>CSV of review reasons, evidence notes and decisions.</p>
           <button type="button" disabled={!loaded || !filtered.some(r=>r.violations.length)}
             onClick={()=>exportIncidentsCSV(filtered)}
-            className="vg-secondary"><Download size={15}/> Incident review CSV</button>
+            className="vg-secondary"><Download size={15}/> Incident review CSV</button></article>
         </div>
         <p className="vg-footnote">PDF includes tracked vehicles and saved review flags. Vehicle CSV contains tracks; incident CSV contains review decisions. Image-derived speed remains an uncalibrated visual estimate, not an enforcement measurement.</p>
       </div>
@@ -339,16 +343,21 @@ export function ActivityVideoLibrary() {
   const [b2Videos, setB2Videos] = useState<B2VideoRow[]>([]);
   const [localVideo, setLocalVideo] = useState<{name:string;size:number}|null>(null);
   const [localError, setLocalError] = useState('');
+  const [localLoading, setLocalLoading] = useState(Boolean(userId));
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'recorded' | 'live'>('all');
   const [b2Loading, setB2Loading] = useState(false);
   const [b2Error, setB2Error] = useState('');
   const [search, setSearch] = useState('');
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const visibleVideos = normalizedSearch ? b2Videos.filter(video =>
     video.filename.toLocaleLowerCase().includes(normalizedSearch)) : b2Videos;
-  const visibleSessions = normalizedSearch ? records.filter(run =>
-    run.sourceName.toLocaleLowerCase().includes(normalizedSearch)) : records;
+  const visibleSessions = records.filter(run =>
+    (!normalizedSearch || run.sourceName.toLocaleLowerCase().includes(normalizedSearch)) &&
+    (sourceFilter === 'all' || (sourceFilter === 'live' ? run.sourceType === 'live-stream' : run.sourceType !== 'live-stream')));
   useEffect(() => {
-    if (!userId) { setLocalVideo(null); setLocalError(''); return; }
+    setLocalVideo(null); setLocalError('');
+    setLocalLoading(Boolean(userId));
+    if (!userId) return;
     let alive = true;
     void localAnalysisStorage.loadVideo(userId).then(saved => {
       if (!alive) return;
@@ -359,11 +368,12 @@ export function ActivityVideoLibrary() {
       setLocalVideo(null);
       setLocalError('Could not access the retained local file: ' +
         (error instanceof Error ? error.message : String(error)));
-    });
+    }).finally(() => { if (alive) setLocalLoading(false); });
     return () => { alive = false; };
   }, [userId]);
   useEffect(() => {
-    if (!userId) { setB2Videos([]); return; }
+    setB2Videos([]); setB2Error(''); setB2Loading(Boolean(userId));
+    if (!userId) return;
     let alive = true;
     setB2Loading(true);
     void (async () => {
@@ -382,7 +392,7 @@ export function ActivityVideoLibrary() {
   },[userId]);
   return <div className="vg-page vg-data-page">
     <header className="vg-page-header vg-history-heading">
-      <div><h1>History</h1><p>Sessions, original files and optional cloud backups—in one view.</p></div>
+      <div><div className="vg-product-eyebrow">Operations / Records</div><h1>History</h1><p>Sessions, original files and optional cloud backups—in one view.</p></div>
       <div className="vg-search-field">
         <Search size={17} aria-hidden="true" />
         <input type="search" value={search} onChange={event => setSearch(event.target.value)}
@@ -397,7 +407,8 @@ export function ActivityVideoLibrary() {
           <Link to="/app/analyze">Video analysis</Link>
         </div>
         {localError && <p role="alert" className="vg-empty-row text-amber-700">{localError}</p>}
-        {!localError && !localVideo && <p className="vg-empty-row">
+        {localLoading && <p role="status" className="vg-empty-row">Checking local retention…</p>}
+        {!localLoading && !localError && !localVideo && <p className="vg-empty-row">
           No original video retained on this device. Analysis records are still available below.
           To replay footage later, choose <strong>Keep this video on this device</strong> when analyzing.
           <Link to="/app/analyze" className="ml-2 font-semibold text-[#bd5035] hover:underline">Open Live Analysis</Link>
@@ -415,12 +426,12 @@ export function ActivityVideoLibrary() {
       </section>
       <section className="vg-panel overflow-hidden">
         <div className="vg-section-head">
-          <div><h2>Video storage · Backblaze B2</h2><p className="vg-section-subtitle">Originals uploaded with your permission · {visibleVideos.length} shown</p></div>
+          <div><h2>Video storage · Backblaze B2</h2><p className="vg-section-subtitle">Originals uploaded with your permission · {b2Loading ? 'Loading' : b2Error ? 'Unavailable' : visibleVideos.length + ' shown'}</p></div>
           <Link to="/app/archive-videos">Manage storage</Link>
         </div>
         {b2Error && <p role="alert" className="p-4 text-sm text-amber-700">{b2Error}</p>}
-        {b2Loading ? <p className="vg-empty-row">Loading video records…</p> :
-          !visibleVideos.length ? <div className="vg-empty-state"><strong>{normalizedSearch ? 'No matching cloud videos.' : 'No videos stored in B2.'}</strong>{normalizedSearch ? 'Try a different filename.' : 'Cloud backup is optional and requires an explicit upload.'}</div> :
+        {b2Loading ? <p role="status" className="vg-empty-row">Loading video records…</p> :
+          b2Error ? null : !visibleVideos.length ? <div className="vg-empty-state"><strong>{normalizedSearch ? 'No matching cloud videos.' : 'No videos stored in B2.'}</strong>{normalizedSearch ? 'Try a different filename.' : 'Cloud backup is optional and requires an explicit upload.'}</div> :
           <PaginatedRows items={visibleVideos} itemLabel="cloud videos" resetKey={normalizedSearch} renderRow={video =>
               <div key={video.id} className="vg-data-row flex flex-wrap items-center gap-4 px-5 py-3.5">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
@@ -444,10 +455,15 @@ export function ActivityVideoLibrary() {
               </div>}/>}
       </section>
       <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><div><h2>Analysis sessions</h2><p className="vg-section-subtitle">Saved observations, separate from original footage</p></div><span className="vg-metadata-chip">{visibleSessions.length} of {records.length}</span></div>
+        <div className="vg-section-head"><div><h2>Analysis sessions</h2><p className="vg-section-subtitle">Saved observations, separate from original footage</p></div><span className="vg-metadata-chip">{loaded ? visibleSessions.length + ' of ' + records.length : 'Loading'}</span></div>
+        <div className="vg-history-filter" role="group" aria-label="Filter analysis sessions by source">
+          {([['all','All sources'],['recorded','Recorded videos'],['live','Live sources']] as const).map(([value,label]) =>
+            <button key={value} type="button" className="vg-range-option" aria-pressed={sourceFilter === value}
+              onClick={() => setSourceFilter(value)}>{label}</button>)}
+        </div>
         {!loaded ? <p className="vg-empty-row">Loading session history…</p> :
-          !visibleSessions.length ? <div className="vg-empty-state"><strong>{normalizedSearch ? 'No matching sessions.' : 'No saved sessions yet.'}</strong>{normalizedSearch ? 'Try another search term.' : 'Your analysis history will appear after processing footage.'}<Link to="/app/analyze">Open Live Analysis</Link></div> :
-          <PaginatedRows items={visibleSessions} itemLabel="analysis sessions" resetKey={normalizedSearch} renderRow={run =>
+          !visibleSessions.length ? <div className="vg-empty-state"><strong>{normalizedSearch || sourceFilter !== 'all' ? 'No matching sessions.' : 'No saved sessions yet.'}</strong>{normalizedSearch || sourceFilter !== 'all' ? 'Change the search or source filter.' : 'Your analysis history will appear after processing footage.'}<Link to="/app/analyze">Open Live Analysis</Link></div> :
+          <PaginatedRows items={visibleSessions} itemLabel="analysis sessions" resetKey={normalizedSearch + ':' + sourceFilter} renderRow={run =>
               <div key={run.id} className="vg-data-row flex items-center gap-4 px-5 py-3.5 text-sm">
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium text-slate-800">{run.sourceName}</div>
@@ -478,7 +494,7 @@ function IncidentRow({
     : event.status === 'rejected'
       ? 'border-slate-200 bg-slate-50 text-slate-600'
       : 'border-amber-200 bg-amber-50 text-amber-900';
-  return <div className="flex flex-wrap items-start justify-between gap-3 px-5 py-4 text-sm">
+  return <div className="vg-review-row flex flex-wrap items-start justify-between gap-3 px-5 py-4 text-sm">
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-semibold text-slate-800">{incidentLabel(event.type)}</p>
@@ -492,7 +508,7 @@ function IncidentRow({
         {run.sourceName} · {event.trackId === null ? 'No vehicle selected' : 'Vehicle #' + event.trackId}
         {' · ' + niceDate(event.observedAt)}
       </p>
-      <p className="mt-1.5 line-clamp-2 text-xs leading-5 text-slate-600" title={event.evidenceNote}>
+      <p className="mt-1.5 break-words text-xs leading-5 text-slate-600">
         {event.evidenceNote}
       </p>
     </div>
@@ -596,19 +612,25 @@ export function ActivityIncidents() {
   return <div className="vg-page">
     <header className="vg-page-header vg-incidents-header">
       <div>
-        <h1>Incidents</h1>
+        <div className="vg-product-eyebrow">Operations / Human review</div><h1>Incidents</h1>
         <p>Review potential events and decide what needs follow-up.</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button type="button"
           aria-controls="manual-incident-form" aria-expanded={manualOpen}
           onClick={() => { setManualOpen(value => !value); setFeedback(''); }}
-          className="vg-secondary inline-flex items-center gap-1.5 text-xs">
+          className="vg-primary inline-flex items-center gap-1.5 text-xs">
           {manualOpen ? <X size={15}/> : <Plus size={15}/>}
           {manualOpen ? 'Close' : 'Add incident'}
         </button>
       </div>
     </header>
+    <div className="vg-review-summary vg-panel">
+      <div><strong>{loaded ? pendingCount : '—'}</strong><span>Needs review</span></div>
+      <div><strong>{loaded ? reviewedCount : '—'}</strong><span>Reviewed</span></div>
+      <div><strong>{loaded ? dismissedCount : '—'}</strong><span>Dismissed</span></div>
+      <p>Observations are review candidates, not confirmed violations.</p>
+    </div>
     <div className="vg-incident-filters" role="group" aria-label="Filter incidents by review status">
       {([
         ['all', 'All observations', incidents.length],
@@ -618,7 +640,7 @@ export function ActivityIncidents() {
       ] as const).map(([value, label, count]) =>
         <button key={value} type="button" className="vg-filter-pill"
           aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)}>
-          <span>{label}</span><b>{count}</b>
+          <span>{label}</span><b>{loaded ? count : '—'}</b>
         </button>
       )}
     </div>
@@ -677,7 +699,7 @@ export function ActivityIncidents() {
     <section className="vg-panel overflow-hidden">
       <div className="vg-section-head">
         <h2>Automatic detections</h2>
-        <span className="text-xs tabular-nums text-slate-500">{automatic.length}</span>
+        <span className="vg-metadata-chip">{loaded ? automatic.length : 'Loading'}</span>
       </div>
       {!loaded ? <p className="vg-empty-row">Loading incidents…</p> :
         !visibleAutomatic.length ?

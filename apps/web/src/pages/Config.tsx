@@ -69,7 +69,7 @@ export function Config() {
   return (
     <div className="vg-page vg-configuration">
       <header className="vg-page-header">
-        <div><h1>System configuration</h1><p>Review the active detector and manage archived evidence retention.</p></div>
+        <div><div className="vg-product-eyebrow">Administration / Policy</div><h1>System configuration</h1><p>Review the active detector and manage archived evidence retention.</p></div>
       </header>
       <div className="vg-config-grid">
         <section className="vg-panel">
@@ -85,7 +85,7 @@ export function Config() {
         <section className="vg-panel">
           <div className="vg-section-head"><h2><HardDrive size={17} aria-hidden="true"/> Evidence retention</h2></div>
           <form onSubmit={event => void save(event)} className="vg-config-form">
-            <div><label htmlFor="evidence-days">Days to retain evidence</label>
+            <div><p className="vg-product-eyebrow">Current policy: {storedDays === null ? 'Unavailable' : storedDays + ' days'}</p><label htmlFor="evidence-days">Days to retain evidence</label>
               <p id="evidence-days-help">Applies to archived incident evidence. Analysis history and original video files have their own storage settings.</p>
             </div>
             <input id="evidence-days" className="vg-field" type="number" min="1" max="3650" step="1"

@@ -47,6 +47,11 @@ describe('operations workspace interactions', () => {
         search.dispatchEvent(new Event('input', { bubbles: true }));
       });
       expect(view.host.textContent).toContain('Analysis sessions');
+      const sources = [...view.host.querySelectorAll<HTMLButtonElement>('.vg-history-filter button')];
+      expect(sources).toHaveLength(3);
+      act(() => sources[2].click());
+      expect(sources[2].getAttribute('aria-pressed')).toBe('true');
+      expect(sources[0].getAttribute('aria-pressed')).toBe('false');
     } finally { view.dispose(); }
   });
 

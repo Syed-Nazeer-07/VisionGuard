@@ -112,13 +112,17 @@ def check_anchor_scroll(driver):
         anchor = driver.find_element(By.CSS_SELECTOR, '.vgn-nav-links a[href="#platform"]')
     anchor.click()
     WebDriverWait(driver, 6).until(lambda d: urlparse(d.current_url).fragment == "platform")
-    position = driver.execute_script(
-        """return {y:scrollY, top:document.querySelector('#platform')
-           .getBoundingClientRect().top, h:document.querySelector('.vgn-header')
-           .getBoundingClientRect().height}"""
-    )
+    def settled_position(d):
+        position = d.execute_script(
+            """return {y:scrollY, top:document.querySelector('#platform')
+               .getBoundingClientRect().top, h:document.querySelector('.vgn-header')
+               .getBoundingClientRect().height}"""
+        )
+        return position if position["y"] > 150 and position["h"] <= position["top"] <= position["h"] + 55 else False
+
+    position = WebDriverWait(driver, 6).until(settled_position, "Platform anchor must scroll below the sticky header")
     assert position["y"] > 150, ("Anchor did not scroll:", position)
-    assert -10 <= position["top"] <= position["h"] + 55, (
+    assert position["h"] <= position["top"] <= position["h"] + 55, (
         "Anchor obscured or smooth-scrolling stalled:", position
     )
 

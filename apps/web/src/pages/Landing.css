@@ -868,3 +868,7 @@
     transition:none!important;
   }
 }
+
+/* Public navigation uses immediate native anchors, including after closing the mobile menu. */
+html:has(.vgn) { scroll-behavior: auto; }
+.vgn a[href] { cursor: pointer; touch-action: manipulation; }
