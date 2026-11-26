@@ -93,7 +93,15 @@ export function reconcileVehicles(
   // Predicted boxes are display-only and must never be interpreted as a
   // fresh YOLO/optical observation during identity reconciliation. Otherwise
   // their extrapolated road positions can overwrite real vehicle locations.
-  const viable = candidates.filter(track => finiteTrack(track) && !track.isPredicted);
+  // One detector identity must not update two persistent vehicles. If a
+  // frame carries conflicting copies of an ID, preserve existing real
+  // optical observations rather than promote either ambiguous candidate.
+  const counts = new Map<number, number>();
+  for (const candidate of candidates) counts.set(candidate.id, (counts.get(candidate.id) ?? 0) + 1);
+  const viable = candidates.filter(track => counts.get(track.id) === 1 &&
+    Number.isSafeInteger(track.id) && track.id >= 0 &&
+    Number.isFinite(track.confidence) && track.confidence >= 0 && track.confidence <= 1 &&
+    finiteTrack(track) && !track.isPredicted);
   const options: { previous: number; current: number; score: number }[] = [];
   existing.forEach((old, previous) => {
     viable.forEach((candidate, current) => {

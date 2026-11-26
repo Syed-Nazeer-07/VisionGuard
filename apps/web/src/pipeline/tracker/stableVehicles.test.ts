@@ -265,3 +265,19 @@ it('does not invent a vehicle width for an unknown class', () => {
   const start = updateScreenSpeed({ points: [], smoothedKmh: null }, unknown, 0);
   expect(updateScreenSpeed(start.history, { ...unknown, x: 160 }, 1).kmh).toBeNull();
 });
+
+it('rejects conflicting detector IDs instead of creating duplicate persistent assignments', () => {
+  const first = reconcileVehicles([], [car(100, 120, 7), car(200, 120, 7)], 2, 1);
+  expect(first.tracks).toEqual([]);
+  expect(first.sourceAssignments.size).toBe(0);
+  const valid = reconcileVehicles([], [car(100, 120, 8), car(200, 120, 9)], 2, 1);
+  expect(valid.tracks).toHaveLength(2);
+  expect(valid.sourceAssignments.size).toBe(2);
+});
+it('does not promote non-finite or impossible confidence to a persistent vehicle', () => {
+  const result = reconcileVehicles([], [
+    { ...car(100, 120, 1), confidence: NaN },
+    { ...car(200, 120, 2), confidence: 1.1 }
+  ], 2, 1);
+  expect(result.tracks).toEqual([]);
+});
