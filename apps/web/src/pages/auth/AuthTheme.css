@@ -184,3 +184,14 @@
 .vg-auth .vg-auth-showcase { background: var(--vg-text); }
 .vg-auth :is(button,a,input):focus-visible,
 .vg-auth-recovery :is(button,a,input):focus-visible { outline: 2px solid var(--vg-focus); outline-offset: 3px; }
+
+/* Product identity and first-run experience. */
+.vg-auth .vg-auth-photo img{filter:saturate(.65) brightness(.35)}
+.vg-auth .vg-auth-showcase{background:#13232d}
+.vg-auth .vg-auth-scene{display:block;width:min(100%,380px);height:auto;margin:0 0 28px;border:1px solid #52727a;border-radius:10px}
+.vg-auth .vg-auth-form{background:#f3f6f7}
+.vg-auth .vg-auth-form-inner{max-width:440px}
+.vg-auth .vg-auth-form form label{letter-spacing:.015em;font-size:12px}
+.vg-auth .vg-auth-form form input:not([type="checkbox"]){border-color:#cbd7dc;border-radius:7px}
+.vg-auth .vg-auth-recovery-card,.vg-auth-recovery .vg-auth-recovery-card{border-radius:10px}
+@media(max-height:850px) and (min-width:1024px){.vg-auth .vg-auth-scene{width:min(100%,235px);margin-bottom:20px}}

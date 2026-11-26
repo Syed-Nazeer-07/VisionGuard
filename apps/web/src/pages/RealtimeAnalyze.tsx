@@ -1562,7 +1562,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       </header>
 
       <section className="vg-analysis-sourcebar vg-panel" aria-labelledby="vg-sources-title">
-        <h2 id="vg-sources-title">Video source</h2>
+        <div className="vg-source-intro"><div className="vg-product-eyebrow">01 / Input</div><h2 id="vg-sources-title">Select a source</h2><p>Use footage you are authorized to analyze. Camera and tab permissions are requested only when selected.</p></div>
         <div className="vg-analysis-source-actions">
           <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
             onChange={event => {
@@ -1753,11 +1753,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               </button>
             </>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
-              <Film size={42} className="text-[#f2a27e]" />
+            <div className="vg-player-welcome flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
+              <img src="/scene-guide.svg" alt="" aria-hidden="true" className="vg-player-welcome-art" />
               <div className="text-lg font-semibold">Select an analysis source</div>
-              <p className="max-w-md text-sm text-slate-300">Choose a local file or grant access to a camera or browser tab.</p>
-              <p className="max-w-md text-xs leading-5 text-slate-400">Detection runs on this device.</p>
+              <p className="max-w-md text-sm text-slate-300">Open a local video, or approve access to a camera or browser tab.</p>
+              <button type="button" onClick={() => void chooseVideo()} className="vg-primary"><Upload size={16}/> Choose video</button>
+              <p className="max-w-md text-xs leading-5 text-slate-400">Inference runs on this device. No source has been selected.</p>
             </div>
           )}
         </div>

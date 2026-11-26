@@ -66,11 +66,17 @@ describe('operations workspace interactions', () => {
     const view = mount(<Settings />);
     try {
       const options = [...view.host.querySelectorAll<HTMLButtonElement>('.vg-settings-tab')];
-      expect(options).toHaveLength(3);
+      expect(options).toHaveLength(5);
       expect(options[0].getAttribute('aria-pressed')).toBe('true');
       act(() => options[1].click());
       expect(options[1].getAttribute('aria-pressed')).toBe('true');
       expect(view.host.querySelector('#settings-start')).not.toBeNull();
+      act(() => options[3].click());
+      expect(view.host.textContent).toContain('Backblaze B2 upload is a separate');
+      expect(view.host.querySelector('.vg-settings-save')).toBeNull();
+      act(() => options[4].click());
+      expect(view.host.textContent).toContain('uncalibrated estimates');
+      expect(view.host.querySelector('.vg-settings-save')).toBeNull();
     } finally { view.dispose(); }
   });
 });

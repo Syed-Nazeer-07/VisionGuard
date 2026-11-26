@@ -4,7 +4,7 @@ import { CheckCircle2, KeyRound, LockKeyhole, Save, ShieldCheck, UserRound, Slid
 import { useAuthStore } from '../store/auth';
 import { supabase, supabaseConfig } from '../lib/supabase';
 
-type Section = 'profile' | 'workspace' | 'security';
+type Section = 'profile' | 'workspace' | 'security' | 'storage' | 'about';
 const START_PAGES = [
   { value: '/app', label: 'Overview' },
   { value: '/app/analyze', label: 'Live analysis' },
@@ -35,7 +35,7 @@ export default function Settings() {
   }, [user?.id, user?.user_metadata?.full_name, profile, settings]);
 
   const save = async () => {
-    if (!user || saving) return;
+    if (!user || saving || section === 'storage' || section === 'about') return;
     setFeedback(null);
     if (supabaseConfig.isMock) {
       setFeedback({ok:false,text:'Settings require a connected Supabase account.'});
@@ -47,8 +47,9 @@ export default function Settings() {
         const values = {
           name: name.trim(),
           organization: organization.trim(),
-          timezone
+          timezone: timezone.trim()
         };
+        try { new Intl.DateTimeFormat('en', { timeZone: values.timezone }).format(); } catch { throw Error('Enter a valid timezone, such as Asia/Kolkata or UTC.'); }
         if (values.name.length < 2) throw Error('Enter a display name of at least two characters.');
         const { error } = await supabase.from('profiles').update(values).eq('id',user.id)
           .select('id').single();
@@ -82,7 +83,9 @@ export default function Settings() {
   const sectionButtons = [
     {id:'profile' as const,label:'Profile',description:'Your account details',icon:UserRound},
     {id:'workspace' as const,label:'Workspace',description:'Starting page and storage',icon:SlidersHorizontal},
-    {id:'security' as const,label:'Security',description:'Password and account access',icon:ShieldCheck}
+    {id:'security' as const,label:'Security',description:'Password and account access',icon:ShieldCheck},
+    {id:'storage' as const,label:'Storage',description:'Originals and backup controls',icon:HardDrive},
+    {id:'about' as const,label:'About',description:'Processing and support',icon:LockKeyhole}
   ];
 
   return <main className="vg-page">
@@ -95,9 +98,9 @@ export default function Settings() {
           {sectionButtons.map(item => {
             const Icon = item.icon;
             return <button key={item.id} type="button" onClick={() => {
-              setSection(item.id);setFeedback(null);
+              setSection(item.id);setFeedback(null);setNewPassword('');setConfirmPassword('');
             }} aria-pressed={section === item.id}
-              className="vg-settings-tab flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors">
+              disabled={saving} className="vg-settings-tab flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors">
               <Icon size={18} className="shrink-0"/>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold">{item.label}</span>
@@ -148,7 +151,9 @@ export default function Settings() {
               </select>
               <p className="mt-2 text-xs text-slate-500">Saved to your account. Different users can choose different pages.</p>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          </>}
+          {section==='storage' && <>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
                 <HardDrive size={17}/> Video and analysis storage
               </div>
@@ -162,6 +167,12 @@ export default function Settings() {
               </Link>
             </div>
           </>}
+          {section==='about' && <div className="space-y-5 text-sm text-slate-600">
+            <h3 className="font-semibold text-slate-900">VisionGuard · Browser-first analysis</h3>
+            <p>Vehicle detection uses YOLO11s through ONNX Runtime Web. Image-derived speeds are uncalibrated estimates, not enforcement measurements.</p>
+            <p>Camera and browser-tab permissions are requested only when you select the corresponding source. Use your browser's site controls to revoke access.</p>
+            <a className="vg-secondary" href="https://github.com/Syed-Nazeer-07/VisionGuard" target="_blank" rel="noopener noreferrer">Project documentation and support</a>
+          </div>}
           {section==='security' && <>
             <div className="flex items-center gap-2 text-xs leading-5 text-slate-500">
               <KeyRound size={16}/> Update the password for your currently signed-in account.
@@ -186,10 +197,10 @@ export default function Settings() {
             {feedback.ok && <CheckCircle2 size={18} className="shrink-0"/>}
             <span>{feedback.text}</span>
           </div>}
-          <div className="vg-settings-save flex justify-end border-t border-slate-100 pt-5">
+          {section !== 'storage' && section !== 'about' && <div className="vg-settings-save flex justify-end border-t border-slate-100 pt-5">
             <button type="button" onClick={() => void save()} disabled={saving || !user}
               className="vg-primary"><Save size={16}/>{saving?'Saving…':section==='security'?'Update password':'Save changes'}</button>
-          </div>
+          </div>}
         </div>
       </section>
     </div>

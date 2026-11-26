@@ -76,7 +76,7 @@ export function ActivityDashboard() {
   return <div className="vg-page">
     <header className="vg-overview-header vg-panel">
       <div className="vg-overview-copy">
-        <h1>Overview</h1>
+        <div className="vg-product-eyebrow">Traffic operations</div><h1>Overview</h1>
         <p>Review recent analyses, vehicle observations, and incidents that need attention.</p>
         <div className="vg-overview-actions">
           <Link to="/app/analyze" className="vg-primary">Start an analysis <ArrowUpRight size={17} aria-hidden="true"/></Link>
@@ -85,9 +85,15 @@ export function ActivityDashboard() {
         <span>{!loaded ? 'Loading workspace…' : mostRecent > 0
           ? 'Last analyzed ' + niceDate(mostRecent) : 'No analysis sessions saved yet'}</span>
       </div>
-      <div className="vg-overview-image" aria-hidden="true"><img src="/traffic_monitoring_corridor.jpg" alt=""/></div>
+      <div className="vg-overview-image" aria-hidden="true"><img src="/scene-guide.svg" alt=""/></div>
     </header>
     {error && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{error}</p>}
+    {loaded && records.length === 0 && !error && <section className="vg-panel vg-first-run" aria-labelledby="vg-first-run-title">
+      <div><div className="vg-product-eyebrow">Getting started</div><h2 id="vg-first-run-title">Your first analysis</h2><p>Choose a source when you are ready. Camera or tab access is requested only if you choose that source.</p></div>
+      <ol><li><strong>01</strong><span>Select a video or live source</span></li><li><strong>02</strong><span>Review vehicle tracks as footage plays</span></li><li><strong>03</strong><span>Return to saved sessions and review flags</span></li></ol>
+      <Link className="vg-primary" to="/app/analyze">Open analysis <ArrowUpRight size={16} aria-hidden="true"/></Link>
+    </section>}
+    <div className="vg-product-section-label">Recorded activity <span>Account-scoped observations</span></div>
     <div className="vg-metric-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Stat label="Repeated vehicle tracks" number={loaded ? stats.vehicles : null}
         note={loaded ? fmt(stats.transientTrackCandidates) + ' brief candidates excluded' : 'Observed on multiple frames'}/>
