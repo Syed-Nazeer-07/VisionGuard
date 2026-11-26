@@ -71,7 +71,7 @@ node scripts/evaluate-tracking.mjs /path/to/labelled-browser-trace.json
 ~~~
 
 The evaluator produces class-aware precision, recall, F1 and mean box IoU
-at IoU@0.50; it also reports duplicate boxes, tracking ID switches
+at IoU@0.50 using maximum-cardinality class-aware one-to-one matching (not a global IoU optimizer); it also reports duplicate boxes, duplicate-ID frames, tracking ID switches
 (across annotated observations no more than 0.5s apart) and how many
 sampled frames a predicted ID lingered after a human-marked exit.
 
@@ -83,6 +83,27 @@ node scripts/evaluate-tracking.mjs /path/to/labelled-browser-trace.json --min-pr
 
 These thresholds are suggested examples, **not measured achievements**.
 The tool exits nonzero if a requested threshold is not met.
+
+## Compare two revisions on matched evidence
+
+Use the same permitted video and exact source-media frame times for both revisions.
+Copy only the independently created human annotations to the corresponding
+candidate frames; never alter predicted boxes. The comparison rejects mismatched
+times, frame dimensions, ground-truth geometry, class labels and exit annotations.
+It does not infer video identity from pixels; retain source checksums and run
+metadata separately. If the capture times differ, reacquire matched frames
+rather than silently dropping difficult frames.
+
+~~~bash
+node scripts/evaluate-tracking.mjs baseline.json --compare=candidate.json --min-f1=0.75 --min-mean-matched-iou=0.7 --max-duplicate-id-frames=0
+~~~
+
+The output includes both scorecards and candidate-minus-baseline deltas.
+Thresholds apply to the candidate. These are illustrative thresholds, not
+achieved model results. Higher precision/recall/F1 and mean IoU are better;
+lower ID switches, duplicate predictions and ghost metrics are better.
+Re-score the baseline using the new matching policy rather than comparing
+the revised score with old greedy-matcher results.
 
 ## Real-world validation plan for a 9/10 portfolio project
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boxIoU, evaluateTracking, gateFailures, FORMAT } from './evaluate-tracking.mjs';
+import { boxIoU, compareTracking, evaluateTracking, gateFailures, FORMAT } from './evaluate-tracking.mjs';
 
 const box=(x,w=20)=>({x,y:40,w,h:20});
 const gt=(id,x,cls='car')=>({id,className:cls,box:box(x)});
@@ -76,4 +76,14 @@ test('quality gates include localization, F1 and duplicate predictions',()=>{
   const score=evaluateTracking(trace(f(0,[gt('A',20),gt('B',95)],[pred(1,25),pred(2,25)])));
   assert.equal(gateFailures(score,{minF1:.8,minMeanMatchedIoU:.8,maxDuplicatePairs:0}).length,3);
   assert.throws(()=>gateFailures(score,{maxGhostFrames:.5}),/Invalid quality/);
+});
+
+test('paired comparison measures only predictions on identical labelled frames',()=>{
+  const baseline=trace(f(0,[gt('A',20),gt('B',95)],[pred(1,20)]));
+  const candidate=trace(f(0,[gt('B',95),gt('A',20)],[pred(1,20),pred(2,95)]));
+  const score=compareTracking(baseline,candidate);
+  assert.equal(score.delta.recall,.5);
+  assert.equal(score.candidate.f1,1);
+  assert.throws(()=>compareTracking(baseline,trace(f(.1,[gt('A',20),gt('B',95)]))),/identical media times/);
+  assert.throws(()=>compareTracking(baseline,trace(f(0,[gt('A',21),gt('B',95)]))),/identical media times/);
 });

@@ -339,13 +339,21 @@ interface B2VideoRow {
 }
 
 export function ActivityVideoLibrary() {
+  // Remount account-scoped async state synchronously on identity change.
+  // An effect-only reset can briefly render the previous owner's filenames.
+  const ownerId = useAuthStore(state => state.user?.id ?? null);
+  return <AccountVideoLibrary key={ownerId ?? 'signed-out'}/>;
+}
+
+function AccountVideoLibrary() {
   const { records, loaded, error, userId } = useRuns();
   const [b2Videos, setB2Videos] = useState<B2VideoRow[]>([]);
   const [localVideo, setLocalVideo] = useState<{name:string;size:number}|null>(null);
   const [localError, setLocalError] = useState('');
   const [localLoading, setLocalLoading] = useState(Boolean(userId));
   const [sourceFilter, setSourceFilter] = useState<'all' | 'recorded' | 'live'>('all');
-  const [b2Loading, setB2Loading] = useState(false);
+  const [b2Loading, setB2Loading] = useState(Boolean(userId));
+  const [storageRetry, setStorageRetry] = useState(0);
   const [b2Error, setB2Error] = useState('');
   const [search, setSearch] = useState('');
   const normalizedSearch = search.trim().toLocaleLowerCase();
@@ -389,7 +397,7 @@ export function ActivityVideoLibrary() {
       setB2Loading(false);
     })().catch(e => { if(alive) {setB2Loading(false);setB2Error(String(e));} });
     return () => { alive = false; };
-  },[userId]);
+  },[userId,storageRetry]);
   return <div className="vg-page vg-data-page">
     <header className="vg-page-header vg-history-heading">
       <div><div className="vg-product-eyebrow">Operations / Records</div><h1>History</h1><p>Sessions, original files and optional cloud backups—in one view.</p></div>
@@ -426,10 +434,10 @@ export function ActivityVideoLibrary() {
       </section>
       <section className="vg-panel overflow-hidden">
         <div className="vg-section-head">
-          <div><h2>Video storage · Backblaze B2</h2><p className="vg-section-subtitle">Originals uploaded with your permission · {b2Loading ? 'Loading' : b2Error ? 'Unavailable' : visibleVideos.length + ' shown'}</p></div>
+          <div><h2>Video storage · Backblaze B2</h2><p className="vg-section-subtitle">Originals uploaded with your permission · {b2Loading ? 'Loading' : b2Error ? 'Unavailable' : visibleVideos.length + ' shown (latest 50)'}</p></div>
           <Link to="/app/archive-videos">Manage storage</Link>
         </div>
-        {b2Error && <p role="alert" className="p-4 text-sm text-amber-700">{b2Error}</p>}
+        {b2Error && <div className="p-4"><p role="alert" className="text-sm text-amber-700">{b2Error}</p><button type="button" className="vg-secondary mt-3" onClick={() => setStorageRetry(value => value + 1)}>Retry storage lookup</button></div>}
         {b2Loading ? <p role="status" className="vg-empty-row">Loading video records…</p> :
           b2Error ? null : !visibleVideos.length ? <div className="vg-empty-state"><strong>{normalizedSearch ? 'No matching cloud videos.' : 'No videos stored in B2.'}</strong>{normalizedSearch ? 'Try a different filename.' : 'Cloud backup is optional and requires an explicit upload.'}</div> :
           <PaginatedRows items={visibleVideos} itemLabel="cloud videos" resetKey={normalizedSearch} renderRow={video =>

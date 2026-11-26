@@ -124,6 +124,29 @@ export function evaluateTracking(data) {
       .map(([name,c])=>[name,{...c,...metrics(c.tp,c.fp,c.fn)}])),
   };
 }
+/** Paired evaluation: both revisions must use the same human annotations and exact media frames.
+ * Never silently interpolate, discard difficult frames, or compare different ground truth. */
+export function compareTracking(baseline, candidate) {
+  const before = evaluateTracking(baseline);
+  const after = evaluateTracking(candidate);
+  const fingerprint = frame => JSON.stringify({
+    time: frame.time, width: frame.width, height: frame.height,
+    groundTruth: frame.groundTruth.map(item => {
+      const normalized = normalize(item,'groundTruth');
+      const {x,y,w,h}=normalized.box;
+      return {id:normalized.id,className:normalized.className,box:{x,y,w,h}};
+    }).sort((a,b)=>a.id.localeCompare(b.id)),
+    exitedIds: (frame.exitedIds || []).map(String).sort()
+  });
+  if(baseline.frames.length !== candidate.frames.length ||
+    baseline.frames.some((frame,index)=>fingerprint(frame)!==fingerprint(candidate.frames[index])))
+    throw Error('Paired evaluation requires identical media times, dimensions, ground truth and exit annotations.');
+  const keys=['precision','recall','f1','meanMatchedIoU','idSwitches',
+    'duplicatePredictionPairs','duplicateIdFrames','exitGhostFrames','maxExitGhostSeconds'];
+  const delta=Object.fromEntries(keys.map(key=>[key,after[key]-before[key]]));
+  return {comparisonType:'paired-annotation-comparison-not-real-world-validation',
+    frames:before.frames,baseline:before,candidate:after,delta};
+}
 export function gateFailures(result, gates={}) {
   const rules=[
     ['minPrecision','precision',false],['minRecall','recall',false],
@@ -155,15 +178,24 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1]
       '--max-duplicate-pairs':'maxDuplicatePairs','--max-duplicate-id-frames':'maxDuplicateIdFrames'
     };
     const gates={};
+    let candidatePath;
     for(const arg of args.slice(1)) {
+      if(arg.startsWith('--compare=')) {
+        if(candidatePath || !arg.slice('--compare='.length)) throw Error('Expected one candidate trace path.');
+        candidatePath=arg.slice('--compare='.length);
+        continue;
+      }
       const pieces=arg.split('=');
       if(pieces.length!==2||!Object.hasOwn(supported,pieces[0])||pieces[1]==='')
         throw Error('Invalid quality gate: '+arg);
       gates[supported[pieces[0]]]=Number(pieces[1]);
     }
-    const report=evaluateTracking(JSON.parse(readFileSync(args[0],'utf8')));
+    const source=JSON.parse(readFileSync(args[0],'utf8'));
+    const report=candidatePath
+      ? compareTracking(source,JSON.parse(readFileSync(candidatePath,'utf8')))
+      : evaluateTracking(source);
     console.log(JSON.stringify(report,null,2));
-    const failures=gateFailures(report,gates);
+    const failures=gateFailures(candidatePath ? report.candidate : report,gates);
     if(failures.length){console.error(failures.join('\n'));process.exitCode=2;}
   }catch(error){console.error(error.message);process.exitCode=1;}
 }
