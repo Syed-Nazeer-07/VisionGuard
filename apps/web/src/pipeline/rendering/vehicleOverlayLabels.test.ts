@@ -26,3 +26,10 @@ describe('vehicle type labels in live detection overlays', () => {
     expect(labels.join(' ')).not.toContain('NaN');
   });
 });
+
+it('hides carried-forward speed on predicted boxes and rejects invalid ranges', () => {
+  for (const data of [{ speedKmh: 90, isPredicted: true }, { speedKmh: -1 }, { speedKmh: 161 }]) {
+    expect(vehicleOverlayLabels({ id: 1, className: 'car', ...data })[0]).toBe('#1 CAR — km/h*');
+  }
+  expect(vehicleOverlayLabels({ id: 1, className: 'car', speedKmh: 0 })[0]).toContain('≈0');
+});

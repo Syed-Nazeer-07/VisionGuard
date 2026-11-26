@@ -242,3 +242,26 @@ it('rejects prediction-only samples and extreme optical jumps instead of emittin
   expect(extreme.kmh).toBeNull();
   expect(extreme.history.points).toHaveLength(1);
 });
+
+it('does not turn detector correction at the same timestamp into a new speed reading', () => {
+  const start = updateScreenSpeed({ points: [], smoothedKmh: null }, car(100), 0);
+  const measured = updateScreenSpeed(start.history, car(130), .65);
+  const correction = updateScreenSpeed(measured.history, car(180), .65);
+  expect(correction.history).toBe(measured.history);
+  expect(correction.kmh).toBe(measured.kmh);
+});
+it('resets optical speed history after a backward seek or a vehicle-scale change', () => {
+  const start = updateScreenSpeed({ points: [], smoothedKmh: null }, car(100), 0);
+  const measured = updateScreenSpeed(start.history, car(130), .65);
+  const seek = updateScreenSpeed(measured.history, car(100), .2);
+  expect(seek.kmh).toBeNull();
+  expect(seek.history.points).toHaveLength(1);
+  const differentClass = updateScreenSpeed(measured.history, { ...car(150), className: 'truck' }, 1.2);
+  expect(differentClass.kmh).toBeNull();
+  expect(differentClass.history.points).toHaveLength(1);
+});
+it('does not invent a vehicle width for an unknown class', () => {
+  const unknown = { ...car(100), className: 'unknown' };
+  const start = updateScreenSpeed({ points: [], smoothedKmh: null }, unknown, 0);
+  expect(updateScreenSpeed(start.history, { ...unknown, x: 160 }, 1).kmh).toBeNull();
+});

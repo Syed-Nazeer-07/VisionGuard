@@ -23,7 +23,7 @@ const SAMPLE_INTERVAL = 0.18;
 const STREAK_GAP = 0.6;
 function valid(t: IncidentObservation): boolean {
   return Number.isSafeInteger(t.id) && t.id > 0 && t.confidence >= 0.68 &&
-    Number.isFinite(t.confidence) && !t.isPredicted &&
+    Number.isFinite(t.confidence) && t.confidence <= 1 && !t.isPredicted &&
     t.speedKmh !== null && Number.isFinite(t.speedKmh) &&
     t.speedKmh >= 0 && t.speedKmh <= 160 && t.w >= 8 && t.h >= 8 &&
     [t.x, t.y, t.w, t.h].every(Number.isFinite);
@@ -42,7 +42,17 @@ export class AutomaticIncidentDetector {
     if (this.lastTime !== null && (time < this.lastTime - .01 || time - this.lastTime > 1.5))
       this.reset();
     this.lastTime = time;
-    const reliable = tracks.filter(valid);
+    // Conflicting observations for the same identity are ambiguous, not two
+    // moving peers or additional evidence. Break that identity's active streak.
+    const counts = new Map<number, number>();
+    for (const track of tracks) counts.set(track.id, (counts.get(track.id) ?? 0) + 1);
+    for (const [id, count] of counts) {
+      if (count > 1) {
+        const state = this.states.get(id);
+        if (state) { state.speed = null; state.stopped = null; }
+      }
+    }
+    const reliable = tracks.filter(t => counts.get(t.id) === 1 && valid(t));
     const movingIds = reliable.filter(t => t.speedKmh! >= 12).map(t => t.id);
     const candidates: AutomaticReviewCandidate[] = [];
     for (const t of reliable) {

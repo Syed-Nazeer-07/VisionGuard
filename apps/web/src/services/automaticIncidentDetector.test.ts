@@ -67,3 +67,22 @@ describe('automatic incident review candidates', () => {
     expect(events).toEqual([]);
   });
 });
+
+it('does not count conflicting copies of a tracking identity as evidence', () => {
+  const detector = new AutomaticIncidentDetector();
+  const events = [];
+  for (let i = 0; i < 60; i++) {
+    events.push(...detector.ingest([
+      car(1,0), car(2,22,{x:200+i}), car(2,22,{x:300+i}), car(3,22,{x:400+i})
+    ],i*.25));
+  }
+  expect(events).toEqual([]);
+});
+it('rejects invalid confidence greater than one', () => {
+  const detector = new AutomaticIncidentDetector();
+  const events = [];
+  for (let i = 0; i < 15; i++) {
+    events.push(...detector.ingest([car(1,95,{x:120+i*5,confidence:1.2})],i*.25));
+  }
+  expect(events).toEqual([]);
+});

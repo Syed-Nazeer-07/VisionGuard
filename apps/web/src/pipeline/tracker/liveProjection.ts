@@ -97,7 +97,8 @@ export function projectLiveTracks(
   ) return [];
 
   return tracks.flatMap((track) => {
-    if (![track.x, track.y, track.w, track.h, track.vx, track.vy].every(Number.isFinite) ||
+    if (![track.x, track.y, track.w, track.h, track.vx, track.vy, track.confidence].every(Number.isFinite) ||
+        track.confidence > 1 ||
         age > allowedOverlayAge(track, observedTime)) return [];
     const twoWheeler = track.className === 'motorcycle' || track.className === 'bicycle';
     const minimumSize = twoWheeler ? 4 : 7;
@@ -126,7 +127,9 @@ export function calculateMotion(
   current: { x: number; y: number; h: number },
   mediaTime: number,
 ): { vx: number; vy: number; motionPxPerSec: number | null } {
-  if (!previous) return { vx: 0, vy: 0, motionPxPerSec: null };
+  if (!previous || ![previous.x, previous.y, previous.h, previous.time, previous.vx,
+    previous.vy, current.x, current.y, current.h, mediaTime].every(Number.isFinite) ||
+    previous.h <= 0 || current.h <= 0) return { vx: 0, vy: 0, motionPxPerSec: null };
   const elapsed = mediaTime - previous.time;
   if (elapsed < 0.035 || elapsed > 1.5) return { vx: 0, vy: 0, motionPxPerSec: null };
   const vxMeasured = (current.x - previous.x) / elapsed;
