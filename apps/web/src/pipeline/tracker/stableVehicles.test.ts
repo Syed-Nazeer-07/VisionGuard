@@ -281,3 +281,15 @@ it('does not promote non-finite or impossible confidence to a persistent vehicle
   ], 2, 1);
   expect(result.tracks).toEqual([]);
 });
+
+it('corrects moderate observed growth and shrinkage without losing vehicle identity', () => {
+  const before: PersistentTrack = { ...car(100, 120, 9), w: 50, h: 40,
+    lastDetectedAt: 1, speedKmh: null, speedIsEstimate: true };
+  const larger = reconcileVehicles([before], [{ ...car(100, 120, 71), w: 65, h: 52 }], 1.3, 10);
+  expect(larger.tracks[0].id).toBe(9);
+  expect(larger.tracks[0].w).toBeCloseTo(59.75);
+  expect(larger.tracks[0].h).toBeCloseTo(47.8);
+  const smaller = reconcileVehicles([before], [{ ...car(100, 120, 72), w: 40, h: 32 }], 1.3, 10);
+  expect(smaller.tracks[0].id).toBe(9);
+  expect(smaller.tracks[0].w).toBeCloseTo(43.5);
+});

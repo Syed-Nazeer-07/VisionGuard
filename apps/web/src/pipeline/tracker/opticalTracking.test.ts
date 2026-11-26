@@ -119,3 +119,38 @@ describe('optical tracking between slow YOLO observations', () => {
   });
 
 });
+
+it('updates the scale of an approaching car from separated matching features', () => {
+  const textured = (time: number, growth: number, offset: number): GrayFrame => {
+    const width = 120, height = 110;
+    const pixels = new Uint8Array(width * height);
+    const centers = [[0,0], [-11,-11], [11,-11], [-11,11], [11,11], [0,-14], [0,14]];
+    centers.forEach(([x,y], index) => {
+      const cx = 60 + Math.round(x * growth) + offset;
+      const cy = 55 + Math.round(y * growth);
+      for (let py = -4; py <= 4; py++) {
+        for (let px = -4; px <= 4; px++) {
+          const pattern = 50 + (index * 61 + (px + 4) * 37 + (py + 4) * 29 + px * py * 13) % 170;
+          pixels[(cy + py) * width + cx + px] = pattern;
+        }
+      }
+    });
+    return { time, width, height, sourceWidth: width, sourceHeight: height, pixels };
+  };
+  const target = { ...vehicle, x: 60, y: 55, w: 58, h: 58 };
+  const [updated] = advanceOpticalTracks([target], textured(1, 1, 0), textured(1.1, 1.12, 2));
+  expect(updated.x).toBeCloseTo(62, 0);
+  expect(updated.w).toBeGreaterThan(62);
+  expect(updated.w).toBeLessThan(67);
+  expect(updated.h / updated.w).toBe(1);
+  const [translated] = advanceOpticalTracks([target], textured(1, 1, 0), textured(1.1, 1, 2));
+  expect(translated.w).toBe(58);
+});
+
+it('rejects malformed optical frames and invalid track geometry rather than drawing guesses', () => {
+  const before = makeFrame(2, 0);
+  const after = makeFrame(2.1, 4);
+  expect(advanceOpticalTracks([vehicle], before, { ...after, pixels: new Uint8Array(4) })).toEqual([]);
+  expect(advanceOpticalTracks([vehicle], before, { ...after, time: NaN })).toEqual([]);
+  expect(advanceOpticalTracks([{ ...vehicle, confidence: NaN }], before, after)).toEqual([]);
+});

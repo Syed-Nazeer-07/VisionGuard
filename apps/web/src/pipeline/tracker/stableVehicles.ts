@@ -125,11 +125,14 @@ export function reconcileVehicles(
     // finishes the frame that optical flow has already advanced through.
     const correction = .55;
     const mix = (x: number, y: number) => x + correction * (y - x);
-    // Box-size observations are noisier than center positions: suppress
-    // abrupt jumps, while still allowing approach/perspective size changes.
+    // Correct moderate detector-confirmed size changes promptly, while
+    // retaining the original conservative limit for extreme box jumps.
+    const observedScale = Math.max(after.w / before.w, before.w / after.w,
+      after.h / before.h, before.h / after.h);
     const smoothSize = (oldValue: number, observed: number) => {
+      if (observedScale <= 1.5) return oldValue + .65 * (observed - oldValue);
       const bounded = Math.max(oldValue * .78, Math.min(oldValue * 1.22, observed));
-      return oldValue * .72 + bounded * .28;
+      return oldValue + .28 * (bounded - oldValue);
     };
     // For buses/trucks, smooth the actual class probabilities instead of
     // inventing a label from the colour of a vehicle's roof or trailer.
