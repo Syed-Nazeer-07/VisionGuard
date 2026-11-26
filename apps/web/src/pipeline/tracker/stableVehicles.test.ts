@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { chooseHeavyVehicleLabel, reconcileVehicles, recoverBriefOpticalMisses, updateScreenSpeed, type PersistentTrack } from './stableVehicles';
-import type { LiveTrack } from './liveProjection';
+import { projectLiveTracks, type LiveTrack } from './liveProjection';
+import { TwoWheelerAssociator } from './twoWheelerAssociator';
+import { decodeTrafficVehicles, trafficLetterbox } from '../detector/liveVehicles';
 
 function car(x: number, y = 120, id = 0): LiveTrack {
   return {
@@ -292,4 +294,41 @@ it('corrects moderate observed growth and shrinkage without losing vehicle ident
   const smaller = reconcileVehicles([before], [{ ...car(100, 120, 72), w: 40, h: 32 }], 1.3, 10);
   expect(smaller.tracks[0].id).toBe(9);
   expect(smaller.tracks[0].w).toBeCloseTo(43.5);
+});
+
+it('carries decoded motorcycles and bicycles through signed source IDs to positive persistent overlay IDs', () => {
+  const tracker = new TwoWheelerAssociator();
+  const anchors = 8400;
+  const tensor = new Float32Array(84 * anchors);
+  const add = (i: number, classId: number, x: number, probability: number) => {
+    tensor[i] = x;
+    tensor[anchors + i] = 320;
+    tensor[2 * anchors + i] = 20;
+    tensor[3 * anchors + i] = 32;
+    tensor[(4 + classId) * anchors + i] = probability;
+  };
+  add(0, 3, 150, .8);
+  add(1, 1, 400, .82);
+  const decoded = decodeTrafficVehicles(tensor, trafficLetterbox(640, 640));
+  const observed = tracker.update(decoded, 1);
+  expect(observed).toHaveLength(2);
+  expect(observed.every(track => track.id < 0)).toBe(true);
+  const first = reconcileVehicles([], [...observed, car(300, 120, 1)], 1, 1);
+  expect(first.tracks).toHaveLength(3);
+  expect(new Set(first.tracks.map(track => track.id)).size).toBe(3);
+  expect(first.tracks.every(track => track.id > 0)).toBe(true);
+  expect(projectLiveTracks(first.tracks, 1, 1, 640, 640).map(track => track.className).sort())
+    .toEqual(['bicycle', 'car', 'motorcycle']);
+  const later = tracker.update(decoded.map(box => ({ ...box, x: box.x + 3 })), 1.3);
+  const next = reconcileVehicles(first.tracks, later, 1.3, first.nextId, first.sourceAssignments);
+  for (const track of later) expect(next.sourceAssignments.get(track.id)).toBe(first.sourceAssignments.get(track.id));
+  const recovered = reconcileVehicles([], later, 1.3, first.nextId, first.sourceAssignments);
+  expect(recovered.tracks.map(track => track.id).sort()).toEqual(
+    observed.map(track => first.sourceAssignments.get(track.id)).sort());
+});
+
+it('still rejects ambiguous negative source IDs and negative IDs from the four-wheel tracker', () => {
+  const bike = { ...car(100, 120, -1), className: 'motorcycle' };
+  expect(reconcileVehicles([], [bike, { ...bike, x: 200 }], 1, 1).tracks).toEqual([]);
+  expect(reconcileVehicles([], [car(100, 120, -3)], 1, 1).tracks).toEqual([]);
 });

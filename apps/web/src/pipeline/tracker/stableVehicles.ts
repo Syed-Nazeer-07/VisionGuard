@@ -99,7 +99,11 @@ export function reconcileVehicles(
   const counts = new Map<number, number>();
   for (const candidate of candidates) counts.set(candidate.id, (counts.get(candidate.id) ?? 0) + 1);
   const viable = candidates.filter(track => counts.get(track.id) === 1 &&
-    Number.isSafeInteger(track.id) && track.id >= 0 &&
+    // The separate two-wheeler associator intentionally allocates negative
+    // source IDs, disjoint from ByteTracker's positive IDs. Only the final
+    // persistent IDs must be positive; do not discard valid motorcycles.
+    Number.isSafeInteger(track.id) &&
+    (track.id >= 0 || classFamily(track.className) === 'two-wheeler') &&
     Number.isFinite(track.confidence) && track.confidence >= 0 && track.confidence <= 1 &&
     finiteTrack(track) && !track.isPredicted);
   const options: { previous: number; current: number; score: number }[] = [];
