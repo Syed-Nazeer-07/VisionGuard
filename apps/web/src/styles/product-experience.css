@@ -501,3 +501,7 @@
 .vg-review-row + .vg-review-row { border-top: 1px solid var(--vg-line); }
 .vg-review-row button { min-height: 36px; }
 @media(max-width: 760px) { .vg-report-format-grid { grid-template-columns: 1fr; } .vg-review-summary { grid-template-columns: repeat(3,minmax(0,1fr)); } .vg-review-summary > p { grid-column: 1/-1; border-top: 1px solid var(--vg-line); } .vg-review-summary > div { padding: 12px; } .vg-review-summary strong { font-size: 23px; } }
+
+.vg-review-rate {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-top:1px solid var(--vg-border,#dce4e8);color:#334155;background:#f8fafc;}
+.vg-review-rate select {min-height:40px;max-width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px;background:#fff;color:#0f172a;font-size:13px;}
+@media(max-width:580px){.vg-review-rate{align-items:stretch;flex-direction:column}.vg-review-rate select{width:100%}}

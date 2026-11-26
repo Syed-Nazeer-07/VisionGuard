@@ -28,7 +28,11 @@ presented as browser YOLO11s accuracy.
 Seeking, changing the source, reconnecting or toggling box visibility resets
 the trace because frame times or display conditions would otherwise be inconsistent.
 Keep boxes enabled during a complete sample; disabled overlays are not empty
-detector frames. Quality capture is in memory only; it neither uploads recordings
+detector frames. Recorded footage supports slower review playback (0.25×, 0.5×,
+0.75×, 1× normal), giving slower hardware more wall-clock processing time per
+media second. The quality export records the actual playback rate; changing
+rate resets the sample. Compare runs at identical rates when assessing a
+model or tracking change, and report real-time and slowed review separately. Quality capture is in memory only; it neither uploads recordings
 nor syncs its trace to Supabase.
 
 The optional diagnostic export also includes bounded worker inference samples

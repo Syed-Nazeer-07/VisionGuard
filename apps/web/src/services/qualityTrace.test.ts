@@ -60,3 +60,9 @@ it('exports measured timing distributions and replay misses without inventing ab
   expect(summary.replayAnchorMisses).toBe(1);
   expect(JSON.parse(serializeQualityTrace([], samples)).performance).toEqual(summary);
 });
+
+it('records the actual review playback speed as evaluation context', () => {
+  expect(JSON.parse(serializeQualityTrace([], [], .25)).playbackRate).toBe(.25);
+  expect(JSON.parse(serializeQualityTrace([], [], NaN)).playbackRate).toBeNull();
+  expect(JSON.parse(serializeQualityTrace([])).playbackRate).toBe(1);
+});

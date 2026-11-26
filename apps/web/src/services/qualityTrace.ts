@@ -92,11 +92,12 @@ export function appendQualityFrame(
   });
   return true;
 }
-export function serializeQualityTrace(frames: readonly QualityFrame[], inferences: readonly QualityInference[] = []): string {
+export function serializeQualityTrace(frames: readonly QualityFrame[], inferences: readonly QualityInference[] = [], playbackRate = 1): string {
   return JSON.stringify({
     format: 'visionguard-tracking-eval/v1',
     annotationStatus: 'NOT ANNOTATED - fill groundTruth and exitedIds before scoring',
     note: 'Browser-overlay predictions only; no model accuracy is implied',
+    playbackRate: Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : null,
     performance: summarizeQualityPerformance(frames, inferences),
     inferences,
     frames,

@@ -155,6 +155,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [reviewRate, setReviewRate] = useState(1);
+  const qualityRateRef = useRef(1);
   const [detector, setDetector] = useState<DetectorState>('idle');
   const [modelProgress, setModelProgress] = useState<{ receivedBytes: number; totalBytes: number | null } | null>(null);
   const [modelCacheHit, setModelCacheHit] = useState(false);
@@ -175,7 +177,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
     if (!frames.length || !currentFileRef.current) return;
-    const blob = new Blob([serializeQualityTrace(frames, qualityInferencesRef.current)], { type: 'application/json' });
+    const blob = new Blob([serializeQualityTrace(frames, qualityInferencesRef.current, qualityRateRef.current)], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = href;
@@ -1684,6 +1686,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 onLoadedMetadata={event => {
                   setDuration(event.currentTarget.duration);
                   event.currentTarget.playbackRate = 1;
+                  setReviewRate(1);
+                  qualityRateRef.current = 1;
                 }}
                 onLoadedData={event => {
                   setReadyVideo(true);
@@ -1698,6 +1702,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                     if (Number.isFinite(v.duration)) v.currentTime = Math.min(t, Math.max(0, v.duration - 0.05));
                   }
                   startDetector();
+                }}
+                onRateChange={event => {
+                  const rate = event.currentTarget.playbackRate;
+                  if (!Number.isFinite(rate) || rate <= 0) return;
+                  if (qualityRateRef.current !== rate) {
+                    qualityFramesRef.current = [];
+                    qualityInferencesRef.current = [];
+                    qualityRateRef.current = rate;
+                  }
+                  setReviewRate(rate);
                 }}
                 onPlay={() => {
                   setPlaying(true);
@@ -1777,6 +1791,24 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             </div>
           )}
         </div>
+        {url && !webcamActive && !tabCaptureActive && <div className="vg-review-rate">
+          <div className="min-w-0">
+            <label htmlFor="vg-review-rate" className="text-sm font-semibold">Review playback speed</label>
+            <p className="mt-1 text-xs">Slow down recorded footage to give the detector more processing time per video second. This does not guarantee more accurate detections.</p>
+          </div>
+          <select id="vg-review-rate" value={reviewRate} onChange={event => {
+            const video = videoRef.current;
+            if (!video || captureKindRef.current) return;
+            try { video.playbackRate = Number(event.target.value); }
+            catch (error) { setError('This browser does not support the selected playback speed: ' + String(error)); }
+          }}>
+            {![.25,.5,.75,1].includes(reviewRate) && <option value={reviewRate}>{reviewRate}× (browser setting)</option>}
+            <option value={.25}>0.25× · slow review</option>
+            <option value={.5}>0.5×</option>
+            <option value={.75}>0.75×</option>
+            <option value={1}>1× · normal</option>
+          </select>
+        </div>}
         {url && (
           <div className="vg-analysis-player-footer flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
