@@ -25,6 +25,14 @@ function smoothCenter(
   return target - direction * Math.min(residual, size * 0.10);
 }
 
+function smoothDimension(previous: number, target: number, remainingCorrection: number): number {
+  // A slowly growing rendered box must not lag the tracker by an arbitrary
+  // amount during an approach, zoom or corrected detector observation.
+  const residual = (previous - target) * remainingCorrection;
+  const maxResidual = target * .10;
+  return target + Math.max(-maxResidual, Math.min(maxResidual, residual));
+}
+
 /** Smooths only the geometry of tracks that already qualify for display. */
 export class LiveBoxSmoother {
   private previous = new Map<number, BoxSample>();
@@ -51,8 +59,8 @@ export class LiveBoxSmoother {
       const box: Box = {
         x: smoothCenter(previous.box.x, track.x, previous.vx, track.vx, track.w, elapsed, remainingCorrection),
         y: smoothCenter(previous.box.y, track.y, previous.vy, track.vy, track.h, elapsed, remainingCorrection),
-        w: track.w + (previous.box.w - track.w) * remainingCorrection,
-        h: track.h + (previous.box.h - track.h) * remainingCorrection
+        w: smoothDimension(previous.box.w, track.w, remainingCorrection),
+        h: smoothDimension(previous.box.h, track.h, remainingCorrection)
       };
       next.set(track.id, { box, time: mediaTime, vx: track.vx, vy: track.vy });
       return { ...track, ...box };

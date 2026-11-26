@@ -64,3 +64,17 @@ describe('live box smoothing', () => {
     expect(smoother.update([car], 2)).toEqual([car]);
   });
 });
+
+it('bounds displayed size error for an approaching or receding vehicle without modifying tracking geometry', () => {
+  const smoother = new LiveBoxSmoother();
+  smoother.update([car], 0);
+  const approaching = { ...car, w: 160, h: 100 };
+  const [grown] = smoother.update([approaching], 1 / 30);
+  expect(grown.w).toBeGreaterThanOrEqual(144);
+  expect(grown.h).toBeGreaterThanOrEqual(90);
+  expect(approaching.w).toBe(160);
+  const receding = { ...car, w: 70, h: 42 };
+  const [shrunk] = smoother.update([receding], 2 / 30);
+  expect(shrunk.w).toBeLessThanOrEqual(77);
+  expect(shrunk.h).toBeLessThanOrEqual(46.2);
+});
