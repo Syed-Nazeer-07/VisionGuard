@@ -36,8 +36,13 @@ model or tracking change, and report real-time and slowed review separately. Qua
 nor syncs its trace to Supabase.
 
 The optional diagnostic export also includes bounded worker inference samples
-and p50/p95 timing summaries for worker latency, result age relative to the
-displayed video, and rendered overlay age. Replay-anchor misses distinguish
+and p50/p95 timing summaries for worker latency, preprocessing, model execution,
+postprocessing, result age relative to the displayed video, and rendered overlay
+age. Each captured inference also includes its source dimensions and, when
+available, post-NMS detector boxes before association/replay. A null candidates
+field means unavailable evidence, not zero detections. Label the precise
+inference media time separately from overlay frame times to distinguish model/
+decoder misses from tracking/replay misses. Candidate counts are not recall. Replay-anchor misses distinguish
 late inference from a successfully replayed observation. Empty timing samples
 are reported as null, not zero; these are captured browser measurements, not
 hardware benchmarks or a substitute for independently labeled accuracy. Retain

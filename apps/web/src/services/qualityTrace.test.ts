@@ -66,3 +66,22 @@ it('records the actual review playback speed as evaluation context', () => {
   expect(JSON.parse(serializeQualityTrace([], [], NaN)).playbackRate).toBeNull();
   expect(JSON.parse(serializeQualityTrace([])).playbackRate).toBe(1);
 });
+
+it('records actual pre-association detector candidates and stage timings separately from rendered tracks', () => {
+  const samples: QualityInference[] = [];
+  const candidate = { x:60, y:40, w:32, h:20, prob:.9, classId:2, className:'car' };
+  const first = { mediaTime:1, inferenceMs:200, resultAgeMs:90, provider:'wasm',
+    detectionCount:1, replayAnchorAvailable:false, sourceWidth:640, sourceHeight:360,
+    preprocessMs:10, modelRunMs:170, postprocessMs:20, detections:[candidate] };
+  expect(appendQualityInference(samples, first)).toBe(true);
+  candidate.x = 999;
+  expect(samples[0].detections?.[0].x).toBe(60);
+  expect(appendQualityInference(samples, { ...first, mediaTime:2, detectionCount:0, detections:[] })).toBe(true);
+  expect(appendQualityInference(samples, { ...first, mediaTime:3, detections:null, modelRunMs:NaN })).toBe(true);
+  expect(samples[1].detections).toEqual([]);
+  expect(samples[2].detections).toBeNull();
+  expect(samples[2].modelRunMs).toBeNull();
+  const summary = summarizeQualityPerformance([], samples);
+  expect(summary.modelRunMs).toEqual({ samples:2, p50:170, p95:170 });
+  expect(summary.detectorCandidateSamples).toBe(2);
+});

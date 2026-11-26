@@ -10,6 +10,7 @@ import { savedLocalMatchesArchive } from '../services/localVideoRecovery';
 import { LiveBoxSmoother } from '../pipeline/rendering/liveBoxSmoother';
 import { paintLiveOverlay, type LiveLabelAnchor } from '../pipeline/rendering/liveOverlay';
 import { displayedVideoMediaTime, matchesFrameRequest, shouldStopAfterInferenceErrors } from '../pipeline/worker/frameSync';
+import type { DetectorEvent as WorkerEvent } from '../pipeline/worker/detectorProtocol';
 import { canReanalyzeStoredVideo } from '../lib/videoAssets';
 import { uploadManager, type ActiveUpload } from '../services/uploadManager';
 import { isB2UploadConfigured, storageProviderFor, uploadStorageProvider } from '../services/videoStorage';
@@ -38,15 +39,6 @@ const OPTICAL_INTERVAL = 0.085;
 const HISTORY_WINDOW = 3.5;
 const MAX_CAPTURE_WIDTH = 640;
 const WORKER_TIMEOUT_MS = 20_000;
-
-type WorkerEvent =
-  | { type: 'loading'; stage: 'downloading' | 'initializing' }
-  | { type: 'progress'; receivedBytes: number; totalBytes: number | null }
-  | { type: 'cache-hit'; modelBytes: number }
-  | { type: 'ready'; provider: string; fallbackReason?: string }
-  | { type: 'result'; requestId: number; generation: number; mediaTime: number; tracks: LiveTrack[]; detectionCount: number; inferenceMs: number; provider: string }
-  | { type: 'skipped'; requestId: number; generation: number }
-  | { type: 'error'; requestId: number; generation: number; message: string };
 
 type DetectorState = 'idle' | 'downloading' | 'initializing' | 'ready' | 'error';
 type StreamHealth = 'idle' | 'connecting' | 'playing' | 'buffering' | 'reconnecting' | 'ended' | 'error';
@@ -378,7 +370,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             mediaTime: message.mediaTime, inferenceMs: message.inferenceMs,
             resultAgeMs: Number.isFinite(displayedTime) ? Math.max(0, (displayedTime - message.mediaTime) * 1000) : null,
             provider: message.provider, detectionCount: message.detectionCount,
-            replayAnchorAvailable: anchor >= 0 && closestDistance <= .14
+            replayAnchorAvailable: anchor >= 0 && closestDistance <= .14,
+            sourceWidth: video.videoWidth, sourceHeight: video.videoHeight,
+            preprocessMs: message.preprocessMs, modelRunMs: message.modelRunMs,
+            postprocessMs: message.postprocessMs, detections: message.detections ?? null
           });
         }
         if (anchor < 0 || closestDistance > 0.14) {
@@ -1392,7 +1387,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         }, WORKER_TIMEOUT_MS);
         try {
           worker.postMessage({
-            type: 'frame', bitmap, requestId, generation, mediaTime, sourceWidth, sourceHeight
+            type: 'frame', bitmap, requestId, generation, mediaTime, sourceWidth, sourceHeight,
+            diagnostics: qualityEnabledRef.current && !!currentFileRef.current && showBoxesRef.current
           }, [bitmap]);
         } catch (error) {
           bitmap.close();
