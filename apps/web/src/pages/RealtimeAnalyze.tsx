@@ -1757,7 +1757,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               <img src="/scene-guide.svg" alt="" aria-hidden="true" className="vg-player-welcome-art" />
               <div className="text-lg font-semibold">Select an analysis source</div>
               <p className="max-w-md text-sm text-slate-300">Open a local video, or approve access to a camera or browser tab.</p>
-              <button type="button" onClick={() => void chooseVideo()} className="vg-primary"><Upload size={16}/> Choose video</button>
+              <button type="button" onClick={() => void chooseVideo()} className="vg-primary"><Upload size={16}/> Select local video</button>
               <p className="max-w-md text-xs leading-5 text-slate-400">Inference runs on this device. No source has been selected.</p>
             </div>
           )}
