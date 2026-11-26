@@ -25,9 +25,19 @@ presented as browser YOLO11s accuracy.
    **null/unannotated**. It is not a benchmark and the evaluator intentionally
    refuses to score it until you supply honest manual annotations.
 
-Seeking, changing the source or reconnecting resets the trace because frame
-times would otherwise be inconsistent. Quality capture is in memory only;
-it neither uploads recordings nor syncs its trace to Supabase.
+Seeking, changing the source, reconnecting or toggling box visibility resets
+the trace because frame times or display conditions would otherwise be inconsistent.
+Keep boxes enabled during a complete sample; disabled overlays are not empty
+detector frames. Quality capture is in memory only; it neither uploads recordings
+nor syncs its trace to Supabase.
+
+The optional diagnostic export also includes bounded worker inference samples
+and p50/p95 timing summaries for worker latency, result age relative to the
+displayed video, and rendered overlay age. Replay-anchor misses distinguish
+late inference from a successfully replayed observation. Empty timing samples
+are reported as null, not zero; these are captured browser measurements, not
+hardware benchmarks or a substitute for independently labeled accuracy. Retain
+the same device, viewport, source clip, and display conditions when comparing runs.
 
 ## Label actual ground truth
 

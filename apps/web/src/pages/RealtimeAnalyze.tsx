@@ -19,7 +19,7 @@ import { fastestVisibleEstimate } from '../services/analysisMetrics';
 import { captureInferenceBitmap } from '../services/frameCapture';
 import { analysisPaintIntervalMs, shouldPaintAnalysisFrame } from '../services/frameBudget';
 import { startupTimeoutMs, shouldRetryStartupOnWasm } from '../services/detectorStartupPolicy';
-import { appendQualityFrame, serializeQualityTrace, type QualityFrame } from '../services/qualityTrace';
+import { appendQualityFrame, appendQualityInference, serializeQualityTrace, type QualityFrame, type QualityInference } from '../services/qualityTrace';
 import { AutomaticIncidentDetector } from '../services/automaticIncidentDetector';
 import { resolveDeployedModelUrl } from '../services/modelUrl';
 import { hasAdvancedVideoFrame, isLiveFrameDiscontinuity, isStreamStalled, shouldPaintLiveOverlay } from '../services/streamRecovery';
@@ -69,6 +69,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const qualityEnabledRef = useRef(false);
   qualityEnabledRef.current = qualityEnabled;
   const qualityFramesRef = useRef<QualityFrame[]>([]);
+  const qualityInferencesRef = useRef<QualityInference[]>([]);
   const ownerId = useAuthStore(state => state.user?.id ?? null);
   const activeRunRef = useRef('');
   const currentFileRef = useRef<File | null>(null);
@@ -138,6 +139,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   // candidate reshuffling, disappearing speed text or floating labels.
   const labelAnchorsRef = useRef(new Map<number, LiveLabelAnchor>());
   const [showBoxes, setShowBoxes] = useState(true);
+  const showBoxesRef = useRef(true);
+  showBoxesRef.current = showBoxes;
   const [showLabels, setShowLabels] = useState(true);
   const [showTelemetry, setShowTelemetry] = useState(true);
   const [visibleClasses, setVisibleClasses] = useState<Record<string, number>>({});
@@ -172,7 +175,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
     if (!frames.length || !currentFileRef.current) return;
-    const blob = new Blob([serializeQualityTrace(frames)], { type: 'application/json' });
+    const blob = new Blob([serializeQualityTrace(frames, qualityInferencesRef.current)], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = href;
@@ -226,6 +229,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     speedHistoryRef.current.clear();
     autoIncidentDetectorRef.current.reset();
     qualityFramesRef.current = []; // A seek/source change invalidates timestamp alignment.
+    qualityInferencesRef.current = [];
     detectorToStableIdRef.current.clear();
     // Preserve increasing stable IDs within this run. A seek/reconnect must
     // not reuse #1 for an entirely different vehicle in the saved ledger.
@@ -363,6 +367,17 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             anchor = i;
             closestDistance = distance;
           }
+        }
+        if (qualityEnabledRef.current && currentFileRef.current && showBoxesRef.current) {
+          const displayedTime = displayedVideoMediaTime(
+            video.currentTime, presentedMediaTimeRef.current, video.paused, video.seeking
+          );
+          appendQualityInference(qualityInferencesRef.current, {
+            mediaTime: message.mediaTime, inferenceMs: message.inferenceMs,
+            resultAgeMs: Number.isFinite(displayedTime) ? Math.max(0, (displayedTime - message.mediaTime) * 1000) : null,
+            provider: message.provider, detectionCount: message.detectionCount,
+            replayAnchorAvailable: anchor >= 0 && closestDistance <= .14
+          });
         }
         if (anchor < 0 || closestDistance > 0.14) {
           // One late inference result must not erase newer optically matched
@@ -1491,7 +1506,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             !video.paused && !video.ended && !video.seeking) {
           appendQualityFrame(qualityFramesRef.current,
             presentedMediaTimeRef.current ?? video.currentTime,
-            video.videoWidth, video.videoHeight, showBoxes ? visibleTracks : [], overlayAgeMs);
+            video.videoWidth, video.videoHeight, visibleTracks, overlayAgeMs, showBoxes);
         }
         if (time - lastUI > 250) {
           lastUI = time;
@@ -1806,10 +1821,19 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       <fieldset className="vg-analysis-display vg-panel">
         <legend className="sr-only">Display preferences</legend>
         <span aria-hidden="true"><SlidersHorizontal size={16}/> Display</span>
-        <label><input type="checkbox" checked={showBoxes} onChange={event => setShowBoxes(event.target.checked)}/> Boxes</label>
+        <label><input type="checkbox" checked={showBoxes} onChange={event => {
+          if (qualityEnabledRef.current) {
+            // A visibility change splits the evaluated segment. Never let a
+            // deliberately hidden overlay masquerade as a detector failure.
+            qualityFramesRef.current = [];
+            qualityInferencesRef.current = [];
+          }
+          setShowBoxes(event.target.checked);
+        }}/> Boxes</label>
         <label><input type="checkbox" checked={showLabels} disabled={!showBoxes} onChange={event => setShowLabels(event.target.checked)}/> Labels</label>
         <label><input type="checkbox" checked={showTelemetry} onChange={event => setShowTelemetry(event.target.checked)}/> Telemetry</label>
         {showBoxes && <small>Dashed boxes indicate predicted positions.</small>}
+        {qualityEnabled && <small>{showBoxes ? 'QA trace: keep boxes enabled for a continuous sample.' : 'QA trace paused: enable boxes to start a new sample.'}</small>}
       </fieldset>
 
       <details id="vg-analysis-details" className="vg-analysis-details vg-storage-disclosure">
