@@ -41,3 +41,11 @@
 .vg-shell .vg-main-scroll :is(.text-emerald-700,.text-emerald-800) { color: var(--vg-success); }
 .vg-shell .vg-main-scroll .text-\[\#bd5035\] { color: var(--vg-link); }
 [data-theme="dark"] .vg-main-scroll :is(.hover\:bg-slate-50,.hover\:bg-slate-100):hover { background-color: var(--vg-surface-soft); }
+
+.vg-shell :is(.vg-history-filter, .vg-list-pager, .vg-live-counts, .vg-list-size-label select) { background: var(--vg-surface-soft); color: var(--vg-text); border-color: var(--vg-border); }
+.vg-shell :is(.vg-list-pager-summary, .vg-list-size-label, .vg-list-page-count) { color: var(--vg-subtext); }
+.vg-shell :is(.vg-list-pager-actions button, .vg-settings-tab:hover, .vg-search-field input) { background: var(--vg-surface); color: var(--vg-text); border-color: var(--vg-border); }
+.vg-shell .vg-analysis-focus-toggle[aria-pressed="true"] { background: var(--vg-action); color: var(--vg-action-text); border-color: var(--vg-action); }
+.vg-shell .vg-side-account { background: #1d342a; border-color: #3b5347; }
+.vg-shell .vg-range-option { min-height: 38px; }
+.vg-shell .vg-incidents-header { align-items: center; }

@@ -14,8 +14,8 @@ removed from the interface.
 
 1. Open and play a permitted YouTube video/live stream in a separate
    Microsoft Edge or Chrome tab. You can use VisionGuard's small
-   **Open YouTube** shortcut or navigate to YouTube normally.
-2. Return to VisionGuard → **Live analysis** → **Analyze tab**.
+   **YouTube footage** shortcut or navigate to YouTube normally.
+2. Return to VisionGuard → **Live analysis** → **Existing browser tab**.
 3. In the browser's Share picker, choose the **Edge Tab / Chrome Tab**
    category, select the already-playing YouTube tab and click **Share**.
    Never choose Entire Screen or Window: those can show VisionGuard

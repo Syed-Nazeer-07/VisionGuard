@@ -548,14 +548,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setTabCaptureActive(false);
   };
 
-  useEffect(() => {
-    const devices = navigator.mediaDevices as MediaDevices & {
-      setCaptureHandleConfig?: (configuration: { handle: string; permittedOrigins: string[] }) => void;
-    };
-    try { devices?.setCaptureHandleConfig?.({ handle: 'visionguard', permittedOrigins: [window.location.origin] }); }
-    catch { /* Optional browser feature. */ }
-  }, []);
-
   const startTabCapture = async () => {
     if (tabCaptureStarting) return;
     if (!navigator.mediaDevices?.getDisplayMedia) {
@@ -1084,6 +1076,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       void persistenceQueueRef.current.catch(error => setError('Could not save playback position: ' + String(error)));
     }
     video?.pause();
+    if (ownerId && activeRunRef.current) void activityLedger.flush(ownerId).catch(console.warn);
     uploadGenerationRef.current += 1;
     resetTracks();
     firstFrameResolveRef.current?.();
@@ -1198,11 +1191,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
     // Never overwrite a saved file's position with a now-closed camera or
     // YouTube tab capture timestamp.
-    if (video && !wasCapturing && !cloudPlaybackActive && ownerId &&
+    if (video && !wasCapturing && currentFileRef.current && ownerId &&
         Number.isFinite(video.currentTime)) {
       void localAnalysisStorage.savePosition(video.currentTime, ownerId).catch(() => {});
     }
-  }, [active, keepTabConnected, ownerId, cloudPlaybackActive]);
+  }, [active, keepTabConnected, ownerId, resetTracks]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -1215,7 +1208,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         // delivered a fresh decoded frame. Keep overlays hidden until it does.
         if (shouldResumeSharedTab(captureKindRef.current, document.hidden, video.paused)) {
           void video.play().catch(() => {
-            setError('Tab sharing is still active, but playback was paused by the browser. Press Play to resume detection.');
+            setError('The browser paused the shared preview. Use Change source to reopen the tab.');
           });
         }
         return;

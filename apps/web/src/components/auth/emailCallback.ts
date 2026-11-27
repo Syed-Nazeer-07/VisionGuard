@@ -9,6 +9,7 @@ export function parseEmailCallback(url: URL) {
     accessToken: fragment.get('access_token'),
     hasRefreshToken: fragment.has('refresh_token'),
     type,
+    errorCode: fragment.get('error_code') ?? url.searchParams.get('error_code'),
     failed: fragment.has('error') || url.searchParams.has('error'),
   };
 }
@@ -45,7 +46,8 @@ if (!supabaseConfig.isMock && legacyType && incoming?.accessToken && incoming.ha
   void legacyCallback.then(() => unsubscribe?.());
 }
 
-export const hasLegacyConfirmation = legacyType === 'email';
+export const hasLegacyConfirmation = legacyType === 'email' ||
+  (initialUrl?.pathname === '/login' && incoming?.errorCode === 'otp_expired');
 
 export async function redeemEmailLink(type: 'email' | 'recovery', tokenHash?: string): Promise<Session | null> {
   if (supabaseConfig.isMock) return null;

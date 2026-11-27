@@ -10,7 +10,7 @@ import { useAuthStore } from '../../store/auth';
 import { workspaceReturn } from '../../components/auth/workspaceReturn';
 import { AuthCardLayout } from '../../components/auth/AuthCardLayout';
 import { AuthField } from '../../components/auth/AuthField';
-import { getPendingEmail, hasLegacyConfirmation, resendDelay, savePendingEmail } from '../../components/auth/emailCallback';
+import { getPendingEmail, hasLegacyConfirmation, parseEmailCallback, resendDelay, savePendingEmail } from '../../components/auth/emailCallback';
 import { VerifyEmail } from './VerifyEmail';
 
 const email = z.string().trim().email('Enter a valid email address');
@@ -42,7 +42,7 @@ function CredentialsForm({ signup }: { signup: boolean }) {
   const emailDefault = typeof location.state?.email === 'string' ? location.state.email : '';
   const login = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema), defaultValues: { email: emailDefault } });
   const registration = useForm<z.infer<typeof signupSchema>>({ resolver: zodResolver(signupSchema), defaultValues: { email: emailDefault } });
-  const callbackError = new URLSearchParams(location.search).has('error');
+  const [callbackError, setCallbackError] = useState(() => parseEmailCallback(new URL(window.location.href)).failed);
 
   useEffect(() => {
     if (!initialized || !session || callbackError) return;
@@ -84,6 +84,7 @@ function CredentialsForm({ signup }: { signup: boolean }) {
           savePendingEmail(pending);
           navigate('/verify-email', { state: { pending }, replace: true });
         } else if (error) throw error;
+        else setCallbackError(false);
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not continue. Try again.');

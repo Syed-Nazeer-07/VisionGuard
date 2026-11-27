@@ -2,13 +2,13 @@
 .vg-shell .vg-analysis-header { padding-bottom: 0; margin-bottom: 2px; border: 0; }
 .vg-shell .vg-analysis-header h1 { font-size: clamp(1.65rem, 3vw, 2.2rem); }
 .vg-shell .vg-analysis-header p { margin-top: 4px; }
-.vg-shell .vg-analysis-sourcebar { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.vg-shell .vg-analysis-sourcebar { display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; gap: 8px; align-items: center; padding: 0; margin: 0; border: 0; background: transparent; box-shadow: none; }
 .vg-active-source { display: flex; gap: 8px; align-items: center; min-width: 0; color: var(--vg-text); font-size: 14px; }
 .vg-active-source svg { flex: none; color: var(--vg-link); }
 .vg-active-source strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vg-shell .vg-analysis-source-actions { display: flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; gap: 6px; }
 .vg-shell .vg-analysis-source-actions button { min-height: 38px; }
-.vg-shell .vg-analysis-grid { align-items: start; }
+.vg-shell .vg-analysis-grid { align-items: start; margin-block: 0 3px; }
 .vg-shell .vg-analysis-stage-head { min-height: 37px; padding-block: 7px; background: #142621; border-color: #31493d; }
 .vg-shell .vg-analysis-player-card .vg-player-frame:not(:fullscreen) { background: #0e1d17; }
 .vg-shell .vg-player-welcome { display: grid; height: 100%; place-items: center; padding: 10px; background: radial-gradient(at 50% 45%, #203a30, #111d18 76%); text-align: center; color: #f0fff4; }
@@ -51,7 +51,7 @@
 .vg-source-dialog-actions { margin-top: 5px; }
 .vg-source-error { padding: 9px; background: var(--vg-warning-bg); color: var(--vg-warning); border-radius: 6px; }
 @media (max-width: 460px) {
-  .vg-shell .vg-analysis-sourcebar { padding: 0; gap: 5px; }
+  .vg-shell .vg-analysis-sourcebar { flex-direction: row; padding: 0; gap: 5px; }
   .vg-active-source { font-size: 12px; }
   .vg-shell .vg-analysis-source-actions button { padding-inline: 7px; white-space: nowrap; }
   .vg-player-welcome p { margin-bottom: 8px; font-size: 12px; }

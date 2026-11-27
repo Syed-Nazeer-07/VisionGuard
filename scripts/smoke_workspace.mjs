@@ -9,11 +9,14 @@ assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname),
 const { chromium } = await import(process.env.VISIONGUARD_PLAYWRIGHT_MODULE || 'playwright-core');
 const fixtureVideo = fileURLToPath(new URL('../apps/web/public/imagery/motorway-sample.mp4', import.meta.url));
 const modelPath = process.env.VISIONGUARD_SMOKE_MODEL;
+const testBrowserTab = process.env.VISIONGUARD_SMOKE_TAB === '1';
+const captureTitle = 'VisionGuard Capture Fixture';
 const screenshots = process.env.VISIONGUARD_SMOKE_SCREENSHOTS;
 if (screenshots) await mkdir(screenshots, { recursive: true });
 const browser = await chromium.launch({
   executablePath: process.env.VISIONGUARD_CHROMIUM || undefined,
-  args: ['--disable-dev-shm-usage', '--use-fake-device-for-media-stream'],
+  args: ['--disable-dev-shm-usage', '--use-fake-device-for-media-stream',
+    ...(testBrowserTab ? ['--auto-select-tab-capture-source-by-title=' + captureTitle] : [])],
 });
 const account = 'e527dfcf-75bc-45b7-845f-7757bafaf225';
 const profile = { id: account, email: 'alex@example.test', name: 'Alex Morgan', role: 'Admin', status: 'Active' };
@@ -139,6 +142,34 @@ try {
   await page.keyboard.press('Escape');
   checked.push('Guided YouTube offers direct search and a browser tab-selection action.');
 
+  if (testBrowserTab) {
+    const capturePage = await context.newPage();
+    await capturePage.route('**/capture-fixture', route => route.fulfill({
+      contentType: 'text/html',
+      body: '<title>' + captureTitle + '</title><video muted autoplay loop playsinline width="800" src="/imagery/motorway-sample.mp4"></video>',
+    }));
+    await capturePage.goto(base + '/capture-fixture');
+    await capturePage.locator('video').evaluate(video => video.play());
+    await page.bringToFront();
+    await openSources();
+    await page.getByRole('button',{name:/Existing browser tab/}).click();
+    await page.getByRole('button',{name:'Stop sharing',exact:true}).waitFor();
+    assert.equal(await page.locator('video').evaluate(video => video.srcObject?.getVideoTracks()[0]?.getSettings().displaySurface), 'browser');
+    await page.getByText('Analysis settings', {exact:true}).evaluate(summary => {
+      summary.closest('details').open = true;
+    });
+    await page.getByRole('checkbox',{name:/Keep tab sharing/}).check();
+    await page.getByRole('button',{name:'Open navigation'}).click();
+    await page.getByRole('link',{name:'Overview',exact:true}).click();
+    await page.getByRole('button',{name:'Stop',exact:true}).click();
+    await page.getByRole('button',{name:'Stop',exact:true}).waitFor({state:'hidden'});
+    await capturePage.close();
+    await page.getByRole('button',{name:'Open navigation'}).click();
+    await page.getByRole('link',{name:'Live analysis',exact:true}).click();
+    await page.getByRole('button',{name:'Choose source',exact:true}).waitFor();
+    checked.push('Chromium shared an actual browser tab, kept it across workspace navigation and stopped from the top bar.');
+  }
+
   await context.grantPermissions(['camera'], {origin:base});
   await openSources();
   await page.getByRole('button',{name:/Device camera/}).click();
@@ -203,9 +234,27 @@ try {
       return Number(stat?.querySelector('dd')?.textContent) > 0;
     }, null, {timeout:30000});
     await screenshot('desktop-analysis-real-yolo');
+    await page.locator('.vg-player-frame').hover();
+    await page.getByRole('button',{name:'Enter fullscreen'}).click();
+    await page.waitForFunction(() => {
+      const canvas = document.fullscreenElement?.querySelector('canvas');
+      if (!canvas || !canvas.width || !canvas.height) return false;
+      const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      return pixels.some((channel, index) => index % 4 === 3 && channel > 0);
+    }, null, {timeout:15000});
+    await screenshot('desktop-analysis-fullscreen');
+    await page.locator('.vg-player-frame').hover();
+    await page.getByRole('button',{name:'Exit fullscreen'}).click();
     await page.setViewportSize({width:390,height:844});
     await screenshot('mobile-analysis-real-yolo');
-    checked.push('Licensed A40 sample produced observed tracks with the actual YOLO11s ONNX model.');
+    await page.locator('video').evaluate(video => video.pause());
+    await page.waitForFunction(() => document.querySelector('video')?.paused);
+    await page.getByRole('button',{name:'Open navigation'}).click();
+    await page.getByRole('link',{name:'History',exact:true}).click();
+    const observation = page.locator('.vg-history-row').filter({hasText:'Sample · A40 motorway'});
+    await observation.waitFor();
+    assert.ok((await observation.textContent()).includes('Built-in sample'));
+    checked.push('Licensed A40 sample produced real YOLO11s tracks and nonempty canvas pixels in composite fullscreen.');
   }
 
   await open('/app/cases', 'Incidents');
@@ -249,6 +298,7 @@ try {
   assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
   await page.reload();
   assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+  await page.getByRole('heading',{name:'Settings',exact:true}).waitFor();
   await screenshot('desktop-settings-dark');
   checked.push('Analytics filters work and workspace theme survives a reload.');
 

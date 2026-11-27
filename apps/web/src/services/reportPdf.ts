@@ -135,6 +135,15 @@ export async function createReportPdf(
       run.sourceName + '\n' + run.id, date.format(run.createdAt), ...sessionCounts(run),
     ]), { columnStyles: { 0: { cellWidth: 81 }, 1: { cellWidth: 41 } } });
 
+  const pending = records.flatMap(run => incidentRows(run).filter(flag => flag.status === 'Needs review')
+    .map(flag => ({ source: run.sourceName, ...flag })))
+    .sort((a, b) => b.observedAt - a.observedAt).slice(0, 3);
+  if (pending.length && type === 'executive') {
+    section('Recent observations awaiting review');
+    table(['Reason / source', 'Origin', 'Observed'],
+      pending.map(flag => [flag.reason + '\n' + flag.source, flag.origin, date.format(flag.observedAt)]));
+  }
+
   section('Method and limitations');
   paragraph('A repeated track meets the session’s observation, duration and confidence rules. Tracking interruptions and replays can count the same physical vehicle more than once. Detector candidates, track rows and inference frames describe different populations.');
   paragraph('Speed values are uncalibrated estimates from image motion. Automatic flags are candidates for human review. Reviewed status records a person’s decision and carries no enforcement finding.');
@@ -149,9 +158,12 @@ export async function createReportPdf(
     section('Vehicle observations', 21);
     const vehicles = vehicleRows(run);
     if (!vehicles.length) paragraph('No observation rows saved for this session.');
-    else table(['Track', 'Class', 'Conf. (%)', 'First (s)', 'Last (s)', 'Samples', 'Est. km/h', 'Repeated'],
-      vehicles.map(track => [track.id, track.type, track.confidence || '-', track.first || '-', track.last || '-',
-        track.observations, track.speed || '-', track.repeated]));
+    else {
+      const columns = ['Track', 'Class', 'Conf. (%)', 'First (s)', 'Last (s)', 'Samples', 'Est. km/h', 'Repeated'];
+      table(columns, vehicles.map(track => [track.id, track.type, track.confidence || '-', track.first || '-', track.last || '-',
+        track.observations, track.speed || '-', track.repeated]),
+        { head: [[{ content: 'Session ID · ' + run.id, colSpan: columns.length }], columns] });
+    }
     section('Incident review');
     const flags = incidentRows(run);
     if (!flags.length) paragraph('No review flags saved for this session.');
