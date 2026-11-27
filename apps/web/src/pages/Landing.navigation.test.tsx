@@ -50,19 +50,43 @@ function expectNativeRouteClick(selector: string, destination: string) {
 }
 
 describe('native browser navigation from the public landing page', () => {
-  it('changes the illustrative workflow without claiming live inference', () => {
+  it('switches from the sample recording to a captured detector frame', () => {
     const { host, dispose } = mountLanding();
     try {
       const tabs = [...host.querySelectorAll<HTMLButtonElement>('.vgn-stage-tab')];
       expect(tabs).toHaveLength(3);
+      const frame = host.querySelector('.vgn-stage-image img');
+      expect(frame?.getAttribute('src')).toBe('/imagery/motorway-recording-frame.webp');
       act(() => tabs[1].click());
       expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
       expect(tabs[0].getAttribute('aria-pressed')).toBe('false');
-      expect(host.querySelector('.vgn-stage-image')?.getAttribute('data-scene')).toBe('1');
-      expect(host.textContent).toContain('Follow vehicles across frames');
-      expect(host.textContent).toContain('Illustrative workflow preview');
+      expect(frame?.getAttribute('src')).toBe('/imagery/motorway-detections.webp');
+      expect(host.querySelector('.vgn-stage-image figcaption')?.textContent).toBe('Frame from a sample analysis');
+      expect(host.querySelector('.vgn-trace')).toBeNull();
+      act(() => tabs[0].click());
+      expect(frame?.getAttribute('src')).toBe('/imagery/motorway-recording-frame.webp');
     } finally { dispose(); }
   });
+  it('shows the theme selection and persists a choice', () => {
+    const { host, dispose } = mountLanding();
+    const root = document.documentElement;
+    try {
+      const select = host.querySelector<HTMLSelectElement>('.vg-theme-expanded select[aria-label="Color theme"]')!;
+      expect(Array.from(select.options, option => option.text)).toEqual(['System', 'Light', 'Dark']);
+      act(() => {
+        select.value = 'dark';
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      expect(root.dataset.theme).toBe('dark');
+      expect(localStorage.getItem('visionguard:appearance')).toBe('dark');
+    } finally {
+      delete root.dataset.theme;
+      delete root.dataset.appearance;
+      localStorage.removeItem('visionguard:appearance');
+      dispose();
+    }
+  });
+
   it('does not intercept the header Get started link', () => {
     expectNativeRouteClick('.vgn-nav-actions a[href="/register"]', '/register');
   });
