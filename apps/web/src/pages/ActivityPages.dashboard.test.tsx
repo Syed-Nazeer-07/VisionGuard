@@ -14,7 +14,7 @@ describe('browser-first operations overview', () => {
     const html = render();
     expect(html).toContain('<h1>Overview</h1>');
     expect(html).toContain('href="/app/analyze"');
-    expect(html).toContain('Start an analysis');
+    expect(html).toContain('New analysis');
     expect(html).toContain('Repeated vehicle tracks');
     expect(html).toContain('Inference frames');
   });

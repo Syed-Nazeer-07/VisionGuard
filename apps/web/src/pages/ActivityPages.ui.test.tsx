@@ -63,7 +63,7 @@ describe('operations workspace interactions', () => {
       expect(options[0].getAttribute('aria-pressed')).toBe('true');
       act(() => options[1].click());
       expect(options[1].getAttribute('aria-pressed')).toBe('true');
-      expect(view.host.textContent).toContain('Needs review');
+      expect(view.host.textContent).toContain('Review queue');
     } finally { view.dispose(); }
   });
 
@@ -71,29 +71,30 @@ describe('operations workspace interactions', () => {
     const view = mount(<Settings />);
     try {
       const options = [...view.host.querySelectorAll<HTMLButtonElement>('.vg-settings-tab')];
-      expect(options).toHaveLength(5);
+      expect(options).toHaveLength(6);
       expect(options[0].getAttribute('aria-pressed')).toBe('true');
       act(() => options[1].click());
       expect(options[1].getAttribute('aria-pressed')).toBe('true');
+      expect(view.host.querySelector('select[aria-label="Color theme"]')).not.toBeNull();
+      act(() => options[2].click());
       expect(view.host.querySelector('#settings-start')).not.toBeNull();
-      act(() => options[3].click());
+      act(() => options[4].click());
       expect(view.host.textContent).toContain('Backblaze B2 upload is a separate');
       expect(view.host.querySelector('.vg-settings-save')).toBeNull();
-      act(() => options[4].click());
+      act(() => options[5].click());
       expect(view.host.textContent).toContain('uncalibrated estimates');
       expect(view.host.querySelector('.vg-settings-save')).toBeNull();
     } finally { view.dispose(); }
   });
 });
 
-it('uses actionable overview shortcuts rather than decorative dashboard filler', () => {
+it('uses one analysis action and links from real work sections', () => {
   const view = mount(<ActivityDashboard />);
   try {
-    const shortcuts = view.host.querySelector('nav[aria-label="Quick access to workspace tools"]');
-    expect(shortcuts?.querySelector('a[href="/app/videos"]')).not.toBeNull();
-    expect(shortcuts?.querySelector('a[href="/app/cases"]')).not.toBeNull();
-    expect(shortcuts?.querySelector('a[href="/app/analytics"]')).not.toBeNull();
-    expect(view.host.querySelector('.vg-overview-actions a[href="/app/reports"]')).not.toBeNull();
-    expect(view.host.querySelector('.vg-overview-image')).toBeNull();
+    expect(view.host.querySelector('nav[aria-label="Quick access to workspace tools"]')).toBeNull();
+    expect(view.host.querySelectorAll('a[href="/app/analyze"]')).toHaveLength(1);
+    expect(view.host.querySelector('a[href="/app/cases"]')).not.toBeNull();
+    expect(view.host.textContent).toContain('Recent sessions');
+    expect(view.host.textContent).toContain('Review queue');
   } finally { view.dispose(); }
 });

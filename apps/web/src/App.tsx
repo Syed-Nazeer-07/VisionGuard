@@ -18,7 +18,7 @@ const AppLayout = lazy(() => import('./components/layout/AppLayout').then(module
 const loadActivityPages = () => import('./pages/ActivityPages');
 const Dashboard = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityDashboard })));
 const Analytics = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityAnalytics })));
-const Reports = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityReports })));
+const Reports = lazy(() => import('./pages/Reports').then(module => ({ default: module.ActivityReports })));
 const ActivityVideoLibrary = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityVideoLibrary })));
 const ActivityIncidents = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityIncidents })));
 const LegacyVideoLibrary = lazy(() => import('./pages/VideoLibrary').then(module => ({ default: module.VideoLibrary })));
