@@ -3,8 +3,9 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, BarChart3, Clock3, FileKey, FileText, FolderSearch,
   LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
-  Settings, UserCog, Users, X, Plus
+  Settings, UserCog, Users, X
 } from 'lucide-react';
+import { ThemeControl } from '../theme/ThemeControl';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useAuthStore } from '../../store/auth';
 import { supabase } from '../../lib/supabase';
@@ -12,6 +13,7 @@ import '../../styles/workspace.css';
 import '../../styles/workspace-theme.css';
 import '../../styles/workspace-responsive.css';
 import '../../styles/product-experience.css';
+import '../../styles/appearance.css';
 
 // Load the inference workspace only after requested, but preserve its state
 // once visited so playback and tab capture survive workspace navigation.
@@ -37,7 +39,7 @@ const ADMIN_NAV = [
 type NavItem = (typeof PRIMARY_NAV)[number];
 const NAV = [...PRIMARY_NAV, ...DATA_NAV, ...ADMIN_NAV];
 const MODERN_PATHS = new Set(['/app', '/app/analyze', '/app/videos',
-  '/app/cases', '/app/analytics', '/app/reports']);
+  '/app/cases', '/app/analytics', '/app/reports', '/app/settings']);
 
 export function AppLayout() {
   const location = useLocation();
@@ -153,7 +155,7 @@ export function AppLayout() {
         (compactSidebar ? 'lg:w-[78px] ' : 'lg:w-[248px] ') +
         (mobileOpen ? 'translate-x-0' : '-translate-x-full')}>
       <div className="vg-side-head flex h-[72px] shrink-0 items-center justify-between border-b px-4">
-        <Link to="/app" onClick={() => setMobileOpen(false)}
+        <Link to="/app" onClick={() => setMobileOpen(false)} aria-label="VisionGuard workspace"
           className={'vg-side-logo flex min-w-0 items-center gap-2.5 ' + (compactSidebar ? 'mx-auto' : '')}>
           <img src="/brand-mark.svg?v=20261111" alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-[10px]" />
           {!compactSidebar && <span className="truncate text-[16px] font-bold tracking-[-.045em]">Vision<span className="font-medium">Guard</span><span className="vg-brand-dot">.</span></span>}
@@ -190,7 +192,7 @@ export function AppLayout() {
           <div className="vg-side-avatar h-8 w-8 shrink-0 rounded-full text-xs">{initial}</div>
           {!compactSidebar && <div className="min-w-0 flex-1">
             <div className="vg-side-account-name truncate text-xs font-semibold" title={displayName}>{displayName}</div>
-            <div className="vg-side-account-role mt-0.5 text-[11px]">{currentRole}</div>
+
           </div>}
           <button type="button" onClick={() => void signOut()} title="Sign out" aria-label="Sign out"
             className="vg-side-signout rounded-md p-1.5">
@@ -201,7 +203,6 @@ export function AppLayout() {
     </aside>
 
     <div className="flex min-w-0 flex-1 flex-col" inert={smallViewport && mobileOpen}>
-      {/* Shared route breadcrumb and signed-in role. */}
       <div className="vg-mobile-bar vg-product-topbar flex h-12 shrink-0 items-center gap-3 border-b px-3">
         <button ref={menuButtonRef} type="button" aria-label="Open navigation"
           className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
@@ -212,19 +213,13 @@ export function AppLayout() {
           <span className="vg-topbar-title truncate">{title}</span>
         </div>
         <div className="vg-topbar-actions ml-auto">
-          <span className="vg-product-topbar-role hidden sm:inline">{currentRole}</span>
-          {!activeAnalyze && <Link to="/app/analyze" className="vg-topbar-launch" aria-label="Start analysis"><Plus size={16} aria-hidden="true"/><span>Analyze</span></Link>}
+          {tabSharing && !activeAnalyze && <div className="vg-capture-status" aria-label="Browser tab sharing is active">
+            <span aria-hidden="true"/><Link to="/app/analyze">Tab sharing</Link>
+            <button type="button" onClick={() => window.dispatchEvent(new Event('visionguard:stop-tab-capture'))}>Stop</button>
+          </div>}
+          <ThemeControl/>
         </div>
       </div>
-      {tabSharing && <div className="fixed right-3 top-3 z-50 flex items-center gap-2 rounded-xl border border-amber-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur-sm md:right-5 md:top-4"
-        role="status" aria-label="Browser tab sharing is active">
-        <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true"/>
-        <span className="hidden text-xs font-semibold text-slate-700 sm:inline">Tab sharing</span>
-        {!activeAnalyze && <Link to="/app/analyze"
-          className="rounded-md px-2 py-1 text-xs font-semibold text-[#426b7d] hover:bg-slate-100">View</Link>}
-        <button type="button" className="rounded-md px-2 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-50"
-          onClick={() => window.dispatchEvent(new Event('visionguard:stop-tab-capture'))}>Stop</button>
-      </div>}
       <main tabIndex={-1} className="vg-main-scroll relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto" id="main-content">
         <ErrorBoundary>
           {/* Retain the playback element/worker between app pages. */}
