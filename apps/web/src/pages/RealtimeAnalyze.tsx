@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LiveTelemetry } from '../components/analysis/LiveTelemetry';
 import { CompositePlayer } from '../components/analysis/CompositePlayer';
@@ -738,22 +739,33 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     // A request for a specific cloud archive ID takes precedence over the
     // generic most-recent local video. Otherwise unrelated footage can appear
     // behind the archive failure and look like a successful recovery.
-    if (!ownerId || new URLSearchParams(location.search).has('video') ||
-        currentFileRef.current || urlRef.current ||
-        localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
-    const generation = uploadGenerationRef.current;
+    const parameters = new URLSearchParams(location.search);
+    const requestedRun = parameters.get('local');
+    if (!ownerId || parameters.has('video') || localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
+    if (requestedRun ? activeRunRef.current === requestedRun && currentFileRef.current :
+        currentFileRef.current || urlRef.current || activeRunRef.current.startsWith('sample:')) return;
+    const generation = requestedRun ? ++uploadGenerationRef.current : uploadGenerationRef.current;
     void Promise.all([
       localAnalysisStorage.loadVideo(ownerId ?? undefined),
       localAnalysisStorage.loadPosition(ownerId ?? undefined)
     ]).then(async ([saved, savedPosition]) => {
-      if (!alive || generation !== uploadGenerationRef.current || !saved) return;
+      if (!alive || generation !== uploadGenerationRef.current) return;
+      if (!saved || (requestedRun && saved.runId !== requestedRun)) {
+        if (requestedRun) setError('The original for this session is no longer retained on this device.');
+        return;
+      }
       await activityLedger.load(ownerId);
       if (!alive || generation !== uploadGenerationRef.current) return;
       const file = saved.file instanceof File
         ? saved.file
         : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
+      if (requestedRun) {
+        videoRef.current?.pause();
+        stopWebcam();
+        setStreamHealth('idle');
+      }
       currentFileRef.current = file;
-      const savedRunId = localStorage.getItem('visionguard:video-run:' + ownerId) || undefined;
+      const savedRunId = saved.runId || localStorage.getItem('visionguard:video-run:' + ownerId) || undefined;
       attachVideo(file, saved.name, savedPosition, savedRunId);
       setStorage('saved');
     }).catch(e => {
@@ -914,7 +926,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setUnavailableOriginal(null);
     // A file deliberately chosen in response to an archive-recovery link is
     // a NEW local analysis, not a remotely stored video or the old session.
-    if (new URLSearchParams(location.search).has('video')) {
+    if (['video', 'local'].some(key => new URLSearchParams(location.search).has(key))) {
       navigate({
         pathname: location.pathname,
         search: qualityEnabled ? '?quality=1' : '',
@@ -931,6 +943,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setCloudStarting(false);
     const generation = uploadGenerationRef.current;
     attachVideo(file, file.name);
+    const runId = activeRunRef.current;
     // Video is never retained unless the user explicitly opted in.
     const shouldSave = ownerId && localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes';
     setStorage(shouldSave ? 'saving' : 'not-saved');
@@ -940,7 +953,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         await localAnalysisStorage.clearVideo(ownerId ?? undefined);
       } else {
         // Real opt-in file snapshot, not a revocable Edge file-system handle.
-        await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined);
+        await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined, runId);
       }
       if (generation !== uploadGenerationRef.current) return;
       await localAnalysisStorage.clearAnalysis(ownerId ?? undefined);
@@ -990,6 +1003,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         cloudAvailability !== 'configured' || cloudUploadIdRef.current) return;
     setCloudStarting(true);
     setCloudError('');
+    const request = uploadGenerationRef.current;
+    const analysisRunId = activeRunRef.current;
     try {
       if (uploadStorageProvider().id !== 'b2') {
         throw new Error('Cloud video saving is restricted to Backblaze B2.');
@@ -1003,7 +1018,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       // The existing UploadManager writes a metadata row and uses the
       // authenticated B2 signing function. File bytes go directly to B2.
       // No upload occurs unless the user clicks this button.
-      const { videoId } = await uploadManager.startUpload(file, undefined, { keepPreview: false });
+      if (request !== uploadGenerationRef.current) return;
+      const { videoId } = await uploadManager.startUpload(file, undefined, { keepPreview: false, analysisRunId });
+      if (request !== uploadGenerationRef.current) return;
       cloudUploadIdRef.current = videoId;
       cloudUnsubscribeRef.current?.();
       cloudUnsubscribeRef.current = uploadManager.subscribe(videoId, upload => {
@@ -1011,7 +1028,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (upload.status === 'failed') reportCloudUploadFailure(upload.error || 'B2 upload failed.');
       });
     } catch (error) {
-      reportCloudUploadFailure(error);
+      if (request === uploadGenerationRef.current) reportCloudUploadFailure(error);
     } finally {
       setCloudStarting(false);
     }
@@ -1045,7 +1062,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         ? saved.file : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
       currentFileRef.current = file;
       attachVideo(file, saved.name, savedPosition,
-        localStorage.getItem('visionguard:video-run:' + ownerId) || undefined);
+        saved.runId || localStorage.getItem('visionguard:video-run:' + ownerId) || undefined);
       setStorage('saved');
     } catch (error) {
       if (request !== uploadGenerationRef.current || !activeRef.current) return;
@@ -1233,6 +1250,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setSaveVideo(checked);
     localStorage.setItem('visionguard:save-video:' + ownerId, checked ? 'yes' : 'no');
     const file = currentFileRef.current;
+    const runId = activeRunRef.current;
     setStorage(checked && file ? 'saving' : 'not-saved');
     persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
       if (!checked) {
@@ -1240,7 +1258,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         await localAnalysisStorage.clearPosition(ownerId);
         localStorage.removeItem('visionguard:video-run:' + ownerId);
       } else if (file) {
-        await localAnalysisStorage.saveVideo(file, file.name, ownerId);
+        await localAnalysisStorage.saveVideo(file, file.name, ownerId, runId);
       }
     });
     void persistenceQueueRef.current.then(() => setStorage(checked && file ? 'saved' : 'not-saved'))
@@ -1574,6 +1592,13 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setSourcesOpen(true);
   }
 
+  function closeSource() {
+    removeVideo();
+    if (['video', 'local'].some(key => new URLSearchParams(location.search).has(key))) {
+      navigate({ pathname: location.pathname, search: qualityEnabled ? '?quality=1' : '' }, { replace: true });
+    }
+  }
+
   function useSample() {
     if (sampleActive) {
       setSourcesOpen(false);
@@ -1586,7 +1611,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     removeVideo();
     setSourcesOpen(false);
     setUnavailableOriginal(null);
-    if (new URLSearchParams(location.search).has('video')) {
+    if (['video', 'local'].some(key => new URLSearchParams(location.search).has(key))) {
       navigate({ pathname: location.pathname, search: qualityEnabled ? '?quality=1' : '' }, { replace: true });
     }
     attachVideo(SAMPLE_URL, SAMPLE_NAME);
@@ -1640,7 +1665,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       {sourcesOpen && <AnalysisSources onDismiss={() => {
         if (cameraStarting || tabCaptureStarting) uploadGenerationRef.current += 1;
         setSourcesOpen(false);
-      }} onUpload={() => { setSourcesOpen(false); chooseVideo(); }}
+      }} onUpload={() => { flushSync(() => setSourcesOpen(false)); chooseVideo(); }}
         onCamera={() => void startWebcam()} onTab={() => void startTabCapture()} onSample={useSample}
         onRestore={saveVideo ? () => { setSourcesOpen(false); void reopenSavedVideo(); } : undefined}
         cameraStarting={cameraStarting} tabStarting={tabCaptureStarting} error={error}/>}
@@ -1648,7 +1673,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <span className="vg-active-source" title={filename}><Film size={16} aria-hidden="true"/><strong>{filename}</strong></span>
         <div className="vg-analysis-source-actions">
           <button type="button" className="vg-secondary" onClick={openSources}>Change source</button>
-          {!capture && <button type="button" className="vg-secondary" aria-label="Close current source" onClick={removeVideo}
+          {!capture && <button type="button" className="vg-secondary" aria-label="Close current source" onClick={closeSource}
             title="Close current video"><X size={17}/></button>}
         </div>
       </div>}
