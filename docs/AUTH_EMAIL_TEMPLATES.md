@@ -1,49 +1,14 @@
 # VisionGuard authentication emails
 
-The repo contains two clean, responsive email HTML references:
+The production Auth project is `wpkwxlhwjkgtvyersust`. Its repository templates require a manual hosted update after the corresponding frontend is deployed.
 
-- `supabase/templates/confirmation.html` — sign-up email verification
-- `supabase/templates/recovery.html` — password-reset emails
+1. In the VisionGuard Supabase project, open **Authentication → URL Configuration**. Set **Site URL** to `https://visionguard.syednazeerofficial2007.workers.dev` with no trailing slash. Retain the exact production `/login` and `/reset-password` redirects and any authorized localhost equivalents at port 3000. Review other allowlist entries with the project owner.
+2. Under **Authentication → Sign In / Providers → Email**, review the **Confirm email** setting against the intended signup policy. The frontend handles either setting.
+3. Under **Authentication → Emails → Templates**, set **Confirm signup** subject to **Confirm your VisionGuard account** and paste [confirmation.html](../supabase/templates/confirmation.html). Set **Reset password** subject to **Reset your VisionGuard password** and paste [recovery.html](../supabase/templates/recovery.html).
+4. Check **Authentication → Emails → SMTP Settings** for an authorized sender address, verified sender domain and valid credentials. Disable link tracking. Check **Authentication → Rate Limits** and the SMTP provider’s sending quotas. Supabase’s default mail service restricts recipients and throughput, so use the project’s authorized SMTP configuration for external delivery.
+5. Under **Authentication → Sign In / Providers → Google**, check the configured provider and client. Confirm the Google OAuth application's redirect is `https://wpkwxlhwjkgtvyersust.supabase.co/auth/v1/callback`. [Google setup](GOOGLE_SIGN_IN.md)
+6. With a new authorized mailbox, register, inspect the delivered email in its client, confirm from a private window/device, sign in, request recovery, open the delivered recovery message, update the password, and test both passwords. Test expired, invalid and reused links and record actual provider and inbox outcomes.
 
-Both use Supabase's official `{{ .ConfirmationURL }}` template variable. No
-tracking pixels, fonts, third-party images, or external scripts are required.
+The templates put the provider’s `TokenHash` in a URL fragment on the configured Site URL. A user explicitly continues from a branded screen before the app sends the one-time token to Supabase via `verifyOtp`. This supports other browsers and avoids consuming the token on a link preview GET. Existing provider-issued implicit links at `/login` and `/reset-password` remain supported.
 
-## Apply to the hosted Supabase Auth project
-
-These files are **not deployed automatically** by Git commits. To update
-the emails your users actually receive:
-
-1. Open the **Supabase Dashboard** for your VisionGuard Auth project.
-2. Go to **Authentication → Email Templates**.
-3. Open **Confirm signup**, set subject to
-   `Confirm your VisionGuard account`, and paste the entire HTML from
-   `supabase/templates/confirmation.html`.
-4. Open **Reset Password**, set subject to
-   `Reset your VisionGuard password`, and paste the HTML from
-   `supabase/templates/recovery.html`.
-5. Save each template. Check your project's Auth email URL/redirect allow
-   list includes the **real** origins you will serve:
-   - `http://localhost:3000/login`
-   - `http://localhost:3000/reset-password`
-   - `https://YOUR_PRODUCTION_HOST/login`
-   - `https://YOUR_PRODUCTION_HOST/reset-password`
-6. Test both flows with a disposable, authorized account: confirmation
-   link, expired link, password update, and retry.
-
-Hosted Supabase template variables are processed **server-side** by Supabase
-Auth. Never substitute user-entered URLs into an email template. Google
-OAuth client credentials and Backblaze B2 secrets should not appear in
-email templates or frontend code.
-
-For reliable production email delivery, configure and verify your sending
-domain / SMTP provider according to the Supabase dashboard. The default
-SMTP service can have sending limits; successfully saving HTML templates
-does not guarantee email deliverability.
-
-The React UI's confirmation instructions, sign-in page and password
-recovery now use the same light VisionGuard styling.
-
-References:
-
-- https://supabase.com/docs/guides/auth/auth-email-templates
-- https://supabase.com/docs/guides/auth/auth-smtp
+[Supabase templates](https://supabase.com/docs/guides/auth/auth-email-templates) · [Supabase SMTP](https://supabase.com/docs/guides/auth/auth-smtp)

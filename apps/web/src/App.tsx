@@ -6,6 +6,7 @@ import { Landing } from './pages/Landing'
 import { Login } from './pages/auth/Login'
 import { ForgotPassword } from './pages/auth/ForgotPassword'
 import { ResetPassword } from './pages/auth/ResetPassword'
+import { VerifyEmail } from './pages/auth/VerifyEmail'
 import { useAuthStore } from './store/auth'
 import { lazy, Suspense, useEffect } from 'react'
 
@@ -92,13 +93,14 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Login />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           
           {/* Protected App Routes */}
           <Route path="/app" element={<RequireAuth />}>
             <Route element={
-              <Suspense fallback={<div role="status" className="flex min-h-[40vh] items-center justify-center bg-[#f5f7f6] px-6 text-sm text-[#61747b]">Opening your workspace…</div>}>
+              <Suspense fallback={<div role="status" className="flex min-h-[40vh] items-center justify-center px-6 text-sm text-[var(--vg-subtext)]">Opening your workspace…</div>}>
                 <AppLayout />
               </Suspense>
             }>

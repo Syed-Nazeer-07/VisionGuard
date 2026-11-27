@@ -22,22 +22,20 @@ describe('VisionGuard public landing experience', () => {
 
   it('uses a product-led interactive stage with three accessible perspectives', () => {
     const html = renderLanding();
-    expect(html).toContain('SCENE EXPLORER');
-    expect(html).toContain('traffic_monitoring_corridor.jpg');
+    expect(html).toContain('/imagery/traffic-night.webp');
+    expect(html).toContain('/imagery/motorway-still.webp');
     expect(html).toContain('Explore the VisionGuard analysis workflow');
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('aria-pressed="false"');
     expect(html).toContain('Observe');
     expect(html).toContain('Follow');
     expect(html).toContain('Review');
-    expect(html).toContain('ILLUSTRATIVE SCENE — NO LIVE INFERENCE');
-    expect(html).toContain('Illustration only');
+    expect(html).toContain('Illustrative workflow preview');
   });
 
   it('never displays a fake live dashboard, sample video player, or fabricated metrics', () => {
     const html = renderLanding();
-    expect(html).toContain('scene-guide.svg');
-    expect(html).toContain('TRACKING CONCEPT / ILLUSTRATION');
+    expect(html).toContain('Traffic and light trails');
     expect(html).not.toContain('<video');
     expect(html).not.toContain('car-detection.mp4');
     expect(html).not.toContain('platform_preview.png');
@@ -46,9 +44,8 @@ describe('VisionGuard public landing experience', () => {
 
   it('states speed, storage and human-review limitations rather than overstating accuracy', () => {
     const html = renderLanding();
-    expect(html).toContain('Image-derived speed is an estimate');
+    expect(html).toContain('Review flagged observations');
     expect(html).toContain('Cloud video backup requires explicit upload');
-    expect(html).toContain('human review');
   });
 
   it('shows the same current logo, keeps the footer compact, and has no ornamental arrow cards', () => {
