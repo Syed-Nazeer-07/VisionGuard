@@ -17,7 +17,7 @@ from urllib.request import urlopen
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support.ui import Select, WebDriverWait
 
 BASE = os.environ.get("VISIONGUARD_SMOKE_BASE", "http://127.0.0.1:3000")
 BREAKPOINTS = [(1440, 900), (1024, 768), (768, 900), (390, 844)]
@@ -164,6 +164,19 @@ def check_responsive_geometry(driver, width: int, height: int):
         assert driver.find_element(By.CSS_SELECTOR, ".vgn-mobile-navigation").is_displayed()
         menu.click()
         assert menu.get_attribute("aria-expanded") == "false"
+
+    theme = driver.find_element(By.CSS_SELECTOR, '.vgn-nav select[aria-label="Color theme"]')
+    assert theme.value_of_css_property("opacity") == "1", "The selected theme should be visible"
+    Select(theme).select_by_value("dark")
+    WebDriverWait(driver, 5).until(lambda d: d.find_element(By.TAG_NAME, "html").get_attribute("data-theme") == "dark")
+    Select(theme).select_by_value("system")
+
+    driver.find_element(By.XPATH, '//button[normalize-space()="Follow"]').click()
+    WebDriverWait(driver, 5).until(lambda d: d.execute_script("""
+        const frame = document.querySelector('.vgn-stage-image img');
+        return frame?.complete && frame.naturalWidth > 0 &&
+          frame.getAttribute('src') === '/imagery/motorway-detections.webp';
+    """))
 
     for route in ("/login", "/register"):
         driver.get(BASE + route)

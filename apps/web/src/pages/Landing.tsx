@@ -11,7 +11,7 @@ const sections = [
 
 const scenes = [
   { label: 'Observe', heading: 'Start with a scene', text: 'Open a recording, connect a camera, or share a browser tab with permission.' },
-  { label: 'Follow', heading: 'Follow vehicles across frames', text: 'VisionGuard outlines the vehicles it tracks in the recording. This frame shows the detector output from a sample session.' },
+  { label: 'Follow', heading: 'Follow vehicles across frames', text: 'A track connects detections over time, so you can follow a vehicle through the scene.' },
   { label: 'Review', heading: 'Keep the evidence in context', text: 'Revisit saved sessions, compare vehicle classes, and send unusual observations for human review.' },
 ];
 
