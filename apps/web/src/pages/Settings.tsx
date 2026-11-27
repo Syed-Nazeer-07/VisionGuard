@@ -107,7 +107,7 @@ export default function Settings() {
               <Icon size={18} className="shrink-0"/>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold">{item.label}</span>
-                <span className="mt-0.5 block text-[11px] opacity-75">{item.description}</span>
+                <span className="mt-0.5 block text-[11px] text-[var(--vg-subtext)]">{item.description}</span>
               </span>
             </button>;
           })}
