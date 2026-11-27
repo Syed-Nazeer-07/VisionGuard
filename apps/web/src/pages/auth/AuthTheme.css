@@ -195,3 +195,14 @@
 .vg-auth .vg-auth-form form input:not([type="checkbox"]){border-color:#cbd7dc;border-radius:7px}
 .vg-auth .vg-auth-recovery-card,.vg-auth-recovery .vg-auth-recovery-card{border-radius:10px}
 @media(max-height:850px) and (min-width:1024px){.vg-auth .vg-auth-scene{width:min(100%,235px);margin-bottom:20px}}
+
+/* Shared midnight/porcelain identity. Preserve all form structure and behavior. */
+.vg-auth .vg-auth-showcase{background:var(--vg-midnight)}
+.vg-auth .vg-auth-photo img{filter:saturate(.75) brightness(.42)}
+.vg-auth .vg-auth-form,.vg-auth-recovery{background:var(--vg-page-bg)}
+.vg-auth .vg-auth-form form input:not([type="checkbox"]),.vg-auth .vg-google-button,.vg-auth-recovery .vg-field{border-radius:10px;border-color:#cbd5e2}
+.vg-auth .vg-auth-submit,.vg-auth-recovery .vg-primary{border-radius:10px;min-height:49px}
+.vg-auth .vg-auth-form form input[type="checkbox"]{accent-color:var(--vg-action)}
+.vg-auth .vg-auth-form form input:not([type="checkbox"]):focus{border-color:var(--vg-focus);box-shadow:0 0 0 3px #d7eee7}
+.vg-auth .vg-auth-scene{border-radius:14px;border-color:#526581}
+.vg-auth-recovery .vg-auth-recovery-card{border-color:var(--vg-border);border-radius:16px}

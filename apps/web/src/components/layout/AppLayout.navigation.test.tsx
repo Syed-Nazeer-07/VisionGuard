@@ -78,3 +78,13 @@ describe('responsive workspace navigation accessibility', () => {
     } finally { view.dispose(); }
   });
 });
+
+it('exposes the analysis action and accessible names for navigation links', () => {
+  mobileMediaQuery();
+  const view = mount();
+  try {
+    expect(view.host.querySelector('a[aria-label="Start analysis"]')?.getAttribute('href')).toBe('/app/analyze');
+    expect(view.host.querySelector('a[aria-label="Overview"]')?.getAttribute('aria-current')).toBe('page');
+    expect(view.host.querySelector('a[aria-label="Settings"]')?.getAttribute('href')).toBe('/app/settings');
+  } finally { view.dispose(); }
+});

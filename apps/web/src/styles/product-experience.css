@@ -1,14 +1,14 @@
 /* Product-level presentation. Never change the video/canvas coordinate system here. */
 .vg-shell {
-  --vg-canvas:#f3f6f7;
-  --vg-ink:#172831;
-  --vg-muted:#526773;
-  --vg-line:#dbe3e7;
-  --vg-accent:#11685d;
-  --vg-accent-hover:#0c5048;
-  --vg-accent-soft:#e7f4f1;
-  --vg-sidebar:#13232d;
-  --vg-sidebar-muted:#aabfc8;
+  --vg-canvas:var(--vg-page-bg);
+  --vg-ink:var(--vg-text);
+  --vg-muted:#536278;
+  --vg-line:var(--vg-border);
+  --vg-accent:var(--vg-action);
+  --vg-accent-hover:var(--vg-action-hover);
+  --vg-accent-soft:#e0f2ec;
+  --vg-sidebar:var(--vg-midnight);
+  --vg-sidebar-muted:#b3c2d8;
 }
 
 .vg-shell .vg-side-head,.vg-shell .vg-side-footer,.vg-shell .vg-side-bar {
@@ -505,3 +505,96 @@
 .vg-review-rate {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-top:1px solid var(--vg-border,#dce4e8);color:#334155;background:#f8fafc;}
 .vg-review-rate select {min-height:40px;max-width:100%;border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px;background:#fff;color:#0f172a;font-size:13px;}
 @media(max-width:580px){.vg-review-rate{align-items:stretch;flex-direction:column}.vg-review-rate select{width:100%}}
+
+/* A single refined product language across overview, analysis, data and administration. */
+.vg-shell .vg-side-head,.vg-shell .vg-side-footer,.vg-shell .vg-side-bar{border-color:#2c3a50}
+.vg-shell .vg-side-head{height:72px}
+.vg-shell .vg-side-group-label{color:#a8b9d0}
+.vg-shell .vg-side-nav-item{height:44px;border-radius:9px;color:#d0dbeb}
+.vg-shell .vg-side-nav-item:hover,.vg-shell .vg-side-settings:hover{background:#24344d;border-color:#354761}
+.vg-shell .vg-side-nav-item[aria-current="page"]{background:#25413f;border-color:#416560;color:#ecfff8}
+.vg-shell .vg-side-nav-item[aria-current="page"]>svg,.vg-shell .vg-brand-dot{color:var(--vg-mint)}
+.vg-shell .vg-side-nav-item[aria-current="page"]::before{background:var(--vg-mint)}
+.vg-shell .vg-side-account{background:#1d2b43;border-color:#38475f;border-radius:11px}
+.vg-shell .vg-side-icon-button:hover,.vg-shell .vg-side-signout:hover{background:#31415c}
+.vg-shell .vg-product-topbar{height:64px;padding-inline:24px;border-color:var(--vg-line);gap:12px}
+.vg-topbar-location{display:flex;flex-direction:column;gap:1px;line-height:1.3}
+.vg-product-breadcrumb{font-size:10px;text-transform:uppercase;letter-spacing:.08em}
+.vg-topbar-title{font-size:14px;font-weight:720;color:var(--vg-ink)}
+.vg-topbar-actions{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.vg-product-topbar-role{color:var(--vg-muted);border-color:var(--vg-line);border-radius:7px}
+.vg-topbar-launch{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:39px;padding:0 13px;border-radius:8px;background:var(--vg-accent);color:white;font-size:12px;font-weight:700}
+.vg-topbar-launch:hover{background:var(--vg-accent-hover)}
+.vg-shell .vg-page{padding-top:26px}
+.vg-shell .vg-panel,.vg-shell .vg-stat{border-radius:13px;border-color:var(--vg-line);box-shadow:0 2px 9px rgb(24 36 58 / .035)}
+.vg-shell .vg-page-header{padding-bottom:15px;margin-bottom:18px}
+.vg-shell .vg-page-header h1{font-size:clamp(28px,2.6vw,37px);font-weight:750;letter-spacing:-.045em}
+.vg-shell .vg-page-header p,.vg-shell .vg-section-subtitle,.vg-shell .vg-run-meta,.vg-shell .vg-footnote{color:var(--vg-muted)}
+.vg-shell .vg-section-head{padding:15px 19px;border-color:var(--vg-line)}
+.vg-shell .vg-section-head h2{color:var(--vg-ink);font-weight:720}
+.vg-shell .vg-primary,.vg-shell .vg-secondary,.vg-shell .vg-field,.vg-shell .vg-search-field{border-radius:9px}
+.vg-shell .vg-secondary,.vg-shell .vg-field,.vg-shell .vg-search-field{border-color:#cbd5e2}
+.vg-shell .vg-secondary:hover:not(:disabled){background:#eef4f8;border-color:#a8bccb}
+.vg-shell .vg-stat{min-height:110px;display:flex;flex-direction:column;justify-content:space-between;padding:16px 18px}
+.vg-shell .vg-stat-label{color:var(--vg-muted);font-size:12px}
+.vg-shell .vg-stat-value{color:var(--vg-ink);font-size:clamp(27px,2.4vw,35px);margin-top:8px}
+.vg-shell .vg-stat-foot{margin-top:6px;font-size:11.5px}
+.vg-shell .vg-overview-command{grid-template-columns:minmax(0,1.3fr) minmax(0,.85fr);overflow:hidden;align-items:stretch;background:#fff}
+.vg-shell .vg-overview-command .vg-overview-copy{padding:25px 27px}
+.vg-shell .vg-overview-command .vg-overview-copy h1{font-size:38px}
+.vg-shell .vg-overview-command .vg-overview-copy>span{font-size:11.5px}
+.vg-overview-shortcuts{background:#111d32;color:#edf3ff;display:grid;align-content:center;gap:5px;padding:17px 20px;min-width:0}
+.vg-overview-shortcuts-label{font-size:10px;letter-spacing:.10em;font-weight:700;text-transform:uppercase;color:#b8c8df;margin:0 0 4px 7px}
+.vg-overview-shortcuts>a{display:flex;align-items:center;gap:11px;min-height:50px;padding:8px;border:1px solid transparent;border-radius:8px;color:inherit}
+.vg-overview-shortcuts>a:hover{background:#24344d;border-color:#43516a}
+.vg-overview-shortcuts>a>svg:first-child{color:var(--vg-mint);flex:none}
+.vg-overview-shortcuts>a>svg:last-child{color:#b8c8df;flex:none}
+.vg-overview-shortcuts>a>span{min-width:0;flex:1;display:grid;gap:2px}
+.vg-overview-shortcuts strong{font-size:13px;font-weight:680}
+.vg-overview-shortcuts small{font-size:11px;color:#b8c8df;overflow-wrap:anywhere}
+.vg-shell .vg-first-run{padding:16px 20px}
+.vg-shell .vg-empty-state{background:#fafbfd;border-radius:10px}
+.vg-shell .vg-metadata-chip{background:#f0f3f8;border-color:var(--vg-line);color:var(--vg-muted)}
+.vg-shell .vg-range-control{background:#e9edf4;border-color:var(--vg-line)}
+.vg-shell .vg-range-option{color:#526178}
+.vg-shell .vg-range-option[aria-pressed="true"]{color:var(--vg-accent);background:#fff}
+.vg-shell .vg-filter-pill{border-radius:9px}
+.vg-shell .vg-history-filter{background:#f7f9fc}
+.vg-shell .vg-list-pager{border-color:var(--vg-line);background:#fafbfd}
+.vg-shell .vg-list-pager-actions button:not(:disabled):hover{background:#e8f3ef;border-color:#a2c9bd}
+.vg-shell .vg-report-format-grid article{background:#fafbfd;border-radius:11px}
+.vg-shell .vg-report-empty{background:#f7f9fc;border-color:var(--vg-line)}
+.vg-shell .vg-settings-tab{border-radius:9px}
+.vg-shell .vg-settings-tab:hover{background:#edf3f6;color:var(--vg-ink)}
+.vg-shell .vg-analysis-sourcebar{padding:16px 19px;gap:12px}
+.vg-shell .vg-analysis-source-actions>button{min-height:44px}
+.vg-shell .vg-analysis-player-card{border-color:#35445c;background:#111d32;border-radius:13px}
+.vg-shell .vg-analysis-stage-head,.vg-shell .vg-analysis-player-footer{background:#1b2b43;border-color:#3a4a63}
+.vg-shell .vg-analysis-stage-head>span:first-child,.vg-shell .vg-analysis-source-title{color:#f0f5ff}
+.vg-shell .vg-analysis-source-meta{color:#c7d4e8}
+.vg-shell .vg-live-counts{gap:0;background:#f3f7fa}
+.vg-shell .vg-live-counts dd{font-size:29px;color:var(--vg-ink)}
+.vg-shell .vg-live-counts>div{padding:15px 13px}
+.vg-shell .vg-live-speed{background:#f4f8f8}
+.vg-shell .vg-live-classes li.vg-class-observation{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 8px;padding:6px 0}
+.vg-class-meter{grid-column:1/-1;background:#e4eaf0;height:4px;border-radius:8px;overflow:hidden}
+.vg-class-meter>span{height:100%;display:block;background:#368779;border-radius:8px}
+.vg-shell .vg-live-performance summary{min-height:30px}
+.vg-shell .vg-analysis-display input{accent-color:var(--vg-accent)}
+.vg-shell .vg-analysis-focus-toggle[aria-pressed="true"]{background:var(--vg-accent);border-color:var(--vg-accent)}
+.vg-shell .vg-admin-page :is(.bg-indigo-50,.bg-indigo-100){background:#e6f2ee}
+.vg-shell .vg-admin-page .border-indigo-200{border-color:#c0ded5}
+.vg-shell .vg-admin-page :is(.text-indigo-600,.text-indigo-700,.text-indigo-800,a.text-blue-600,button.text-blue-600){color:var(--vg-accent)}
+.vg-shell .vg-storage-notice svg,.vg-shell .vg-storage-notice strong{color:var(--vg-accent)}
+.vg-shell .vg-modal{border-radius:15px}
+.vg-shell .vg-modal-drawer{border-radius:0}
+@media(max-width:1023px){.vg-shell .vg-product-topbar{height:58px;padding-inline:13px}}
+@media(max-width:760px){
+ .vg-shell .vg-overview-command{grid-template-columns:minmax(0,1fr)}
+ .vg-shell .vg-overview-command .vg-overview-copy{padding:21px}
+ .vg-shell .vg-overview-command .vg-overview-copy h1{font-size:32px}
+ .vg-overview-shortcuts{padding:15px}
+ .vg-shell .vg-page{padding-top:18px}
+ .vg-shell .vg-section-head{padding:14px 16px}
+}
+@media(max-width:639px){.vg-topbar-actions{gap:7px}.vg-topbar-launch{min-height:40px;padding-inline:11px}.vg-shell .vg-stat{min-height:112px}}

@@ -159,16 +159,16 @@ export function Landing() {
           <div className="vgn-shell vgn-hero-grid">
             <div className="vgn-hero-content">
               <span className="vgn-eyebrow"><span aria-hidden="true" /> Browser-first traffic intelligence</span>
-              <h1>Understand traffic.<br /><em>Frame by frame.</em></h1>
-              <p>Turn authorized video, camera and browser-tab footage into vehicle observations, session history and reviewable findings. Inference runs in your browser.</p>
+              <h1>See the road.<br /><em>Understand the motion.</em></h1>
+              <p>Analyze traffic footage, follow vehicles across frames, and turn observations into useful, reviewable insights. All from your browser.</p>
               <div className="vgn-hero-actions">
                 <a href="/register" className="vgn-button vgn-button-accent">Create an account <ArrowUpRight size={18} /></a>
                 <a href="#platform" className="vgn-button vgn-button-ghost">Explore the platform <ArrowRight size={17} /></a>
               </div>
               <div className="vgn-hero-footnote">
-                <span><CircleDot size={14} /> Browser-based analysis</span>
+                <span><LockKeyhole size={14} /> Local-first video processing</span>
                 <span className="vgn-footnote-divider" />
-                <span>Built for human review</span>
+                <span><CircleDot size={13}/> Human-led review</span>
               </div>
             </div>
 
@@ -188,7 +188,7 @@ export function Landing() {
                   <div className="vgn-stage-image-no"><strong>{selected.title}</strong></div>
                 </div>
                 <div className="vgn-stage-tabs" role="group" aria-label="Explore the VisionGuard analysis workflow">
-                  <span>Workflow</span>
+                  <span>Explore the workflow</span>
                   <div>
                     {perspectives.map(item => (
                       <button
@@ -211,7 +211,7 @@ export function Landing() {
 
         <div className="vgn-rail">
           <div className="vgn-shell">
-            <span>THE TOOLS BEHIND THE PICTURE</span>
+            <span>BUILT FOR THE WAY YOU ANALYZE</span>
             <div><span>YOLO11s</span><i /> <span>ONNX Runtime Web</span><i /><span>Visual tracking</span><i /><span>Session history</span></div>
           </div>
         </div>
@@ -219,7 +219,7 @@ export function Landing() {
         <section className="vgn-section vgn-intro" id="platform">
           <div className="vgn-shell">
             <div className="vgn-intro-heading">
-              <span className="vgn-eyebrow">01 / The platform</span><h2>From detection to <em>review.</em></h2>
+              <span className="vgn-eyebrow">01 / The platform</span><h2>One connected <em>analysis workspace.</em></h2>
               <div>
                 <p>Video analysis should help you understand what happened—not leave you with disconnected detections and numbers.</p>
                 <p>VisionGuard connects the visual moment to a broader workflow: track activity, explore results, and return to sessions later.</p>
@@ -259,7 +259,7 @@ export function Landing() {
         <section className="vgn-section vgn-capabilities" id="capabilities">
           <div className="vgn-shell">
             <div className="vgn-capability-heading">
-              <span className="vgn-eyebrow">02 / Capabilities</span><h2>Analysis <em>capabilities.</em></h2>
+              <span className="vgn-eyebrow">02 / Capabilities</span><h2>See more in <em>every session.</em></h2>
               <p>Four connected ways to turn moving pixels into something you can actually review.</p>
             </div>
             <div className="vgn-capability-grid">
@@ -277,7 +277,7 @@ export function Landing() {
         <section className="vgn-section vgn-how" id="workflow">
           <div className="vgn-shell">
             <div className="vgn-how-heading">
-              <span className="vgn-eyebrow">03 / Workflow</span><h2>How analysis <em>works.</em></h2>
+              <span className="vgn-eyebrow">03 / Workflow</span><h2>From footage <em>to findings.</em></h2>
               <p>Bring the footage. Explore what's visible. Return when you need the context again.</p>
             </div>
             <div className="vgn-steps">
@@ -298,7 +298,7 @@ export function Landing() {
         <section className="vgn-cta">
           <div className="vgn-shell vgn-cta-grid">
             <div>
-              <h2>Start analyzing <em>footage.</em></h2>
+              <h2>Make your next frame <em>count.</em></h2>
               <p>Less guesswork between the scene and the insight. Explore VisionGuard's connected analysis workspace.</p>
               <div className="vgn-cta-actions">
                 <a className="vgn-button vgn-button-cta" href="/register">Get started <ArrowUpRight size={18} /></a>

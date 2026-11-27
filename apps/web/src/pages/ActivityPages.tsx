@@ -4,7 +4,7 @@ import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
 import { Link } from 'react-router-dom';
 import { PaginatedRows } from '../components/ui/PaginatedRows';
-import { ArrowUpRight, Download, Film, FileText, Plus, Search, Table2, X } from 'lucide-react';
+import { ArrowUpRight, Download, Film, FileText, Plus, Search, Table2, X, FolderSearch, BarChart3, Clock3 } from 'lucide-react';
 import type { jsPDF } from 'jspdf';
 import { useAuthStore } from '../store/auth';
 import { activityLedger, countRepeatedTracks, isRepeatedVehicleTrack, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
@@ -74,18 +74,23 @@ export function ActivityDashboard() {
   const data = useMemo(() => distribution(stats.distribution), [stats.distribution]);
   const mostRecent = records.reduce((latest, run) => Math.max(latest, run.updatedAt), 0);
   return <div className="vg-page">
-    <header className="vg-overview-header vg-panel">
+    <header className="vg-overview-header vg-panel vg-overview-command">
       <div className="vg-overview-copy">
         <div className="vg-product-eyebrow">Traffic operations</div><h1>Overview</h1>
         <p>Review recent analyses, vehicle observations, and incidents that need attention.</p>
         <div className="vg-overview-actions">
           <Link to="/app/analyze" className="vg-primary">Start an analysis <ArrowUpRight size={17} aria-hidden="true"/></Link>
-          <Link to="/app/videos" className="vg-secondary">Browse history</Link>
+          <Link to="/app/reports" className="vg-secondary">Export reports</Link>
         </div>
         <span>{!loaded ? 'Loading workspace…' : mostRecent > 0
           ? 'Last analyzed ' + niceDate(mostRecent) : 'No analysis sessions saved yet'}</span>
       </div>
-      <div className="vg-overview-image" aria-hidden="true"><img src="/scene-guide.svg" alt=""/></div>
+      <nav className="vg-overview-shortcuts" aria-label="Quick access to workspace tools">
+        <div className="vg-overview-shortcuts-label">Quick access</div>
+        <Link to="/app/videos"><Clock3 size={19} aria-hidden="true"/><span><strong>Session history</strong><small>Return to saved analyses</small></span><ArrowUpRight size={15} aria-hidden="true"/></Link>
+        <Link to="/app/cases"><FolderSearch size={19} aria-hidden="true"/><span><strong>Incident review</strong><small>{loaded && !error ? fmt(stats.pendingReviews) + ' pending review' : 'Inspect recorded flags'}</small></span><ArrowUpRight size={15} aria-hidden="true"/></Link>
+        <Link to="/app/analytics"><BarChart3 size={19} aria-hidden="true"/><span><strong>Analytics</strong><small>Explore recorded activity</small></span><ArrowUpRight size={15} aria-hidden="true"/></Link>
+      </nav>
     </header>
     {error && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{error}</p>}
     {loaded && records.length === 0 && !error && <section className="vg-panel vg-first-run" aria-labelledby="vg-first-run-title">
