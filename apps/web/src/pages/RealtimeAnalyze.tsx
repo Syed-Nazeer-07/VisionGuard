@@ -5,8 +5,7 @@ import { LiveTelemetry } from '../components/analysis/LiveTelemetry';
 import { CompositePlayer } from '../components/analysis/CompositePlayer';
 import { AnalysisSources } from '../components/analysis/AnalysisSources';
 import '../styles/analysis-workspace.css';
-import { useAnalysisFocus } from '../components/analysis/useAnalysisFocus';
-import { AlertTriangle, ChevronDown, Cloud, Film, HardDrive, Info, Maximize2, Minimize2, RefreshCw, ScanLine, SlidersHorizontal, Upload, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Cloud, Film, HardDrive, Info, RefreshCw, ScanLine, SlidersHorizontal, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
@@ -95,7 +94,6 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { focusMode, setFocusMode } = useAnalysisFocus(active);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const urlRef = useRef<string | null>(null);
@@ -1648,26 +1646,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   }
 
   return (
-    <div className={'vg-page vg-analyze-page' + (focusMode ? ' vg-analyze-focus' : '')}>
+    <div className="vg-page vg-analyze-page">
       <header className="vg-page-header vg-analysis-header">
-        {focusMode && <div className="vg-focus-banner">
-          <span className="vg-focus-banner-dot" aria-hidden="true"/>
-          <span>Focus view</span>
-          <small>Press Esc to exit</small>
-        </div>}
         <div className="vg-analysis-heading">
           <h1>Live analysis</h1>
           <p>Track vehicles from a video, browser tab, or device camera.</p>
-        </div>
-        <div className="vg-analysis-actions">
-          <button type="button" onClick={() => setFocusMode(value => !value)}
-            aria-pressed={focusMode}
-            aria-controls="vg-analysis-player"
-            aria-keyshortcuts="Escape"
-            className="vg-analysis-focus-toggle">
-            {focusMode ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            {focusMode ? 'Exit focus' : 'Focus view'}
-          </button>
         </div>
       </header>
 

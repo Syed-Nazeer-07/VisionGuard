@@ -581,7 +581,6 @@
 .vg-class-meter>span{height:100%;display:block;background:#368779;border-radius:8px}
 .vg-shell .vg-live-performance summary{min-height:30px}
 .vg-shell .vg-analysis-display input{accent-color:var(--vg-accent)}
-.vg-shell .vg-analysis-focus-toggle[aria-pressed="true"]{background:var(--vg-accent);border-color:var(--vg-accent)}
 .vg-shell .vg-admin-page :is(.bg-indigo-50,.bg-indigo-100){background:#e6f2ee}
 .vg-shell .vg-admin-page .border-indigo-200{border-color:#c0ded5}
 .vg-shell .vg-admin-page :is(.text-indigo-600,.text-indigo-700,.text-indigo-800,a.text-blue-600,button.text-blue-600){color:var(--vg-accent)}

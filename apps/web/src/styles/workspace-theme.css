@@ -449,20 +449,6 @@
 .vg-shell .vg-analysis-stage-head > span:first-child,
 .vg-shell .vg-analysis-source-title { color: #f9f7f4; }
 .vg-shell .vg-analysis-source-meta { color: #c4c0bd; }
-.vg-shell .vg-analysis-focus-toggle {
-  background: #fff;
-  border-color: #dedad3;
-  color: #2b2e30;
-}
-.vg-shell .vg-analysis-focus-toggle:hover {
-  background: #fff2e9;
-  border-color: #d5ac9b;
-}
-.vg-shell .vg-analysis-focus-toggle[aria-pressed="true"] {
-  background: #29292d;
-  border-color: #29292d;
-  color: white;
-}
 
 /* Live telemetry reads as one bright, structured data surface—not a dark island. */
 
@@ -504,16 +490,6 @@
   color: white;
 }
 .vg-shell .vg-storage-upload:hover { background: #3a3b3f; }
-
-/* Focus theater is intentionally dark for distraction-free video playback.
-   The clear contrast is a functional mode change, not a second app theme. */
-.vg-shell .vg-analyze-page.vg-analyze-focus { background: #151518; }
-.vg-shell .vg-analyze-focus .vg-analysis-header { background: #151518; }
-.vg-shell .vg-analyze-focus .vg-analysis-focus-toggle[aria-pressed="true"] {
-  background: #fff4ee;
-  border-color: #fff4ee;
-  color: #212125;
-}
 
 
 /* Legacy administrative screens share the same visual language without
@@ -633,9 +609,6 @@
 .vg-shell .vg-live-performance summary > span { float: right; color: var(--vg-muted); font-size: .68rem; }
 .vg-shell .vg-live-performance dl { margin: 7px 0 0; }
 .vg-shell .vg-live-performance dd { margin: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.vg-shell .vg-analyze-focus :is(.vg-analysis-sourcebar, .vg-analysis-display) { display: none; }
-.vg-shell .vg-analyze-focus .vg-analysis-grid { grid-template-columns: minmax(0, 1fr); margin-top: 8px; }
-.vg-shell .vg-analyze-focus .vg-live-telemetry { width: min(100%, 600px); margin-inline: auto; }
 
 .vg-shell .vg-configuration { margin-inline: 0; padding: 0; }
 .vg-shell .vg-config-grid { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }

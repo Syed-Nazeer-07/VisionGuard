@@ -125,10 +125,8 @@ try {
   assert.equal(await page.getByRole('heading',{name:'Live observations'}).count(),0);
   await telemetry.check();
   await page.getByRole('heading',{name:'Live observations'}).waitFor();
-  await page.getByRole('button',{name:'Focus view',exact:true}).click();
-  await page.keyboard.press('Escape');
-  assert.equal(await page.getByRole('button',{name:'Focus view',exact:true}).getAttribute('aria-pressed'),'false');
-  checked.push('Display controls and Escape exit in Live Analysis.');
+  assert.equal(await page.getByRole('button',{name:'Focus view',exact:true}).count(),0);
+  checked.push('Display controls work without a separate Focus view button.');
 
   const openSources = () => page.getByRole('button',{name:/^(choose|change) source$/i}).click();
   await openSources();

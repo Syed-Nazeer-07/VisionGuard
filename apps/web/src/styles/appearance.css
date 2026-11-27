@@ -16,8 +16,8 @@
 .vg-shell :is(.vg-section-head h2, .vg-stat-value, .vg-run-name, .vg-run-count, .vg-empty-state strong, .vg-live-classes h3, .vg-live-speed strong, .vg-live-counts dd) { color: var(--vg-text); }
 .vg-shell :is(.vg-stat-label, .vg-stat-foot, .vg-run-meta, .vg-section-subtitle, .vg-footnote, .vg-empty-row, .vg-empty-state, .vg-live-classes p, .vg-live-speed small, .vg-live-speed > span, .vg-live-counts dt) { color: var(--vg-subtext); }
 .vg-shell :is(.vg-empty-state a, .vg-section-head a, .vg-paginated-rows a) { color: var(--vg-link); }
-.vg-shell :is(.vg-field, .vg-secondary, .vg-search-field, .vg-range-control, .vg-filter-pill, .vg-analysis-focus-toggle) { background: var(--vg-surface); color: var(--vg-text); border-color: var(--vg-border); }
-.vg-shell :is(.vg-secondary, .vg-range-option, .vg-filter-pill, .vg-analysis-focus-toggle):hover:not(:disabled) { color: var(--vg-link); background: var(--vg-surface-soft); border-color: var(--vg-border); }
+.vg-shell :is(.vg-field, .vg-secondary, .vg-search-field, .vg-range-control, .vg-filter-pill) { background: var(--vg-surface); color: var(--vg-text); border-color: var(--vg-border); }
+.vg-shell :is(.vg-secondary, .vg-range-option, .vg-filter-pill):hover:not(:disabled) { color: var(--vg-link); background: var(--vg-surface-soft); border-color: var(--vg-border); }
 .vg-shell :is(.vg-range-option, .vg-filter-pill, .vg-settings-tab)[aria-pressed="true"] { color: var(--vg-link); background: var(--vg-accent-surface); border-color: var(--vg-border); }
 .vg-shell :is(.vg-range-option, .vg-settings-tab, .vg-search-field input, .vg-search-field) { color: var(--vg-text); }
 .vg-shell :is(.vg-primary, .vg-overview-actions .vg-primary) { background: var(--vg-action); color: var(--vg-action-text); border-color: var(--vg-action); }
@@ -45,7 +45,6 @@
 .vg-shell :is(.vg-history-filter, .vg-list-pager, .vg-live-counts, .vg-list-size-label select) { background: var(--vg-surface-soft); color: var(--vg-text); border-color: var(--vg-border); }
 .vg-shell :is(.vg-list-pager-summary, .vg-list-size-label, .vg-list-page-count) { color: var(--vg-subtext); }
 .vg-shell :is(.vg-list-pager-actions button, .vg-settings-tab:hover, .vg-search-field input) { background: var(--vg-surface); color: var(--vg-text); border-color: var(--vg-border); }
-.vg-shell .vg-analysis-focus-toggle[aria-pressed="true"] { background: var(--vg-action); color: var(--vg-action-text); border-color: var(--vg-action); }
 .vg-shell .vg-side-account { background: #1d342a; border-color: #3b5347; }
 .vg-shell .vg-range-option { min-height: 38px; }
 .vg-shell .vg-incidents-header { align-items: center; }
