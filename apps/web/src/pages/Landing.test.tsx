@@ -20,17 +20,14 @@ describe('VisionGuard public landing experience', () => {
     expect(html).toContain('id="workflow"');
   });
 
-  it('uses a product-led interactive stage with three accessible perspectives', () => {
+  it('shows a captured detector frame and concise feature strip without old stage controls', () => {
     const html = renderLanding();
     expect(html).toContain('/imagery/traffic-night.webp');
-    expect(html).toContain('/imagery/motorway-recording-frame.webp');
-    expect(html).toContain('Explore the VisionGuard analysis workflow');
-    expect(html).toContain('aria-pressed="true"');
-    expect(html).toContain('aria-pressed="false"');
-    expect(html).toContain('Observe');
-    expect(html).toContain('Follow');
-    expect(html).toContain('Review');
-    expect(html).toContain('Frame from the sample recording');
+    expect(html).toContain('/imagery/motorway-detections.webp');
+    expect(html).toContain('Frame from a sample analysis');
+    expect(html).toContain('vgn-feature-strip');
+    expect(html).not.toContain('vgn-stage-tab');
+    expect(html).not.toContain('/imagery/motorway-recording-frame.webp');
   });
 
   it('never displays a fake live dashboard, sample video player, or fabricated metrics', () => {
@@ -48,13 +45,10 @@ describe('VisionGuard public landing experience', () => {
     expect(html).toContain('Cloud video backup requires explicit upload');
   });
 
-  it('shows the same current logo, keeps the footer compact, and has no ornamental arrow cards', () => {
+  it('shows the same current logo and keeps the footer compact', () => {
     const html = renderLanding();
     expect(html.split('src="/brand-mark.svg?v=20261111"').length - 1).toBe(2);
     expect(html).toContain('vgn-footer');
     expect(html).not.toContain('vgn-footer-wordmark');
-    const controls = html.match(/<button[^>]*class="vgn-stage-tab(?: vgn-stage-tab-active)?"[^>]*>[\s\S]*?<\/button>/g) ?? [];
-    expect(controls).toHaveLength(3);
-    expect(controls.every(tab => !tab.includes('lucide-arrow'))).toBe(true);
   });
 });

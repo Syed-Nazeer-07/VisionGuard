@@ -50,21 +50,14 @@ function expectNativeRouteClick(selector: string, destination: string) {
 }
 
 describe('native browser navigation from the public landing page', () => {
-  it('switches from the sample recording to a captured detector frame', () => {
+  it('uses a captured analysis frame with a working workspace entry link', () => {
     const { host, dispose } = mountLanding();
     try {
-      const tabs = [...host.querySelectorAll<HTMLButtonElement>('.vgn-stage-tab')];
-      expect(tabs).toHaveLength(3);
-      const frame = host.querySelector('.vgn-stage-image img');
-      expect(frame?.getAttribute('src')).toBe('/imagery/motorway-recording-frame.webp');
-      act(() => tabs[1].click());
-      expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
-      expect(tabs[0].getAttribute('aria-pressed')).toBe('false');
-      expect(frame?.getAttribute('src')).toBe('/imagery/motorway-detections.webp');
+      expect(host.querySelector('.vgn-stage-image img')?.getAttribute('src')).toBe('/imagery/motorway-detections.webp');
       expect(host.querySelector('.vgn-stage-image figcaption')?.textContent).toBe('Frame from a sample analysis');
-      expect(host.querySelector('.vgn-trace')).toBeNull();
-      act(() => tabs[0].click());
-      expect(frame?.getAttribute('src')).toBe('/imagery/motorway-recording-frame.webp');
+      expect(host.querySelector('#platform a[href="/register"]')).not.toBeNull();
+      expect(host.querySelectorAll('.vgn-feature-strip > div')).toHaveLength(3);
+      expect(host.querySelector('.vgn-stage-tab')).toBeNull();
     } finally { dispose(); }
   });
   it('shows the theme selection and persists a choice', () => {

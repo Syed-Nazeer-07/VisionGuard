@@ -9,12 +9,6 @@ const sections = [
   { id: 'workflow', label: 'Workflow' },
 ];
 
-const scenes = [
-  { label: 'Observe', heading: 'Start with a scene', text: 'Open a recording, connect a camera, or share a browser tab with permission.' },
-  { label: 'Follow', heading: 'Follow vehicles across frames', text: 'A track connects detections over time, so you can follow a vehicle through the scene.' },
-  { label: 'Review', heading: 'Keep the evidence in context', text: 'Revisit saved sessions, compare vehicle classes, and send unusual observations for human review.' },
-];
-
 function Brand() {
   return <a href="/" className="vgn-brand" aria-label="VisionGuard homepage">
     <img src="/brand-mark.svg?v=20261111" alt="" width="34" height="34"/>
@@ -26,8 +20,6 @@ export function Landing() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [active, setActive] = useState('');
   const [scrolled, setScrolled] = useState(false);
-  const [scene, setScene] = useState(0);
-  const showTracks = scene !== 0;
   const menuRef = useRef<HTMLButtonElement>(null);
   const headerRef = useRef<HTMLElement>(null);
 
@@ -105,9 +97,9 @@ export function Landing() {
         <div className="vgn-shell vgn-hero-content">
           <p className="vgn-kicker"><span/> Traffic video analysis</p>
           <div className="vgn-hero-grid">
-            <h1>Read the road<br/> <em>in motion.</em></h1>
+            <h1>Understand traffic.<br/> <em>Frame by frame.</em></h1>
             <div>
-              <p>Trace how vehicles move through a scene. Review the moments that matter. Work with your own traffic footage, right in the browser.</p>
+              <p>Detect and track vehicles in traffic footage, then review and export your findings. All from your browser.</p>
               <div className="vgn-hero-actions">
                 <a href="/register" className="vgn-button vgn-button-accent">Get started <ArrowUpRight size={17}/></a>
                 <a href="#platform" className="vgn-text-action">Explore the workspace <ArrowDown size={16}/></a>
@@ -126,24 +118,20 @@ export function Landing() {
       </section>
 
       <section className="vgn-section vgn-shell vgn-reveal" id="platform">
-        <div className="vgn-section-heading">
-          <h2>From a single scene<br/> to a useful record.</h2>
-          <p>VisionGuard brings video, vehicle tracking and session history into one workspace. Explore the steps below, then try the detector on sample footage or your own recording.</p>
+        <div className="vgn-product-heading">
+          <div><p className="vgn-kicker">The detector</p><h2>See beyond the footage.</h2></div>
+          <a href="/register" className="vgn-text-action">Open the workspace <ArrowRight size={16}/></a>
         </div>
-        <div className="vgn-story">
+        <div className="vgn-product-showcase">
+          <div className="vgn-preview-bar"><span><ScanLine size={16}/> Vehicle tracking</span><span>Recorded sample</span></div>
           <figure className="vgn-stage-image">
-            <img src={showTracks ? '/imagery/motorway-detections.webp' : '/imagery/motorway-recording-frame.webp'}
-              alt={showTracks ? 'VisionGuard tracking boxes around vehicles in recorded A40 motorway footage' : 'Vehicles on the A40 motorway, seen from a bridge'}
-              width="960" height="540" loading="lazy"/>
-            <figcaption>{showTracks ? 'Frame from a sample analysis' : 'Frame from the sample recording'}</figcaption>
+            <img src="/imagery/motorway-detections.webp" alt="VisionGuard detector output with tracking boxes around vehicles on the A40 motorway" width="960" height="540" loading="lazy"/>
+            <figcaption>Frame from a sample analysis</figcaption>
           </figure>
-          <div className="vgn-story-copy">
-            <div className="vgn-stage-tabs" role="group" aria-label="Explore the VisionGuard analysis workflow">
-              {scenes.map((item, index) => <button key={item.label} type="button" className="vgn-stage-tab"
-                aria-pressed={scene === index} onClick={() => setScene(index)}>{item.label}</button>)}
-            </div>
-            <div aria-live="polite"><h3>{scenes[scene].heading}</h3><p>{scenes[scene].text}</p></div>
-            <a href="/register" className="vgn-text-action">Open the workspace <ArrowRight size={16}/></a>
+          <div className="vgn-feature-strip">
+            <div><span className="vgn-feature-index">01</span><h3>Detect</h3><p>Identify vehicles in recorded footage.</p></div>
+            <div><span className="vgn-feature-index">02</span><h3>Track</h3><p>Follow movement across frames.</p></div>
+            <div><span className="vgn-feature-index">03</span><h3>Review</h3><p>Revisit sessions and export findings.</p></div>
           </div>
         </div>
       </section>
@@ -156,7 +144,7 @@ export function Landing() {
       </section>
 
       <section className="vgn-section vgn-shell vgn-reveal" id="workflow">
-        <div className="vgn-section-heading"><h2>Start with footage.<br/> Finish with findings.</h2><p>Study traffic patterns, compare recorded scenes and review events that need a closer look.</p></div>
+        <div className="vgn-section-heading"><h2>Your analysis workflow.</h2><p>Study traffic patterns, compare recorded scenes and review events that need a closer look.</p></div>
         <ol className="vgn-workflow">
           <li><h3>Choose a source</h3><p>Upload a recording or try the included motorway sample.</p></li>
           <li><h3>Inspect the scene</h3><p>Seek through the recording or slow playback to give the detector more time per second of footage.</p></li>
@@ -166,7 +154,7 @@ export function Landing() {
 
       <section className="vgn-cta">
         <div className="vgn-shell">
-          <h2>Bring a road scene<br/> into focus.</h2>
+          <h2>Ready to analyze?</h2>
           <div className="vgn-cta-actions">
             <a href="/register" className="vgn-button vgn-button-accent">Get started <ArrowUpRight size={17}/></a>
             <a href="/login" className="vgn-text-action">Sign in <ArrowRight size={16}/></a>

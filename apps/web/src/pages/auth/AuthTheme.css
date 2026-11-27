@@ -1,17 +1,17 @@
 .vg-auth { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .96fr); min-height: 100dvh; background: var(--vg-page-bg); color: var(--vg-text); }
-.vg-auth-showcase { position: sticky; top: 0; height: 100dvh; color: #f6fff8; background: #172c25; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; justify-content: end; padding: clamp(24px, 5vw, 72px); }
-.vg-auth-photo { position: absolute; inset: 0; z-index: -1; background: linear-gradient(0deg, rgb(10 26 21 / 94%), rgb(10 26 21 / 0%) 67%), url('/imagery/traffic-night.webp') 46% center / cover no-repeat; }
+.vg-auth-showcase { position: sticky; top: 0; height: 100dvh; color: #f4f7fc; background: #142131; isolation: isolate; overflow: hidden; display: flex; flex-direction: column; justify-content: end; padding: clamp(24px, 5vw, 72px); }
+.vg-auth-photo { position: absolute; inset: 0; z-index: -1; background: linear-gradient(0deg, rgb(12 23 39 / 94%), rgb(12 23 39 / 0%) 67%), url('/imagery/traffic-night.webp') 46% center / cover no-repeat; }
 .vg-auth-photo-copy p { font-size: 12px; margin: 0 0 16px; text-transform: uppercase; letter-spacing: .12em; font-weight: 680; }
-.vg-auth-photo-copy > span { display: block; font: 400 clamp(3.4rem, 6.3vw, 7rem)/.9 var(--vg-display); letter-spacing: -.06em; }
-.vg-auth-photo-copy em { color: #b5f0c9; }
-.vg-auth-credit { font-size: 11px; margin-top: 30px; color: #d8eee1; }
+.vg-auth-photo-copy > span { display: block; font: 650 clamp(2.6rem, 4.8vw, 5rem)/1.05 var(--vg-display); letter-spacing: -.06em; }
+.vg-auth-photo-copy em { color: #a8c8f2; font-style: normal; }
+.vg-auth-credit { font-size: 11px; margin-top: 30px; color: #d7e4f4; }
 .vg-auth-form { display: flex; flex-direction: column; padding: clamp(18px, 3.1vw, 46px); min-width: 0; }
 .vg-auth-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .vg-auth-brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 750; font-size: 19px; letter-spacing: -.045em; }
 .vg-auth-brand img { border-radius: 8px; }
 .vg-auth-form-inner { width: min(100%, 425px); margin: auto; padding: clamp(32px, 5vh, 64px) 0; }
 .vg-auth-title { margin-bottom: 24px; }
-.vg-auth-title h1 { margin: 0 0 8px; font-family: var(--vg-display); font-size: clamp(2.5rem, 4.2vw, 4rem); line-height: .98; font-weight: 400; letter-spacing: -.055em; }
+.vg-auth-title h1 { margin: 0 0 8px; font-family: var(--vg-display); font-size: clamp(2.5rem, 4.2vw, 4rem); line-height: .98; font-weight: 650; letter-spacing: -.045em; }
 .vg-auth-title p, .vg-auth-help { margin: 0; font-size: 14px; line-height: 1.55; color: var(--vg-subtext); overflow-wrap: anywhere; }
 .vg-auth form, .vg-auth-stack { display: grid; gap: 14px; }
 .vg-auth-field > label { display: block; font-size: 13px; font-weight: 660; margin: 0 0 5px; }

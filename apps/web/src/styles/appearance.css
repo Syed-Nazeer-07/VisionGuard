@@ -45,6 +45,6 @@
 .vg-shell :is(.vg-history-filter, .vg-list-pager, .vg-live-counts, .vg-list-size-label select) { background: var(--vg-surface-soft); color: var(--vg-text); border-color: var(--vg-border); }
 .vg-shell :is(.vg-list-pager-summary, .vg-list-size-label, .vg-list-page-count) { color: var(--vg-subtext); }
 .vg-shell :is(.vg-list-pager-actions button, .vg-settings-tab:hover, .vg-search-field input) { background: var(--vg-surface); color: var(--vg-text); border-color: var(--vg-border); }
-.vg-shell .vg-side-account { background: #1d342a; border-color: #3b5347; }
+.vg-shell .vg-side-account { background: #213247; border-color: #3a4c63; }
 .vg-shell .vg-range-option { min-height: 38px; }
 .vg-shell .vg-incidents-header { align-items: center; }

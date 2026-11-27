@@ -2,21 +2,21 @@
 
 :root {
   --vg-font: Inter, "Segoe UI Variable Text", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  --vg-display: Georgia, "Times New Roman", serif;
-  --vg-page-bg: #f6f7f3;
+  --vg-display: var(--vg-font);
+  --vg-page-bg: #f2f5f9;
   --vg-surface: #fff;
-  --vg-surface-soft: #edf1eb;
-  --vg-text: #14251e;
-  --vg-subtext: #4e6258;
-  --vg-focus: #08796e;
-  --vg-action: #12634e;
-  --vg-action-hover: #084b3a;
+  --vg-surface-soft: #e8eef5;
+  --vg-text: #152033;
+  --vg-subtext: #4b5c73;
+  --vg-focus: #245ab1;
+  --vg-action: #234e91;
+  --vg-action-hover: #193d75;
   --vg-action-text: #fff;
-  --vg-accent-surface: #deefe6;
-  --vg-link: #146047;
-  --vg-midnight: #132820;
-  --vg-mint: #b5f0c9;
-  --vg-border: #d7e0d8;
+  --vg-accent-surface: #e0eaf8;
+  --vg-link: #234e91;
+  --vg-midnight: #142131;
+  --vg-mint: #a8c8f2;
+  --vg-border: #d3dce8;
   --vg-danger: #a62e25;
   --vg-danger-bg: #fcebe8;
   --vg-warning: #754a13;
@@ -31,19 +31,19 @@
   background: var(--vg-page-bg);
 }
 :root[data-theme="dark"] {
-  --vg-page-bg: #101714;
-  --vg-surface: #18231e;
-  --vg-surface-soft: #202d26;
-  --vg-text: #eff7ef;
-  --vg-subtext: #a9bdb0;
-  --vg-focus: #82e1a9;
-  --vg-action: #a3e6bb;
-  --vg-action-hover: #c2f1d2;
-  --vg-action-text: #10261c;
-  --vg-accent-surface: #243e31;
-  --vg-link: #a3e6bb;
-  --vg-midnight: #101c17;
-  --vg-border: #34463c;
+  --vg-page-bg: #101722;
+  --vg-surface: #192332;
+  --vg-surface-soft: #222e3f;
+  --vg-text: #edf2f9;
+  --vg-subtext: #b2c1d4;
+  --vg-focus: #a6c8ff;
+  --vg-action: #a8c8f2;
+  --vg-action-hover: #c2dafa;
+  --vg-action-text: #13243b;
+  --vg-accent-surface: #263c59;
+  --vg-link: #a8c8f2;
+  --vg-midnight: #101a28;
+  --vg-border: #354358;
   --vg-danger: #ffb0a4;
   --vg-danger-bg: #402925;
   --vg-warning: #ffd694;
