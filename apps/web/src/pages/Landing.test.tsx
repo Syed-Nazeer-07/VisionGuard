@@ -23,14 +23,14 @@ describe('VisionGuard public landing experience', () => {
   it('uses a product-led interactive stage with three accessible perspectives', () => {
     const html = renderLanding();
     expect(html).toContain('/imagery/traffic-night.webp');
-    expect(html).toContain('/imagery/motorway-still.webp');
+    expect(html).toContain('/imagery/motorway-recording-frame.webp');
     expect(html).toContain('Explore the VisionGuard analysis workflow');
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain('aria-pressed="false"');
     expect(html).toContain('Observe');
     expect(html).toContain('Follow');
     expect(html).toContain('Review');
-    expect(html).toContain('Illustrative workflow preview');
+    expect(html).toContain('Frame from the sample recording');
   });
 
   it('never displays a fake live dashboard, sample video player, or fabricated metrics', () => {

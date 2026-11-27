@@ -11,7 +11,7 @@ const sections = [
 
 const scenes = [
   { label: 'Observe', heading: 'Start with a scene', text: 'Open a recording, connect a camera, or share a browser tab with permission.' },
-  { label: 'Follow', heading: 'Follow vehicles across frames', text: 'Vehicle overlays help connect observations over time. Image-derived speed is an estimate.' },
+  { label: 'Follow', heading: 'Follow vehicles across frames', text: 'A track connects detections over time, so you can follow a vehicle through the scene.' },
   { label: 'Review', heading: 'Keep the evidence in context', text: 'Revisit saved sessions, compare vehicle classes, and send unusual observations for human review.' },
 ];
 
@@ -27,6 +27,7 @@ export function Landing() {
   const [active, setActive] = useState('');
   const [scrolled, setScrolled] = useState(false);
   const [scene, setScene] = useState(0);
+  const showTracks = scene !== 0;
   const menuRef = useRef<HTMLButtonElement>(null);
   const headerRef = useRef<HTMLElement>(null);
 
@@ -82,7 +83,7 @@ export function Landing() {
         <Brand/>
         <div className="vgn-nav-links">{sectionLinks}</div>
         <div className="vgn-nav-tools">
-          <ThemeControl/>
+          <ThemeControl expanded/>
           <div className="vgn-nav-actions">
             <a className="vgn-sign-in" href="/login">Sign in</a>
             <a className="vgn-button vgn-button-accent" href="/register">Get started <ArrowUpRight size={16}/></a>
@@ -130,11 +131,12 @@ export function Landing() {
           <p>VisionGuard brings video, vehicle tracking and session history into one workspace. Explore the steps below, then try the detector on sample footage or your own recording.</p>
         </div>
         <div className="vgn-story">
-          <div className="vgn-stage-image" data-scene={scene}>
-            <img src="/imagery/motorway-still.webp" alt="Vehicles on the A40 motorway, seen from a bridge" width="960" height="540" loading="lazy"/>
-            {scene === 1 && <div className="vgn-trace" aria-hidden="true"><i/><i/><i/></div>}
-            <span>Illustrative workflow preview</span>
-          </div>
+          <figure className="vgn-stage-image">
+            <img src={showTracks ? '/imagery/motorway-detections.webp' : '/imagery/motorway-recording-frame.webp'}
+              alt={showTracks ? 'VisionGuard tracking boxes around vehicles in recorded A40 motorway footage' : 'Vehicles on the A40 motorway, seen from a bridge'}
+              width="960" height="540" loading="lazy"/>
+            <figcaption>{showTracks ? 'Frame from a sample analysis' : 'Frame from the sample recording'}</figcaption>
+          </figure>
           <div className="vgn-story-copy">
             <div className="vgn-stage-tabs" role="group" aria-label="Explore the VisionGuard analysis workflow">
               {scenes.map((item, index) => <button key={item.label} type="button" className="vgn-stage-tab"
