@@ -26,6 +26,7 @@ type Props = {
   fullscreen: boolean;
   onFullscreen: () => void;
   onSeek: (seconds: number) => void;
+  onRateChange: (rate: number) => void;
   onPauseAnalysis: () => void;
   onStop: () => void;
   onError: (error: string) => void;
@@ -33,7 +34,7 @@ type Props = {
 
 export function CompositePlayer({
   children, frameRef, videoRef, source, capture, ready, playing, analysisPaused, position, duration, rate, fullscreen,
-  onFullscreen, onSeek, onPauseAnalysis, onStop, onError,
+  onFullscreen, onSeek, onRateChange, onPauseAnalysis, onStop, onError,
 }: Props) {
   const [showControls, setShowControls] = useState(true);
   const [sound, setSound] = useState({ muted: true, volume: 1 });
@@ -142,12 +143,7 @@ export function CompositePlayer({
               <fieldset>
                 <legend>Playback speed</legend>
                 {playbackRates.map(speed => <label key={speed}>
-                  <input name="vg-playback-rate" type="radio" value={speed} checked={rate === speed} onChange={() => {
-                    const video = videoRef.current;
-                    if (!video) return;
-                    try { video.playbackRate = speed; }
-                    catch { onError('Your browser does not support this playback speed.'); }
-                  }}/>{speed}×
+                  <input name="vg-playback-rate" type="radio" value={speed} checked={rate === speed} onChange={() => onRateChange(speed)}/>{speed}×
                 </label>)}
               </fieldset>
               <p>Slower playback gives the detector more time per video second. Accuracy can still vary.</p>

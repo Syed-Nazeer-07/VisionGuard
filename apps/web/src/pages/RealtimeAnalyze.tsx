@@ -514,6 +514,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     restoreTimeRef.current = savedPosition;
     setFilename(name);
     setReadyVideo(false);
+    setPlaying(false);
     setDuration(0);
     setPosition(0);
     setError('');
@@ -1610,6 +1611,27 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     attachVideo(SAMPLE_URL, SAMPLE_NAME);
   }
 
+  function syncReviewRate(rate: number) {
+    if (!Number.isFinite(rate) || rate <= 0) return;
+    if (qualityRateRef.current !== rate) {
+      qualityFramesRef.current = [];
+      qualityInferencesRef.current = [];
+      qualityRateRef.current = rate;
+    }
+    setReviewRate(rate);
+  }
+
+  function changeReviewRate(rate: number) {
+    const video = videoRef.current;
+    if (!video || captureKindRef.current) return;
+    try {
+      video.playbackRate = rate;
+      syncReviewRate(video.playbackRate);
+    } catch {
+      setError('Your browser does not support this playback speed.');
+    }
+  }
+
   function seek(seconds: number) {
     const video = videoRef.current;
     if (!video || !Number.isFinite(video.duration)) return;
@@ -1709,7 +1731,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <CompositePlayer frameRef={playerRef} videoRef={videoRef} source={url} capture={capture}
           ready={readyVideo} playing={playing} analysisPaused={analysisPaused} position={position} duration={duration}
           rate={reviewRate} fullscreen={isFullscreen} onFullscreen={() => void toggleFullscreen()}
-          onSeek={seek} onPauseAnalysis={toggleAnalysisPause} onStop={removeVideo} onError={setError}>
+          onSeek={seek} onRateChange={changeReviewRate} onPauseAnalysis={toggleAnalysisPause} onStop={removeVideo} onError={setError}>
           {url ? (
             <>
               <video key={tabCaptureActive ? 'shared-browser-tab' : webcamActive ? 'browser-camera' : 'uploaded-file'}
@@ -1737,16 +1759,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   }
                   startDetector();
                 }}
-                onRateChange={event => {
-                  const rate = event.currentTarget.playbackRate;
-                  if (!Number.isFinite(rate) || rate <= 0) return;
-                  if (qualityRateRef.current !== rate) {
-                    qualityFramesRef.current = [];
-                    qualityInferencesRef.current = [];
-                    qualityRateRef.current = rate;
-                  }
-                  setReviewRate(rate);
-                }}
+                onRateChange={event => syncReviewRate(event.currentTarget.playbackRate)}
                 onPlay={() => {
                   setPlaying(true);
                   startDetector();

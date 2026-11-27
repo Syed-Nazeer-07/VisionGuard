@@ -105,6 +105,7 @@ function App() {
               </Suspense>
             }>
               <Route index element={<AppHome />} />
+              <Route path="overview" element={<Dashboard />} />
               <Route path="cameras" element={<Navigate to="/app/analyze" replace />} />
               <Route path="monitor" element={<Navigate to="/app/analyze" replace />} />
               <Route path="analytics" element={<Analytics />} />

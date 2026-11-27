@@ -21,7 +21,7 @@ const RealtimeAnalyze = lazy(() => import('../../pages/RealtimeAnalyze'));
 
 const EVERYONE = ['Viewer', 'Operator', 'Supervisor', 'Admin'];
 const PRIMARY_NAV = [
-  { label: 'Overview', to: '/app', icon: LayoutDashboard, roles: EVERYONE },
+  { label: 'Overview', to: '/app/overview', icon: LayoutDashboard, roles: EVERYONE },
   { label: 'Live analysis', to: '/app/analyze', icon: Activity, roles: EVERYONE },
   { label: 'History', to: '/app/videos', icon: Clock3, roles: EVERYONE },
   { label: 'Incidents', to: '/app/cases', icon: FolderSearch, roles: EVERYONE },
@@ -38,7 +38,7 @@ const ADMIN_NAV = [
 
 type NavItem = (typeof PRIMARY_NAV)[number];
 const NAV = [...PRIMARY_NAV, ...DATA_NAV, ...ADMIN_NAV];
-const MODERN_PATHS = new Set(['/app', '/app/analyze', '/app/videos',
+const MODERN_PATHS = new Set(['/app', '/app/overview', '/app/analyze', '/app/videos',
   '/app/cases', '/app/analytics', '/app/reports', '/app/settings']);
 
 export function AppLayout() {
@@ -59,7 +59,8 @@ export function AppLayout() {
   const currentRole = role || 'Viewer';
   const activeAnalyze = location.pathname === '/app/analyze';
   const [analysisMounted, setAnalysisMounted] = useState(activeAnalyze);
-  const page = NAV.find(item => item.to === location.pathname);
+  const route = location.pathname === '/app' ? '/app/overview' : location.pathname;
+  const page = NAV.find(item => item.to === route);
   const title = page?.label || (location.pathname.includes('settings') ? 'Settings' : 'Workspace');
   const displayName = profile?.name || (user?.user_metadata?.full_name as string | undefined) || user?.email || 'Member';
   const initial = displayName.trim().slice(0, 1).toUpperCase() || 'U';
@@ -126,7 +127,7 @@ export function AppLayout() {
       {!compactSidebar && <div className="vg-side-group-label mb-2 px-3 uppercase">{label}</div>}
       <div className="space-y-1">
         {visible.map(item => {
-          const active = location.pathname === item.to;
+          const active = route === item.to;
           const Icon = item.icon;
           return <Link key={item.to} to={item.to} title={compactSidebar ? item.label : undefined}
             aria-current={active ? 'page' : undefined}

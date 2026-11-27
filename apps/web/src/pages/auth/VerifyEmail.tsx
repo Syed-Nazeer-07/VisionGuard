@@ -80,7 +80,7 @@ export function VerifyEmail() {
   </AuthCardLayout>;
 
   return <AuthCardLayout title="Check your email"
-    subtitle={<>Confirm your account using the link sent to <strong>{pending?.email}</strong>. Check your spam folder if it doesn’t appear in your inbox.</>}>
+    subtitle={<>Look for the confirmation link at <strong>{pending?.email}</strong>. Check your spam folder if it doesn’t appear in your inbox.</>}>
     <div className="vg-auth-stack">
       {error && <p role="alert" className="vg-auth-notice">{error}</p>}
       {message && <p role="status" className="vg-auth-help">{message}</p>}

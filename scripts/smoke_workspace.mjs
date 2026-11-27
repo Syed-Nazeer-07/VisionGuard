@@ -187,7 +187,13 @@ try {
   await page.waitForFunction(()=>document.querySelector('video')?.src.startsWith('blob:') && document.querySelector('video')?.duration > 10);
   checked.push('Camera analysis pauses independently of the fixture stream and switching to a file releases camera tracks.');
 
-  await page.locator('video').evaluate(video => video.pause());
+  await page.waitForFunction(() => {
+    const video = document.querySelector('.vg-player-frame video');
+    return video?.currentTime > .1 && !video.paused;
+  });
+  const pause = page.getByRole('button',{name:'Pause',exact:true});
+  await page.locator('.vg-player-frame').hover();
+  await pause.click();
   await page.getByRole('button',{name:'Play',exact:true}).waitFor();
   assert.equal(await page.locator('video').evaluate(video=>video.controls), false);
   await page.getByRole('group',{name:'Video player'}).focus();
