@@ -4,8 +4,8 @@
   "description": "Browser-first vehicle tracking and traffic video analysis",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f3f6f7",
-  "theme_color": "#13232d",
+  "background_color": "#101010",
+  "theme_color": "#101010",
   "icons": [
     {
       "src": "/favicon.svg?v=20261111",

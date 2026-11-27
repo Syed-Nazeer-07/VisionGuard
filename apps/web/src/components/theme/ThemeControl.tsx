@@ -15,7 +15,7 @@ function apply(appearance: Appearance) {
   const dark = appearance === 'dark' || (appearance === 'system' && window.matchMedia?.(contrastQuery).matches);
   document.documentElement.dataset.appearance = appearance;
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#101714' : '#f6f7f3');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#101010' : '#f6f6f6');
   window.dispatchEvent(new Event(themeChange));
 }
 
@@ -24,7 +24,7 @@ export function watchAppearance() {
   const syncSystem = () => { if (current() === 'system') apply('system'); };
   const syncStorage = (event: StorageEvent) => {
     if (event.key !== themeKey && event.key !== null) return;
-    apply(event.newValue === 'light' || event.newValue === 'dark' ? event.newValue : 'system');
+    apply(event.newValue === 'light' || event.newValue === 'dark' || event.newValue === 'system' ? event.newValue : 'dark');
   };
   media?.addEventListener('change', syncSystem);
   window.addEventListener('storage', syncStorage);

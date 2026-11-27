@@ -9,19 +9,19 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=20261111" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f6f7f3" />
+    <meta name="theme-color" content="#101010" />
     <script>
       (() => {
         let appearance;
         try { appearance = localStorage.getItem('visionguard:appearance'); } catch {}
-        if (appearance !== 'light' && appearance !== 'dark') appearance = 'system';
+        if (appearance !== 'light' && appearance !== 'dark' && appearance !== 'system') appearance = 'dark';
         const dark = appearance === 'dark' || (appearance === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
         document.documentElement.dataset.appearance = appearance;
         document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-        document.querySelector('meta[name="theme-color"]').content = dark ? '#101714' : '#f6f7f3';
+        document.querySelector('meta[name="theme-color"]').content = dark ? '#101010' : '#f6f6f6';
       })();
     </script>
-    <style>html { background:#f6f7f3; color-scheme:light; } html[data-theme=dark] { background:#101714; color-scheme:dark; }</style>
+    <style>html { background:#f6f6f6; color-scheme:light; } html[data-theme=dark] { background:#101010; color-scheme:dark; }</style>
     <title>VisionGuard</title>
     <meta name="description" content="Browser-first vehicle tracking, traffic video analysis and human-led incident review." />
     <meta property="og:title" content="VisionGuard" />
