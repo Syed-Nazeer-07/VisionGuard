@@ -30,7 +30,6 @@
 .vg-analysis-advanced summary::-webkit-details-marker { display: none; }
 .vg-analysis-advanced[open] summary svg:last-child { transform: rotate(180deg); }
 .vg-shell .vg-analysis-advanced .vg-analysis-display { box-shadow: none; border: 0; border-top: 1px solid var(--vg-border); border-radius: 0; }
-.vg-shell .vg-analyze-focus .vg-analysis-advanced { display: none; }
 .vg-shell .vg-source-dialog { max-width: min(555px, 100vw - 26px); width: 100%; max-height: calc(100dvh - 26px); overflow: auto; }
 .vg-source-dialog-inner { padding: clamp(14px, 3vw, 25px); display: grid; gap: 13px; color: var(--vg-text); }
 .vg-source-dialog-inner header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
