@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, BarChart3, Clock3, FileKey, FileText, FolderSearch,
   LayoutDashboard, LogOut, Menu, PanelLeftClose, PanelLeftOpen,
-  Settings, UserCog, Users, X
+  Settings, UserCog, Users, X, Plus
 } from 'lucide-react';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useAuthStore } from '../../store/auth';
@@ -128,6 +128,7 @@ export function AppLayout() {
           const Icon = item.icon;
           return <Link key={item.to} to={item.to} title={compactSidebar ? item.label : undefined}
             aria-current={active ? 'page' : undefined}
+            aria-label={item.label}
             onClick={() => setMobileOpen(false)}
             className={'vg-side-nav-item px-3 ' + (compactSidebar ? 'justify-center ' : '')}>
             <Icon size={18} strokeWidth={active ? 2.15 : 1.8} className="shrink-0"/>
@@ -177,6 +178,7 @@ export function AppLayout() {
       <div className="vg-side-footer shrink-0 border-t p-3">
         <Link to="/app/settings" onClick={() => setMobileOpen(false)}
           aria-current={location.pathname === '/app/settings' ? 'page' : undefined}
+          aria-label="Settings"
           title={compactSidebar ? 'Settings' : undefined}
           className={'vg-side-nav-item vg-side-settings mb-2 flex h-10 items-center gap-3 rounded-lg px-3 ' +
             (compactSidebar ? 'justify-center' : '')}>
@@ -205,7 +207,14 @@ export function AppLayout() {
           className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
           aria-expanded={mobileOpen} aria-controls="vg-workspace-navigation"
           onClick={() => setMobileOpen(true)}><Menu size={20}/></button>
-        <span className="vg-product-breadcrumb hidden lg:inline">Workspace /</span><span className="truncate text-sm font-semibold text-[#263950]">{title}</span><span className="vg-product-topbar-role ml-auto hidden sm:inline">{currentRole}</span>
+        <div className="vg-topbar-location min-w-0">
+          <span className="vg-product-breadcrumb hidden lg:inline">Workspace</span>
+          <span className="vg-topbar-title truncate">{title}</span>
+        </div>
+        <div className="vg-topbar-actions ml-auto">
+          <span className="vg-product-topbar-role hidden sm:inline">{currentRole}</span>
+          {!activeAnalyze && <Link to="/app/analyze" className="vg-topbar-launch" aria-label="Start analysis"><Plus size={16} aria-hidden="true"/><span>Analyze</span></Link>}
+        </div>
       </div>
       {tabSharing && <div className="fixed right-3 top-3 z-50 flex items-center gap-2 rounded-xl border border-amber-200 bg-white/95 px-3 py-2 shadow-lg backdrop-blur-sm md:right-5 md:top-4"
         role="status" aria-label="Browser tab sharing is active">

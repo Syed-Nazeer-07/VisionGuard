@@ -17,6 +17,7 @@ export function LiveTelemetry({
   inferenceFps, playbackFps, overlayAgeMs
 }: LiveTelemetryProps) {
   const entries = Object.entries(classes).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const total = entries.reduce((sum, [, count]) => sum + Math.max(0, count), 0);
   return (
     <aside className="vg-live-telemetry vg-panel" id="vg-analysis-telemetry" aria-labelledby="vg-telemetry-title">
       <div className="vg-section-head"><h2 id="vg-telemetry-title">Live observations</h2></div>
@@ -27,7 +28,7 @@ export function LiveTelemetry({
       <section className="vg-live-classes" aria-label="Visible vehicle classes">
         <h3>Vehicle classes</h3>
         {entries.length === 0 ? <p>Observed vehicles will appear here.</p> :
-          <ul>{entries.map(([label, count]) => <li key={label}><span>{label}</span><strong>{count}</strong></li>)}</ul>}
+          <ul>{entries.map(([label, count]) => <li key={label} className="vg-class-observation"><span>{label}</span><strong>{count}</strong><div className="vg-class-meter" aria-hidden="true"><span style={{width: (total > 0 ? Math.max(0, Math.min(100, count / total * 100)) : 0) + '%'}}/></div></li>)}</ul>}
       </section>
       <div className="vg-live-speed">
         <span>Fastest visible estimate</span>

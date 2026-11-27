@@ -2,7 +2,7 @@ import { act, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { ActivityAnalytics, ActivityIncidents, ActivityVideoLibrary } from './ActivityPages';
+import { ActivityDashboard, ActivityAnalytics, ActivityIncidents, ActivityVideoLibrary } from './ActivityPages';
 import Settings from './Settings';
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -84,4 +84,16 @@ describe('operations workspace interactions', () => {
       expect(view.host.querySelector('.vg-settings-save')).toBeNull();
     } finally { view.dispose(); }
   });
+});
+
+it('uses actionable overview shortcuts rather than decorative dashboard filler', () => {
+  const view = mount(<ActivityDashboard />);
+  try {
+    const shortcuts = view.host.querySelector('nav[aria-label="Quick access to workspace tools"]');
+    expect(shortcuts?.querySelector('a[href="/app/videos"]')).not.toBeNull();
+    expect(shortcuts?.querySelector('a[href="/app/cases"]')).not.toBeNull();
+    expect(shortcuts?.querySelector('a[href="/app/analytics"]')).not.toBeNull();
+    expect(view.host.querySelector('.vg-overview-actions a[href="/app/reports"]')).not.toBeNull();
+    expect(view.host.querySelector('.vg-overview-image')).toBeNull();
+  } finally { view.dispose(); }
 });
