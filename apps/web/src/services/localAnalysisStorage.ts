@@ -86,7 +86,7 @@ async function remove(store: string, ownerId?: string): Promise<void> {
   } finally { database.close(); }
 }
 
-export interface SavedLocalVideo { file: Blob; name: string }
+export interface SavedLocalVideo { file: Blob; name: string; runId?: string }
 export interface SavedVideoHandle {
   kind: 'file-handle';
   name: string;
@@ -150,7 +150,8 @@ export async function readSavedVideo(ownerId?: string): Promise<SavedLocalVideo 
 
 export const localAnalysisStorage = {
   loadVideo: readSavedVideo,
-  saveVideo: (file: Blob, name: string, ownerId?: string) => write('video', { file, name }, ownerId),
+  saveVideo: (file: Blob, name: string, ownerId?: string, runId?: string) =>
+    write('video', { file, name, ...(runId ? { runId } : {}) }, ownerId),
   loadAnalysis: (ownerId?: string) => read<LocalAnalysis>('analysis', ownerId),
   saveAnalysis: (analysis: LocalAnalysis, ownerId?: string) => write('analysis', analysis, ownerId),
   clearAnalysis: (ownerId?: string) => remove('analysis', ownerId),

@@ -1,0 +1,58 @@
+.vg-shell .vg-analyze-page { display: grid; gap: 12px; max-width: 1700px; }
+.vg-shell .vg-analysis-header { padding-bottom: 0; margin-bottom: 2px; border: 0; }
+.vg-shell .vg-analysis-header h1 { font-size: clamp(1.65rem, 3vw, 2.2rem); }
+.vg-shell .vg-analysis-header p { margin-top: 4px; }
+.vg-shell .vg-analysis-sourcebar { display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: space-between; gap: 8px; align-items: center; padding: 0; margin: 0; border: 0; background: transparent; box-shadow: none; }
+.vg-active-source { display: flex; gap: 8px; align-items: center; min-width: 0; color: var(--vg-text); font-size: 14px; }
+.vg-active-source svg { flex: none; color: var(--vg-link); }
+.vg-active-source strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vg-shell .vg-analysis-source-actions { display: flex; flex: 0 0 auto; flex-wrap: nowrap; width: auto; gap: 6px; }
+.vg-shell .vg-analysis-source-actions button { min-height: 38px; }
+.vg-shell .vg-analysis-grid { align-items: start; margin-block: 0 3px; }
+.vg-shell .vg-analysis-stage-head { min-height: 37px; padding-block: 7px; background: #142621; border-color: #31493d; }
+.vg-shell .vg-analysis-player-card .vg-player-frame:not(:fullscreen) { background: #0e1d17; }
+.vg-shell .vg-player-welcome { display: grid; height: 100%; place-items: center; padding: 10px; background: radial-gradient(at 50% 45%, #203a30, #111d18 76%); text-align: center; color: #f0fff4; }
+.vg-player-welcome > div > svg { margin: 0 auto 8px; color: #b5f0c9; }
+.vg-player-welcome h2 { margin: 0; font-size: clamp(1.05rem, 2.2vw, 1.6rem); font-weight: 650; }
+.vg-player-welcome p { margin: 4px 0 15px; color: #d6e7de; }
+.vg-player-welcome > div > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.vg-shell .vg-player-welcome .vg-primary { background: #b5f0c9; color: #102c20; border-color: #b5f0c9; }
+.vg-shell .vg-player-welcome .vg-secondary { background: #1f382d; color: #effbf3; border-color: #526f5f; }
+.vg-shell .vg-player-welcome .vg-primary:hover { background: #d2fae0; }
+.vg-shell .vg-player-welcome .vg-secondary:hover { background: #304d40; }
+.vg-player-telemetry { position: absolute; right: 10px; top: 10px; background: #101f18e8; border-radius: 6px; padding: 6px 9px; pointer-events: none; }
+.vg-player-telemetry span { display: block; font-size: 12px; }
+.vg-analysis-recovery-actions { display: flex; flex-wrap: wrap; gap: 7px; padding: 8px 10px; }
+.vg-sample-credit { margin: 0; padding: 8px 11px; color: var(--vg-subtext); font-size: 11px; }
+.vg-sample-credit a { text-decoration: underline; }
+.vg-analysis-advanced > summary { display: flex; align-items: center; gap: 9px; min-height: 45px; padding: 0 15px; cursor: pointer; list-style: none; font-weight: 650; }
+.vg-analysis-advanced summary svg:last-child { margin-left: auto; }
+.vg-analysis-advanced summary::-webkit-details-marker { display: none; }
+.vg-analysis-advanced[open] summary svg:last-child { transform: rotate(180deg); }
+.vg-shell .vg-analysis-advanced .vg-analysis-display { box-shadow: none; border: 0; border-top: 1px solid var(--vg-border); border-radius: 0; }
+.vg-shell .vg-analyze-focus .vg-analysis-advanced { display: none; }
+.vg-shell .vg-source-dialog { max-width: min(555px, 100vw - 26px); width: 100%; max-height: calc(100dvh - 26px); overflow: auto; }
+.vg-source-dialog-inner { padding: clamp(14px, 3vw, 25px); display: grid; gap: 13px; color: var(--vg-text); }
+.vg-source-dialog-inner header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.vg-source-dialog-inner h2 { font-size: 19px; font-weight: 700; }
+.vg-source-options { display: grid; gap: 6px; }
+.vg-source-options button { display: flex; align-items: center; gap: 12px; padding: 10px 11px; border: 1px solid var(--vg-border); border-radius: 7px; min-height: 51px; text-align: left; color: var(--vg-text); }
+.vg-source-options button:hover:not(:disabled) { background: var(--vg-surface-soft); }
+.vg-source-options button svg { flex: none; color: var(--vg-link); }
+.vg-source-options button span { display: grid; }
+.vg-source-options button small { color: var(--vg-subtext); font-size: 12px; }
+.vg-source-return { display: inline-flex; justify-self: start; gap: 7px; align-items: center; min-height: 34px; color: var(--vg-link); }
+.vg-source-guide { padding-left: 22px; list-style-type: decimal; display: grid; gap: 7px; color: var(--vg-subtext); }
+.vg-source-query { display: grid; gap: 5px; font-weight: 650; }
+.vg-source-query input { font-weight: 400; }
+.vg-source-presets, .vg-source-dialog-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.vg-source-presets button { font-size: 12px; }
+.vg-source-presets button[aria-pressed="true"] { background: var(--vg-accent-surface); }
+.vg-source-dialog-actions { margin-top: 5px; }
+.vg-source-error { padding: 9px; background: var(--vg-warning-bg); color: var(--vg-warning); border-radius: 6px; }
+@media (max-width: 460px) {
+  .vg-shell .vg-analysis-sourcebar { flex-direction: row; padding: 0; gap: 5px; }
+  .vg-active-source { font-size: 12px; }
+  .vg-shell .vg-analysis-source-actions button { padding-inline: 7px; white-space: nowrap; }
+  .vg-player-welcome p { margin-bottom: 8px; font-size: 12px; }
+}

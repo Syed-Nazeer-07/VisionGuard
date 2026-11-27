@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { LiveTelemetry } from '../components/analysis/LiveTelemetry';
+import { CompositePlayer } from '../components/analysis/CompositePlayer';
+import { AnalysisSources } from '../components/analysis/AnalysisSources';
+import '../styles/analysis-workspace.css';
 import { useAnalysisFocus } from '../components/analysis/useAnalysisFocus';
-import { AlertTriangle, Camera, ChevronDown, Cloud, ExternalLink, Film, HardDrive, Info, Maximize2, Minimize2, MonitorPlay, Pause, Play, RefreshCw, ScanLine, SlidersHorizontal, Upload, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Cloud, Film, HardDrive, Info, Maximize2, Minimize2, RefreshCw, ScanLine, SlidersHorizontal, Upload, X } from 'lucide-react';
 import { hiddenPagePolicy, shouldResumeSharedTab, keepCaptureAcrossPages } from '../services/captureVisibility';
 import { ExpiredLocalVideoPermissionError, localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
@@ -46,11 +50,8 @@ const STREAM_STALL_MS = 15_000;
 const BROWSER_CAMERA_SOURCE = 'visionguard:browser-camera';
 const BROWSER_TAB_SOURCE = 'visionguard:shared-browser-tab';
 
-function readableTime(value: number) {
-  const seconds = Math.max(0, Math.floor(Number.isFinite(value) ? value : 0));
-  return Math.floor(seconds / 60).toString().padStart(2, '0') + ':' +
-    (seconds % 60).toString().padStart(2, '0');
-}
+const SAMPLE_URL = '/imagery/motorway-sample.mp4';
+const SAMPLE_NAME = 'Sample · A40 motorway';
 
 type Observation = { time: number; tracks: LiveTrack[] };
 
@@ -88,6 +89,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const stopCaptureActionRef = useRef<() => void>(() => {});
   const [tabCaptureStarting, setTabCaptureStarting] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [analysisPaused, setAnalysisPaused] = useState(false);
+  const analysisPausedRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -165,6 +169,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   const [cloudPlaybackLoading, setCloudPlaybackLoading] = useState(false);
   const [unavailableOriginal, setUnavailableOriginal] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const sampleActive = url === SAMPLE_URL;
+  const capture = tabCaptureActive ? 'tab' : webcamActive ? 'camera' : null;
 
   const downloadQualityTrace = () => {
     const frames = qualityFramesRef.current;
@@ -490,7 +496,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
   };
 
   const attachVideo = useCallback((
-    file: Blob, name: string, savedPosition = 0, restoredRunId?: string
+    file: Blob | string, name: string, savedPosition = 0, restoredRunId?: string
   ) => {
     resetTracks();
     setCloudPlaybackActive(false);
@@ -503,11 +509,12 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         : 1;
     } else nextStableIdRef.current = 1;
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    const nextUrl = URL.createObjectURL(file);
-    urlRef.current = nextUrl;
+    const nextUrl = typeof file === 'string' ? file : URL.createObjectURL(file);
+    urlRef.current = typeof file === 'string' ? null : nextUrl;
     restoreTimeRef.current = savedPosition;
     setFilename(name);
     setReadyVideo(false);
+    setPlaying(false);
     setDuration(0);
     setPosition(0);
     setError('');
@@ -520,9 +527,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       // A newly selected file starts its own session, even if the user
       // previously analyzed a file with the same name/size. Reloading a
       // saved video resumes the *same* session using the stored run ID.
-      const runId = restoredRunId || 'video:' + crypto.randomUUID();
+      const runId = restoredRunId || (typeof file === 'string' ? 'sample:' : 'video:') + crypto.randomUUID();
       activeRunRef.current = runId;
-      localStorage.setItem('visionguard:video-run:' + account, runId);
+      if (typeof file !== 'string') localStorage.setItem('visionguard:video-run:' + account, runId);
       activityLedger.begin(account, runId, name, 'uploaded-video');
     } else activeRunRef.current = '';
   }, [resetTracks]);
@@ -534,6 +541,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     const active = webcamRef.current;
     webcamRef.current = null;
     captureKindRef.current = null;
+    analysisPausedRef.current = false;
+    setAnalysisPaused(false);
     if (active && videoRef.current?.srcObject === active) videoRef.current.srcObject = null;
     active?.getTracks().forEach(track => track.stop());
     setWebcamActive(false);
@@ -560,7 +569,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       }).CaptureController;
       const controller = Controller ? new Controller() : undefined;
       const options = {
-        video: { frameRate: { ideal: 24, max: 30 } },
+        video: { displaySurface: 'browser', frameRate: { ideal: 24, max: 30 } },
         audio: false,
         // Chromium hints favour a YouTube tab and allow swapping tabs without
         // stopping the active capture; they are not a security guarantee.
@@ -577,12 +586,15 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         capture.getTracks().forEach(track => track.stop());
         return;
       }
-      const surface = capture.getVideoTracks()[0]?.getSettings().displaySurface;
-      if (surface && surface !== 'browser') {
-        capture.getTracks().forEach(track => track.stop());
-        setError('Choose Microsoft Edge Tab / Chrome Tab, NOT Entire Screen or Window. Screen sharing would show VisionGuard instead of YouTube after you switch back.');
+      const track = capture.getVideoTracks()[0] as (MediaStreamTrack & {
+        getCaptureHandle?: () => { handle?: string } | null;
+      }) | undefined;
+      if (track?.getSettings().displaySurface !== 'browser' || track.getCaptureHandle?.()?.handle === 'visionguard') {
+        capture.getTracks().forEach(item => item.stop());
+        setError('Choose the tab playing your footage. VisionGuard tabs, app windows and entire screens cannot be used.');
         return;
       }
+      setSourcesOpen(false);
       videoRef.current?.pause();
       stopWebcam();
       resetTracks();
@@ -628,7 +640,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           resetTracks();
           setUrl('');
           setStreamHealth('idle');
-          setError('Tab sharing ended. Click Analyze tab and choose the video tab again.');
+          setError('Tab sharing ended. Choose a new source to share the video tab again.');
           if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
         };
       }
@@ -666,6 +678,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         camera.getTracks().forEach(track => track.stop());
         return;
       }
+      setSourcesOpen(false);
       videoRef.current?.pause();
       stopWebcam();
       resetTracks();
@@ -719,22 +732,33 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     // A request for a specific cloud archive ID takes precedence over the
     // generic most-recent local video. Otherwise unrelated footage can appear
     // behind the archive failure and look like a successful recovery.
-    if (!ownerId || new URLSearchParams(location.search).has('video') ||
-        currentFileRef.current || urlRef.current ||
-        localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
-    const generation = uploadGenerationRef.current;
+    const parameters = new URLSearchParams(location.search);
+    const requestedRun = parameters.get('local');
+    if (!ownerId || parameters.has('video') || localStorage.getItem('visionguard:save-video:' + ownerId) !== 'yes') return;
+    if (requestedRun ? activeRunRef.current === requestedRun && currentFileRef.current :
+        currentFileRef.current || urlRef.current || activeRunRef.current.startsWith('sample:')) return;
+    const generation = requestedRun ? ++uploadGenerationRef.current : uploadGenerationRef.current;
     void Promise.all([
       localAnalysisStorage.loadVideo(ownerId ?? undefined),
       localAnalysisStorage.loadPosition(ownerId ?? undefined)
     ]).then(async ([saved, savedPosition]) => {
-      if (!alive || generation !== uploadGenerationRef.current || !saved) return;
+      if (!alive || generation !== uploadGenerationRef.current) return;
+      if (!saved || (requestedRun && saved.runId !== requestedRun)) {
+        if (requestedRun) setError('The original for this session is no longer retained on this device.');
+        return;
+      }
       await activityLedger.load(ownerId);
       if (!alive || generation !== uploadGenerationRef.current) return;
       const file = saved.file instanceof File
         ? saved.file
         : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
+      if (requestedRun) {
+        videoRef.current?.pause();
+        stopWebcam();
+        setStreamHealth('idle');
+      }
       currentFileRef.current = file;
-      const savedRunId = localStorage.getItem('visionguard:video-run:' + ownerId) || undefined;
+      const savedRunId = saved.runId || localStorage.getItem('visionguard:video-run:' + ownerId) || undefined;
       attachVideo(file, saved.name, savedPosition, savedRunId);
       setStorage('saved');
     }).catch(e => {
@@ -895,7 +919,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setUnavailableOriginal(null);
     // A file deliberately chosen in response to an archive-recovery link is
     // a NEW local analysis, not a remotely stored video or the old session.
-    if (new URLSearchParams(location.search).has('video')) {
+    if (['video', 'local'].some(key => new URLSearchParams(location.search).has(key))) {
       navigate({
         pathname: location.pathname,
         search: qualityEnabled ? '?quality=1' : '',
@@ -912,6 +936,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setCloudStarting(false);
     const generation = uploadGenerationRef.current;
     attachVideo(file, file.name);
+    const runId = activeRunRef.current;
     // Video is never retained unless the user explicitly opted in.
     const shouldSave = ownerId && localStorage.getItem('visionguard:save-video:' + ownerId) === 'yes';
     setStorage(shouldSave ? 'saving' : 'not-saved');
@@ -921,7 +946,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         await localAnalysisStorage.clearVideo(ownerId ?? undefined);
       } else {
         // Real opt-in file snapshot, not a revocable Edge file-system handle.
-        await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined);
+        await localAnalysisStorage.saveVideo(file, file.name, ownerId ?? undefined, runId);
       }
       if (generation !== uploadGenerationRef.current) return;
       await localAnalysisStorage.clearAnalysis(ownerId ?? undefined);
@@ -971,6 +996,8 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         cloudAvailability !== 'configured' || cloudUploadIdRef.current) return;
     setCloudStarting(true);
     setCloudError('');
+    const request = uploadGenerationRef.current;
+    const analysisRunId = activeRunRef.current;
     try {
       if (uploadStorageProvider().id !== 'b2') {
         throw new Error('Cloud video saving is restricted to Backblaze B2.');
@@ -984,7 +1011,9 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       // The existing UploadManager writes a metadata row and uses the
       // authenticated B2 signing function. File bytes go directly to B2.
       // No upload occurs unless the user clicks this button.
-      const { videoId } = await uploadManager.startUpload(file, undefined, { keepPreview: false });
+      if (request !== uploadGenerationRef.current) return;
+      const { videoId } = await uploadManager.startUpload(file, undefined, { keepPreview: false, analysisRunId });
+      if (request !== uploadGenerationRef.current) return;
       cloudUploadIdRef.current = videoId;
       cloudUnsubscribeRef.current?.();
       cloudUnsubscribeRef.current = uploadManager.subscribe(videoId, upload => {
@@ -992,7 +1021,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         if (upload.status === 'failed') reportCloudUploadFailure(upload.error || 'B2 upload failed.');
       });
     } catch (error) {
-      reportCloudUploadFailure(error);
+      if (request === uploadGenerationRef.current) reportCloudUploadFailure(error);
     } finally {
       setCloudStarting(false);
     }
@@ -1026,7 +1055,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         ? saved.file : new File([saved.file], saved.name, { type: saved.file.type || 'video/mp4' });
       currentFileRef.current = file;
       attachVideo(file, saved.name, savedPosition,
-        localStorage.getItem('visionguard:video-run:' + ownerId) || undefined);
+        saved.runId || localStorage.getItem('visionguard:video-run:' + ownerId) || undefined);
       setStorage('saved');
     } catch (error) {
       if (request !== uploadGenerationRef.current || !activeRef.current) return;
@@ -1048,6 +1077,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
       void persistenceQueueRef.current.catch(error => setError('Could not save playback position: ' + String(error)));
     }
     video?.pause();
+    if (ownerId && activeRunRef.current) void activityLedger.flush(ownerId).catch(console.warn);
     uploadGenerationRef.current += 1;
     resetTracks();
     firstFrameResolveRef.current?.();
@@ -1103,7 +1133,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     if (!camera || !video) return;
     video.srcObject = camera;
     void video.play().catch(() => {
-      setError('The live source is ready. Use the player’s play control to start playback.');
+      setError('The browser could not start the live preview. Reopen the source to retry.');
     });
     return () => {
       if (video.srcObject === camera) video.srcObject = null;
@@ -1162,11 +1192,11 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     }
     // Never overwrite a saved file's position with a now-closed camera or
     // YouTube tab capture timestamp.
-    if (video && !wasCapturing && !cloudPlaybackActive && ownerId &&
+    if (video && !wasCapturing && currentFileRef.current && ownerId &&
         Number.isFinite(video.currentTime)) {
       void localAnalysisStorage.savePosition(video.currentTime, ownerId).catch(() => {});
     }
-  }, [active, keepTabConnected, ownerId, cloudPlaybackActive]);
+  }, [active, keepTabConnected, ownerId, resetTracks]);
 
   useEffect(() => {
     const onVisibility = () => {
@@ -1179,7 +1209,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         // delivered a fresh decoded frame. Keep overlays hidden until it does.
         if (shouldResumeSharedTab(captureKindRef.current, document.hidden, video.paused)) {
           void video.play().catch(() => {
-            setError('Tab sharing is still active, but playback was paused by the browser. Press Play to resume detection.');
+            setError('The browser paused the shared preview. Use Change source to reopen the tab.');
           });
         }
         return;
@@ -1214,6 +1244,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     setSaveVideo(checked);
     localStorage.setItem('visionguard:save-video:' + ownerId, checked ? 'yes' : 'no');
     const file = currentFileRef.current;
+    const runId = activeRunRef.current;
     setStorage(checked && file ? 'saving' : 'not-saved');
     persistenceQueueRef.current = persistenceQueueRef.current.catch(() => {}).then(async () => {
       if (!checked) {
@@ -1221,7 +1252,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         await localAnalysisStorage.clearPosition(ownerId);
         localStorage.removeItem('visionguard:video-run:' + ownerId);
       } else if (file) {
-        await localAnalysisStorage.saveVideo(file, file.name, ownerId);
+        await localAnalysisStorage.saveVideo(file, file.name, ownerId, runId);
       }
     });
     void persistenceQueueRef.current.then(() => setStorage(checked && file ? 'saved' : 'not-saved'))
@@ -1239,7 +1270,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     let fallbackId: number | null = null;
 
     const maybeInfer = (mediaTime: number) => {
-      if (stopped || !activeRef.current) return;
+      if (stopped || !activeRef.current || analysisPausedRef.current) return;
       if (webcamRef.current && !video.paused && !video.ended && video.readyState >= 2) {
         const now = performance.now();
         const discontinuity = isLiveFrameDiscontinuity(
@@ -1550,6 +1581,72 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
     return () => cancelAnimationFrame(animation);
   }, [active, showBoxes, showLabels, showTelemetry, url]);
 
+  function openSources() {
+    setError('');
+    setSourcesOpen(true);
+  }
+
+  function closeSource() {
+    removeVideo();
+    if (['video', 'local'].some(key => new URLSearchParams(location.search).has(key))) {
+      navigate({ pathname: location.pathname, search: qualityEnabled ? '?quality=1' : '' }, { replace: true });
+    }
+  }
+
+  function useSample() {
+    if (sampleActive) {
+      setSourcesOpen(false);
+      seek(0);
+      void videoRef.current?.play().catch(() => setError('Could not replay the sample.'));
+      return;
+    }
+    // Preserve any explicitly retained user original. The bundled sample has
+    // its own session and never enters the original-video storage workflow.
+    removeVideo();
+    setSourcesOpen(false);
+    setUnavailableOriginal(null);
+    if (['video', 'local'].some(key => new URLSearchParams(location.search).has(key))) {
+      navigate({ pathname: location.pathname, search: qualityEnabled ? '?quality=1' : '' }, { replace: true });
+    }
+    attachVideo(SAMPLE_URL, SAMPLE_NAME);
+  }
+
+  function syncReviewRate(rate: number) {
+    if (!Number.isFinite(rate) || rate <= 0) return;
+    if (qualityRateRef.current !== rate) {
+      qualityFramesRef.current = [];
+      qualityInferencesRef.current = [];
+      qualityRateRef.current = rate;
+    }
+    setReviewRate(rate);
+  }
+
+  function changeReviewRate(rate: number) {
+    const video = videoRef.current;
+    if (!video || captureKindRef.current) return;
+    try {
+      video.playbackRate = rate;
+      syncReviewRate(video.playbackRate);
+    } catch {
+      setError('Your browser does not support this playback speed.');
+    }
+  }
+
+  function seek(seconds: number) {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration)) return;
+    video.currentTime = Math.min(video.duration, Math.max(0, seconds));
+    setPosition(video.currentTime);
+  }
+
+  function toggleAnalysisPause() {
+    const paused = !analysisPausedRef.current;
+    analysisPausedRef.current = paused;
+    setAnalysisPaused(paused);
+    resetTracks();
+    if (paused && ownerId) void activityLedger.flush(ownerId).catch(console.warn);
+  }
+
   return (
     <div className={'vg-page vg-analyze-page' + (focusMode ? ' vg-analyze-focus' : '')}>
       <header className="vg-page-header vg-analysis-header">
@@ -1574,66 +1671,26 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         </div>
       </header>
 
-      <section className="vg-analysis-sourcebar vg-panel" aria-labelledby="vg-sources-title">
-        <div className="vg-source-intro"><div className="vg-product-eyebrow">01 / Input</div><h2 id="vg-sources-title">Select a source</h2><p>Use footage you are authorized to analyze. Camera and tab permissions are requested only when selected.</p></div>
+      <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
+        onChange={event => {
+          const file = event.target.files?.[0];
+          if (file) void acceptFile(file);
+          event.target.value = '';
+        }}/>
+      {sourcesOpen && <AnalysisSources onDismiss={() => {
+        if (cameraStarting || tabCaptureStarting) uploadGenerationRef.current += 1;
+        setSourcesOpen(false);
+      }} onUpload={() => { flushSync(() => setSourcesOpen(false)); chooseVideo(); }}
+        onCamera={() => void startWebcam()} onTab={() => void startTabCapture()} onSample={useSample}
+        onRestore={saveVideo ? () => { setSourcesOpen(false); void reopenSavedVideo(); } : undefined}
+        cameraStarting={cameraStarting} tabStarting={tabCaptureStarting} error={error}/>}
+      {url && <div className="vg-analysis-sourcebar">
+        <span className="vg-active-source" title={filename}><Film size={16} aria-hidden="true"/><strong>{filename}</strong></span>
         <div className="vg-analysis-source-actions">
-          <input ref={inputRef} type="file" accept="video/*,.mp4,.webm,.mov,.mkv" className="hidden"
-            onChange={event => {
-              const file = event.target.files?.[0];
-              if (file) void acceptFile(file);
-              event.target.value = '';
-            }} />
-          <button type="button" onClick={() => void chooseVideo()}
-            className="vg-primary">
-            <Upload size={16} /> Choose video
-          </button>
-          <button type="button" onClick={() => webcamActive ? removeVideo() : void startWebcam()}
-            disabled={cameraStarting}
-            className="vg-secondary">
-            <Camera size={16} /> {cameraStarting ? 'Opening camera…' : webcamActive ? 'Stop camera' : 'Use camera'}
-          </button>
-          <button type="button"
-            onClick={() => tabCaptureActive ? removeVideo() : void startTabCapture()}
-            disabled={tabCaptureStarting}
-            className="vg-secondary"
-            title="Choose the already-open YouTube or video tab in your browser's Share dialog">
-            <MonitorPlay size={16}/>
-            {tabCaptureStarting ? 'Choose a tab…' : tabCaptureActive ? 'Stop tab capture' : 'Analyze tab'}
-          </button>
-          {(!url || webcamActive || tabCaptureActive) && saveVideo && <button type="button"
-            onClick={() => void reopenSavedVideo()}
-            className="vg-secondary">
-            <Film size={16}/> Reopen saved video
-          </button>}
-          <a href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer"
-            title="Optional: browse YouTube in a separate tab. Open a video, then select Analyze tab."
-            className="vg-analysis-external">
-            Open YouTube <ExternalLink size={13}/>
-          </a>
-          {qualityEnabled && !!currentFileRef.current && !!qualityFramesRef.current.length &&
-            <button type="button" onClick={downloadQualityTrace}
-              title="Download local-only predictions; human annotation is required"
-              className="vg-secondary">
-              Download QA trace ({qualityFramesRef.current.length})
-            </button>}
-          {url && !webcamActive && !tabCaptureActive && <button type="button" aria-label="Close current source" onClick={removeVideo}
-            className="vg-secondary" title="Close current video"><X size={18} /></button>}
+          <button type="button" className="vg-secondary" onClick={openSources}>Change source</button>
+          {!capture && <button type="button" className="vg-secondary" aria-label="Close current source" onClick={closeSource}
+            title="Close current video"><X size={17}/></button>}
         </div>
-      </section>
-
-      {tabCaptureActive && <div className="vg-panel flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-xs font-semibold text-slate-800">Browser tab connected</p>
-          <p className="mt-1 text-xs text-slate-500">Capture is user-approved. No video is recorded or uploaded.</p>
-        </div>
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-700">
-          <input type="checkbox" checked={keepTabConnected} onChange={event => {
-            const enabled = event.target.checked;
-            setKeepTabConnected(enabled);
-            if (ownerId) localStorage.setItem('visionguard:keep-tab-on-navigation:' + ownerId, enabled ? 'yes' : 'no');
-          }} className="h-4 w-4 accent-[#bd5035]"/>
-          Keep sharing on other VisionGuard pages
-        </label>
       </div>}
 
       {cloudPlaybackLoading && <p role="status" className="vg-panel px-4 py-3 text-sm text-slate-600">
@@ -1651,7 +1708,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <button type="button" onClick={() => void chooseVideo()}
           className="vg-primary"><Upload size={15}/> Choose original video</button>
       </div>}
-      {error && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+      {error && !sourcesOpen && <div role="alert" className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
         <AlertTriangle size={18} className="shrink-0" /><span>{error}</span>
       </div>}
 
@@ -1671,13 +1728,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               detector === 'error' ? 'Detector unavailable' : 'Awaiting inference'}
           </span>
         </div>
-        <div ref={playerRef} className="vg-player-frame relative aspect-video w-full overflow-hidden bg-[#080e20]">
+        <CompositePlayer frameRef={playerRef} videoRef={videoRef} source={url} capture={capture}
+          ready={readyVideo} playing={playing} analysisPaused={analysisPaused} position={position} duration={duration}
+          rate={reviewRate} fullscreen={isFullscreen} onFullscreen={() => void toggleFullscreen()}
+          onSeek={seek} onRateChange={changeReviewRate} onPauseAnalysis={toggleAnalysisPause} onStop={removeVideo} onError={setError}>
           {url ? (
             <>
               <video key={tabCaptureActive ? 'shared-browser-tab' : webcamActive ? 'browser-camera' : 'uploaded-file'}
                 ref={videoRef} src={tabCaptureActive || webcamActive ? undefined : url}
                 crossOrigin={cloudPlaybackActive ? 'anonymous' : undefined}
-                controls autoPlay muted playsInline preload="auto"
+                autoPlay muted playsInline preload="auto"
                 className="h-full w-full object-contain"
                 onLoadedMetadata={event => {
                   setDuration(event.currentTarget.duration);
@@ -1699,16 +1759,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   }
                   startDetector();
                 }}
-                onRateChange={event => {
-                  const rate = event.currentTarget.playbackRate;
-                  if (!Number.isFinite(rate) || rate <= 0) return;
-                  if (qualityRateRef.current !== rate) {
-                    qualityFramesRef.current = [];
-                    qualityInferencesRef.current = [];
-                    qualityRateRef.current = rate;
-                  }
-                  setReviewRate(rate);
-                }}
+                onRateChange={event => syncReviewRate(event.currentTarget.playbackRate)}
                 onPlay={() => {
                   setPlaying(true);
                   startDetector();
@@ -1736,7 +1787,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                 onPause={event => {
                   setPlaying(false);
                   setPerformanceStats(previous => ({ ...previous, inferenceFps: null, playbackFps: null }));
-                  if (!webcamActive && !tabCaptureActive && !cloudPlaybackActive && ownerId)
+                  if (currentFileRef.current && ownerId)
                     void localAnalysisStorage.savePosition(event.currentTarget.currentTime, ownerId).catch(() => {});
                   if (ownerId) void activityLedger.flush(ownerId).catch(console.warn);
                 }}
@@ -1761,7 +1812,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
               <canvas ref={canvasRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
               <div className="vg-analysis-live-badges pointer-events-none absolute left-3 top-3 flex flex-wrap gap-2">
                 <span className="rounded-md bg-slate-950/80 px-2.5 py-1.5 text-xs font-semibold text-white">
-                  {tabCaptureActive ? (
+                  {analysisPaused ? 'Analysis paused' : tabCaptureActive ? (
                     streamHealth === 'playing' ? 'TAB LIVE' :
                     streamHealth === 'buffering' ? 'TAB BUFFERING' : 'CONNECTING TAB'
                   ) : webcamActive ? (
@@ -1770,75 +1821,31 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
                   ) : readyVideo ? (playing ? 'PLAYING VIDEO' : 'PAUSED') : 'OPENING VIDEO'}
                 </span>
               </div>
-              <button type="button" onClick={() => void toggleFullscreen()}
-                title={isFullscreen ? 'Exit fullscreen (Esc)' : 'Fullscreen with tracking boxes'}
-                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen with detections'}
-                className="absolute right-3 top-3 z-20 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 bg-slate-950/75 text-white shadow-sm transition-colors hover:bg-slate-900/95">
-                {isFullscreen ? <Minimize2 size={17}/> : <Maximize2 size={17}/>}
-              </button>
+              {showTelemetry && <div className="vg-player-telemetry" aria-label="Fullscreen observations">
+                <span>{visibleCount} observed tracks</span>
+                {liveMaxSpeed !== null && <span>≈{Math.round(liveMaxSpeed)} km/h · uncalibrated</span>}
+              </div>}
             </>
           ) : (
-            <div className="vg-player-welcome flex h-full flex-col items-center justify-center gap-3 px-4 text-center text-white">
-              <img src="/scene-guide.svg" alt="" aria-hidden="true" className="vg-player-welcome-art" />
-              <div className="text-lg font-semibold">Select an analysis source</div>
-              <p className="max-w-md text-sm text-slate-300">Open a local video, or approve access to a camera or browser tab.</p>
-              <button type="button" onClick={() => void chooseVideo()} className="vg-primary"><Upload size={16}/> Select local video</button>
-              <p className="max-w-md text-xs leading-5 text-slate-400">Inference runs on this device. No source has been selected.</p>
-            </div>
-          )}
-        </div>
-        {url && !webcamActive && !tabCaptureActive && <div className="vg-review-rate">
-          <div className="min-w-0">
-            <label htmlFor="vg-review-rate" className="text-sm font-semibold">Review playback speed</label>
-            <p className="mt-1 text-xs">Slow down recorded footage to give the detector more processing time per video second. This does not guarantee more accurate detections.</p>
-          </div>
-          <select id="vg-review-rate" value={reviewRate} onChange={event => {
-            const video = videoRef.current;
-            if (!video || captureKindRef.current) return;
-            try { video.playbackRate = Number(event.target.value); }
-            catch (error) { setError('This browser does not support the selected playback speed: ' + String(error)); }
-          }}>
-            {![.25,.5,.75,1].includes(reviewRate) && <option value={reviewRate}>{reviewRate}× (browser setting)</option>}
-            <option value={.25}>0.25× · slow review</option>
-            <option value={.5}>0.5×</option>
-            <option value={.75}>0.75×</option>
-            <option value={1}>1× · normal</option>
-          </select>
-        </div>}
-        {url && (
-          <div className="vg-analysis-player-footer flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="vg-analysis-source-title truncate">{filename}</div>
-              <div className="vg-analysis-source-meta">
-                {tabCaptureActive ? 'Live browser tab' :
-                  webcamActive ? 'Live camera' : readableTime(position) + ' / ' + readableTime(duration)}
+            <div className="vg-player-welcome">
+              <div>
+                <ScanLine size={30} strokeWidth={1.4} aria-hidden="true"/>
+                <h2>Open a traffic scene</h2>
+                <p>Start with a recording, live camera or shared browser tab.</p>
+                <div>
+                  <button type="button" onClick={openSources} className="vg-primary"><Upload size={16}/> Choose source</button>
+                  <button type="button" onClick={useSample} className="vg-secondary"><Film size={16}/> Try sample footage</button>
+                </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => void toggleFullscreen()}
-                className="vg-analysis-player-button" aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
-                {isFullscreen ? <Minimize2 size={15}/> : <Maximize2 size={15}/>}
-                {isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-              </button>
-              {detector === 'error' && <button type="button" onClick={() => startDetector()}
-                className="vg-analysis-player-button">
-                <RefreshCw size={14} /> Retry detector
-              </button>}
-              {(detector === 'downloading' || detector === 'initializing' || detector === 'error') &&
-                <button type="button" onClick={retryDetectorOnCpu}
-                  className="vg-analysis-player-button">
-                  <RefreshCw size={14} /> Use CPU fallback
-                </button>}
-              {!webcamActive && !tabCaptureActive && <button type="button" onClick={() => {
-                const video = videoRef.current;
-                if (video?.paused) void video.play().catch(e => setError(String(e)));
-                else video?.pause();
-              }} className="vg-analysis-player-button">
-                {playing ? <Pause size={14}/> : <Play size={14}/>} {playing ? 'Pause' : 'Play'}
-              </button>}
-            </div>
-          </div>
-        )}
+          )}
+        </CompositePlayer>
+        {(detector === 'downloading' || detector === 'initializing' || detector === 'error') && url &&
+          <div className="vg-analysis-recovery-actions">
+            {detector === 'error' && <button type="button" onClick={startDetector} className="vg-secondary"><RefreshCw size={14}/> Retry detector</button>}
+            <button type="button" onClick={retryDetectorOnCpu} className="vg-secondary"><RefreshCw size={14}/> Use CPU fallback</button>
+          </div>}
+        {sampleActive && <p className="vg-sample-credit">Sample footage by Kathinka Engels · <a href="https://commons.wikimedia.org/wiki/File:Motorway_A40_-_on_bridge_above_the_traffic.webm">CC BY 4.0</a></p>}
       </section>
 
       {showTelemetry && <LiveTelemetry detections={detectionCount} tracks={visibleCount}
@@ -1846,9 +1853,10 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         provider={provider} fallbackReason={fallbackReason} latency={inferenceMs} {...performanceStats}/>}
       </div>
 
-      <fieldset className="vg-analysis-display vg-panel">
+      <details className="vg-analysis-advanced vg-panel">
+        <summary><SlidersHorizontal size={17}/> Analysis settings <ChevronDown size={16}/></summary>
+        <fieldset className="vg-analysis-display">
         <legend className="sr-only">Display preferences</legend>
-        <span aria-hidden="true"><SlidersHorizontal size={16}/> Display</span>
         <label><input type="checkbox" checked={showBoxes} onChange={event => {
           if (qualityEnabledRef.current) {
             // A visibility change splits the evaluated segment. Never let a
@@ -1862,7 +1870,19 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
         <label><input type="checkbox" checked={showTelemetry} onChange={event => setShowTelemetry(event.target.checked)}/> Telemetry</label>
         {showBoxes && <small>Dashed boxes indicate predicted positions.</small>}
         {qualityEnabled && <small>{showBoxes ? 'QA trace: keep boxes enabled for a continuous sample.' : 'QA trace paused: enable boxes to start a new sample.'}</small>}
-      </fieldset>
+        {qualityEnabled && !!currentFileRef.current && !!qualityFramesRef.current.length &&
+          <button type="button" onClick={downloadQualityTrace} className="vg-secondary">
+            Download QA trace ({qualityFramesRef.current.length})
+          </button>}
+        {tabCaptureActive && <label>
+          <input type="checkbox" checked={keepTabConnected} onChange={event => {
+            const enabled = event.target.checked;
+            setKeepTabConnected(enabled);
+            if (ownerId) localStorage.setItem('visionguard:keep-tab-on-navigation:' + ownerId, enabled ? 'yes' : 'no');
+          }}/> Keep tab sharing on other workspace pages
+        </label>}
+        </fieldset>
+      </details>
 
       <details id="vg-analysis-details" className="vg-analysis-details vg-storage-disclosure">
         <summary className="vg-storage-summary">
@@ -1874,16 +1894,16 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
             </span>
           </span>
           <span className="vg-storage-summary-meta">
-            {!webcamActive && !tabCaptureActive && !cloudPlaybackActive &&
+            {!webcamActive && !tabCaptureActive && !cloudPlaybackActive && !sampleActive &&
               <span className="vg-storage-mini-status">{saveVideo ? 'Local retention on' : 'Local retention off'}</span>}
             {cloudError && <span className="vg-storage-mini-status vg-storage-mini-error" role="alert">Cloud upload issue</span>}
             <span className="vg-storage-manage">Manage <ChevronDown size={16} aria-hidden="true"/></span>
           </span>
         </summary>
         <div className="vg-storage-content">
-          <div className="vg-storage-intro">Analysis history and original video files are stored separately. You choose whether to retain the original.</div>
+          <div className="vg-storage-intro">{sampleActive ? 'The built-in sample is always available. Its analysis history is saved with your account.' : 'Analysis history and original video files are stored separately. You choose whether to retain the original.'}</div>
           <div className="vg-storage-grid">
-            {!webcamActive && !tabCaptureActive && !cloudPlaybackActive &&
+            {!webcamActive && !tabCaptureActive && !cloudPlaybackActive && !sampleActive &&
               <label className="vg-storage-tile vg-storage-device">
                 <span className="vg-storage-tile-icon"><HardDrive size={19} aria-hidden="true"/></span>
                 <span className="vg-storage-tile-text">
@@ -1956,7 +1976,7 @@ export default function RealtimeAnalyze({ active = true }: { active?: boolean })
           <div className="vg-storage-notice">
             <Info size={17} aria-hidden="true" />
             <p><strong>About detection accuracy</strong>
-              Speed values are uncalibrated visual estimates—not measured road speeds.
+              Speed values are uncalibrated estimates derived from image motion.
               Potential high-speed and stationary-vehicle events require human review.
               Crash, helmet and signal violations cannot be verified by this vehicle model.
             </p>

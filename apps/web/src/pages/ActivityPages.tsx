@@ -1,21 +1,21 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { localAnalysisStorage } from '../services/localAnalysisStorage';
 import { describeCloudVideoFailure } from '../services/cloudVideoFeedback';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Modal } from '../components/ui/Modal';
+import { analysisSource, breakdown } from '../services/reportData';
+import { getAssetAvailability } from '../lib/videoAssets';
+import type { VideoAsset } from '../services/db';
+import '../styles/activity-experience.css';
 import { PaginatedRows } from '../components/ui/PaginatedRows';
-import { ArrowUpRight, Download, Film, FileText, Plus, Search, Table2, X, FolderSearch, BarChart3, Clock3 } from 'lucide-react';
-import type { jsPDF } from 'jspdf';
+import { ArrowUpRight, Film, Plus, Search, X } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
-import { activityLedger, countRepeatedTracks, isRepeatedVehicleTrack, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
-import { csvCell } from '../services/csvExport';
+import { activityLedger, countRepeatedTracks, summarizeActivity, useActivityLedger, type AnalysisRecord, type ViolationRecord } from '../services/activityLedger';
 import { groupIncidentRecords, incidentLabel, incidentReviewLabel, manualIncidentEvidence } from '../services/incidentPresentation';
-
-const VehicleDistribution = lazy(() => import('../components/analysis/VehicleDistribution'));
 
 const niceDate = (time: number) => new Date(time).toLocaleString();
 const fmt = (n: number) => n.toLocaleString();
-const title = (value: string) => value.replace(/(^|[-_\s])\w/g, s => s.toUpperCase());
 
 function useRuns() {
   const userId = useAuthStore(s => s.user?.id ?? null);
@@ -32,304 +32,165 @@ function Stat({ label, number, note }: { label: string; number: number | null; n
   </section>;
 }
 
-function distribution(counts: Record<string, number>) {
-  return Object.entries(counts)
-    .map(([name, count]) => ({ name: title(name), count }))
-    .sort((a,b) => b.count-a.count);
+function VehicleBreakdown({ data }: { data: { name: string; count: number }[] }) {
+  const total = data.reduce((sum, item) => sum + item.count, 0);
+  return <ul className="vg-class-breakdown" aria-label="Repeated tracks by vehicle class">
+    {data.map(({ name, count }) => <li key={name}>
+      <span>{name}</span><strong>{fmt(count)}</strong><small>{Math.round(count / total * 100)}%</small>
+      <i aria-hidden="true"><span style={{ width: count / total * 100 + '%' }}/></i>
+    </li>)}
+  </ul>;
 }
 
 function RecentRuns({ records, loaded }: { records: AnalysisRecord[]; loaded: boolean }) {
   return <section className="vg-panel overflow-hidden">
-    <div className="vg-section-head">
-      <h2>Recent sessions</h2>
-      <Link to="/app/videos">View history</Link>
-    </div>
+    <div className="vg-section-head"><h2>Recent sessions</h2><Link to="/app/videos">View history</Link></div>
     {!loaded ? <p role="status" className="vg-empty-row">Loading saved sessions…</p> :
       !records.length ? <div className="vg-empty-state">
-        <strong>Your session history starts here.</strong>
-        Analyze footage to build a searchable history of vehicle observations.
-        <Link to="/app/analyze">Start your first analysis</Link>
-      </div> :
-    <div className="divide-y divide-slate-100">
-      {records.slice(0, 7).map(run =>
-        <div key={run.id} className="vg-run-row flex items-center gap-4 px-5 py-3.5 text-sm">
-          <div className="vg-run-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
-            <Film size={17}/>
-          </div>
+        <strong>No saved sessions yet.</strong> Open footage to start recording vehicle observations.
+      </div> : <div className="divide-y divide-slate-100">
+        {records.slice(0, 6).map(run => <div key={run.id} className="vg-run-row flex items-center gap-3 px-4 py-3 text-sm">
+          <div className="vg-run-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"><Film size={16}/></div>
           <div className="min-w-0 flex-1">
-            <div className="vg-run-name truncate">{run.sourceName}</div>
-            <div className="vg-run-meta mt-1">{niceDate(run.updatedAt)} · {run.sourceType === 'live-stream' ? 'Live source' : 'Video'}</div>
+            <Link to={'/app/reports?session=' + encodeURIComponent(run.id)} className="vg-run-name block truncate hover:underline" title={run.sourceName}>{run.sourceName}</Link>
+            <div className="vg-run-meta mt-1">{niceDate(run.createdAt)} · {analysisSource(run)}</div>
           </div>
           <div className="text-right">
-            <div className="vg-run-count tabular-nums">{countRepeatedTracks(run)}</div>
-            <div className="text-[11px] text-slate-500">vehicles</div>
+            <div className="vg-run-count tabular-nums">{fmt(countRepeatedTracks(run))}</div>
+            <div className="text-[11px] text-slate-500">repeated tracks</div>
           </div>
         </div>)}
-    </div>}
+      </div>}
   </section>;
 }
 
 export function ActivityDashboard() {
   const { records, loaded, stats, error } = useRuns();
-  const data = useMemo(() => distribution(stats.distribution), [stats.distribution]);
-  const mostRecent = records.reduce((latest, run) => Math.max(latest, run.updatedAt), 0);
-  return <div className="vg-page">
-    <header className="vg-overview-header vg-panel vg-overview-command">
-      <div className="vg-overview-copy">
-        <div className="vg-product-eyebrow">Traffic operations</div><h1>Overview</h1>
-        <p>Review recent analyses, vehicle observations, and incidents that need attention.</p>
-        <div className="vg-overview-actions">
-          <Link to="/app/analyze" className="vg-primary">Start an analysis <ArrowUpRight size={17} aria-hidden="true"/></Link>
-          <Link to="/app/reports" className="vg-secondary">Export reports</Link>
-        </div>
-        <span>{!loaded ? 'Loading workspace…' : mostRecent > 0
-          ? 'Last analyzed ' + niceDate(mostRecent) : 'No analysis sessions saved yet'}</span>
-      </div>
-      <nav className="vg-overview-shortcuts" aria-label="Quick access to workspace tools">
-        <div className="vg-overview-shortcuts-label">Quick access</div>
-        <Link to="/app/videos"><Clock3 size={19} aria-hidden="true"/><span><strong>Session history</strong><small>Return to saved analyses</small></span><ArrowUpRight size={15} aria-hidden="true"/></Link>
-        <Link to="/app/cases"><FolderSearch size={19} aria-hidden="true"/><span><strong>Incident review</strong><small>{loaded && !error ? fmt(stats.pendingReviews) + ' pending review' : 'Inspect recorded flags'}</small></span><ArrowUpRight size={15} aria-hidden="true"/></Link>
-        <Link to="/app/analytics"><BarChart3 size={19} aria-hidden="true"/><span><strong>Analytics</strong><small>Explore recorded activity</small></span><ArrowUpRight size={15} aria-hidden="true"/></Link>
-      </nav>
+  const classes = breakdown(stats.distribution);
+  const awaiting = records.filter(run => run.violations.some(flag => flag.status === 'pending_review')).slice(0, 4);
+  return <div className="vg-page vg-data-page vg-overview">
+    <header className="vg-page-header">
+      <div><h1>Overview</h1><p>Recent traffic analysis and observations awaiting review.</p></div>
+      <Link to="/app/analyze" className="vg-primary">New analysis <ArrowUpRight size={16} aria-hidden="true"/></Link>
     </header>
-    {error && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{error}</p>}
-    {loaded && records.length === 0 && !error && <section className="vg-panel vg-first-run" aria-labelledby="vg-first-run-title">
-      <div><div className="vg-product-eyebrow">Getting started</div><h2 id="vg-first-run-title">Your first analysis</h2><p>Choose a source when you are ready. Camera or tab access is requested only if you choose that source.</p></div>
-      <ol><li><strong>01</strong><span>Select a video or live source</span></li><li><strong>02</strong><span>Review vehicle tracks as footage plays</span></li><li><strong>03</strong><span>Return to saved sessions and review flags</span></li></ol>
-      <Link className="vg-primary" to="/app/analyze">Open analysis <ArrowUpRight size={16} aria-hidden="true"/></Link>
-    </section>}
-    <div className="vg-product-section-label">Recorded activity <span>Account-scoped observations</span></div>
+    {!loaded && <p role="status" className="sr-only">Loading workspace…</p>}
+    {error && <p role="alert" className="vg-activity-alert">{error}</p>}
     <div className="vg-metric-grid grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <Stat label="Saved sessions" number={loaded ? stats.runs : null} note="Recordings and live sources"/>
       <Stat label="Repeated vehicle tracks" number={loaded ? stats.vehicles : null}
-        note={loaded ? fmt(stats.transientTrackCandidates) + ' brief candidates excluded' : 'Observed on multiple frames'}/>
-      <Stat label="Analysis sessions" number={loaded ? stats.runs : null} note="Videos and live sources"/>
-      <Stat label="Inference frames" number={loaded ? stats.analyzedFrames : null} note="Completed detector observations"/>
-      <Stat label="Review flags" number={loaded ? stats.violations : null}
-        note={loaded ? stats.pendingReviews + ' pending · ' +
-          (stats.reviewedFlags + stats.dismissedFlags) + ' handled' : 'Pending human review'}/>
+        note={loaded ? fmt(stats.transientTrackCandidates) + ' other track rows excluded' : 'Observed on multiple frames'}/>
+      <Stat label="Inference frames" number={loaded ? stats.analyzedFrames : null} note="Frames analyzed by the detector"/>
+      <Stat label="Needs review" number={loaded ? stats.pendingReviews : null} note={loaded ? fmt(stats.violations) + ' total review flags' : 'Pending human review'}/>
     </div>
-    <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
+    <div className="vg-activity-grid">
       <RecentRuns records={records} loaded={loaded}/>
       <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head">
-          <h2>Vehicle distribution</h2>
-          <Link to="/app/analytics">Analytics</Link>
-        </div>
-        {!loaded ? <p className="vg-empty-row">Loading data…</p> :
-          !data.length ? <div className="vg-empty-state">
-            <strong>Nothing to chart yet.</strong>
-            Detected vehicle classes will appear after you analyze a source.
-            <Link to="/app/analyze">Analyze footage</Link>
-          </div> :
-          <Suspense fallback={<p className="vg-empty-row" role="status">Loading chart…</p>}>
-            <VehicleDistribution data={data}/>
-          </Suspense>}
+        <div className="vg-section-head"><h2>Review queue</h2><Link to="/app/cases">Open queue</Link></div>
+        {!loaded ? <p className="vg-empty-row" role="status">Loading review flags…</p> :
+          !awaiting.length ? <p className="vg-empty-row">No observations are waiting for review.</p> :
+          <ul className="vg-attention-list">{awaiting.map(run => <li key={run.id}>
+            <Link to={'/app/cases?session=' + encodeURIComponent(run.id)}>{run.sourceName}</Link>
+            <span>{run.violations.filter(flag => flag.status === 'pending_review').length} pending</span>
+          </li>)}</ul>}
+      </section>
+      <section className="vg-panel overflow-hidden">
+        <div className="vg-section-head"><h2>Vehicle classes</h2><Link to="/app/analytics">View analytics</Link></div>
+        {loaded && classes.length ? <VehicleBreakdown data={classes}/> :
+          <p className="vg-empty-row">{loaded ? 'No repeated tracks to chart.' : 'Loading vehicle classes…'}</p>}
       </section>
     </div>
-    <p className="vg-footnote">Counts exclude fleeting track IDs but can still include duplicates after occlusion. Speed readings are uncalibrated optical proxies.</p>
+    <p className="vg-footnote">Repeated tracks meet duration and confidence rules. Tracking interruptions and replays can count a physical vehicle more than once.</p>
   </div>;
+}
+
+const dayMs = 86_400_000;
+const timeRanges = [
+  ['all', 'All time', Infinity], ['today', '24 hours', dayMs],
+  ['week', '7 days', 7 * dayMs], ['month', '30 days', 30 * dayMs],
+] as const;
+
+function SessionActivity({ records }: { records: AnalysisRecord[] }) {
+  const byDay = new Map<string, { day: number; sessions: number; tracks: number }>();
+  for (const run of records) {
+    const date = new Date(run.createdAt);
+    const key = date.toLocaleDateString();
+    const row = byDay.get(key) ?? { day: date.setHours(0, 0, 0, 0), sessions: 0, tracks: 0 };
+    row.sessions += 1;
+    row.tracks += countRepeatedTracks(run);
+    byDay.set(key, row);
+  }
+  const days = [...byDay.values()].sort((a, b) => b.day - a.day).slice(0, 10).reverse();
+  const max = Math.max(1, ...days.map(item => item.sessions));
+  const date = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+  if (!days.length) return <p className="vg-empty-row">No sessions started in this period.</p>;
+  return <ul className="vg-activity-bars" aria-label="Session starts on the last ten active days">
+    {days.map(item => <li key={item.day}>
+      <span>{date.format(item.day)}</span>
+      <i title={fmt(item.sessions) + ' sessions'} aria-hidden="true"><span style={{ width: item.sessions / max * 100 + '%' }}/></i>
+      <strong>{fmt(item.sessions)} <span>sessions</span></strong><small>{fmt(item.tracks)} tracks</small>
+    </li>)}
+  </ul>;
 }
 
 export function ActivityAnalytics() {
   const { records, loaded, error } = useRuns();
-  const [range, setRange] = useState<'all'|'today'|'week'|'month'>('all');
-  // Keep filter calculations pure during render.
+  const [range, setRange] = useState<typeof timeRanges[number][0]>('all');
+  const [order, setOrder] = useState<'recent' | 'tracks'>('recent');
   const [asOf, setAsOf] = useState(Date.now);
   useEffect(() => {
-    // An always-open dashboard must not freeze "last 24 hours" at mount time.
     const timer = window.setInterval(() => setAsOf(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
   const filtered = useMemo(() => {
-    const now = asOf;
-    const ms = range === 'today' ? 86400000 : range === 'week' ? 7*86400000 : range === 'month' ? 30*86400000 : Infinity;
-    // Activity is grouped by when the session was last analyzed, not when a
-    // long-running live stream was first opened yesterday.
-    return records.filter(r => now - r.updatedAt <= ms);
+    const span = timeRanges.find(([value]) => value === range)?.[2] ?? Infinity;
+    return records.filter(run => run.createdAt >= asOf - span && run.createdAt <= asOf);
   }, [range, records, asOf]);
   const counts = useMemo(() => summarizeActivity(filtered), [filtered]);
-  const byClass = useMemo(() => distribution(counts.distribution), [counts.distribution]);
+  const byClass = breakdown(counts.distribution);
+  const comparison = filtered.map(run => ({ run, tracks: countRepeatedTracks(run) }))
+    .sort((a, b) => order === 'tracks' ? b.tracks - a.tracks || b.run.createdAt - a.run.createdAt : b.run.createdAt - a.run.createdAt);
   return <div className="vg-page vg-data-page">
     <header className="vg-page-header">
-      <div><div className="vg-product-eyebrow">Intelligence / Recorded activity</div><h1>Analytics</h1><p>Understand vehicle classes, activity volume and session history.</p></div>
+      <div><h1>Analytics</h1><p>Compare sessions, track populations and vehicle classes.</p></div>
       <div role="group" aria-label="Analytics time range" className="vg-range-control">
-        {([
-          ['all', 'All time'], ['today', '24 hours'], ['week', '7 days'], ['month', '30 days'],
-        ] as const).map(([value, label]) =>
-          <button key={value} type="button" aria-pressed={range === value}
-            className="vg-range-option"
-            onClick={() => { setAsOf(Date.now()); setRange(value); }}>
-            {label}
-          </button>
-        )}
+        {timeRanges.map(([value, label]) => <button key={value} type="button" aria-pressed={range === value}
+          className="vg-range-option" onClick={() => { setAsOf(Date.now()); setRange(value); }}>{label}</button>)}
       </div>
     </header>
-    {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
-    <div className="vg-metric-grid mb-5 grid gap-3 sm:grid-cols-3">
-      <Stat label="Repeated tracks" number={loaded ? counts.vehicles : null} note="Observed on multiple frames"/>
-      <Stat label="Peak simultaneous tracks" number={loaded ? counts.maximumVisible : null} note="Largest set of observed tracks in a detector frame"/>
-      <Stat label="Inference frames" number={loaded ? counts.analyzedFrames : null} note="Completed observations"/>
+    {error && <p role="alert" className="vg-activity-alert">{error}</p>}
+    <div className="vg-metric-grid mb-4 grid gap-3 sm:grid-cols-3">
+      <Stat label="Repeated tracks" number={loaded ? counts.vehicles : null} note="Tracks observed on multiple frames"/>
+      <Stat label="Peak simultaneous tracks" number={loaded ? counts.maximumVisible : null} note="Largest visible set in a detector frame"/>
+      <Stat label="Inference frames" number={loaded ? counts.analyzedFrames : null} note="Frames analyzed by the detector"/>
     </div>
-    <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
+    <div className="vg-activity-grid vg-analytics-grid">
       <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><div><h2>Classification breakdown</h2><p className="vg-section-subtitle">Observed classes across recorded sessions</p></div><span className="vg-metadata-chip">{loaded ? byClass.length + ' classes' : 'Loading'}</span></div>
-        {loaded && byClass.length ?
-          <Suspense fallback={<p className="vg-empty-row" role="status">Loading chart…</p>}>
-            <VehicleDistribution data={byClass}/>
-          </Suspense> :
+        <div className="vg-section-head"><div><h2>Session activity</h2><p className="vg-section-subtitle">Up to 10 active days, by session start</p></div></div>
+        {loaded ? <SessionActivity records={filtered}/> : <p className="vg-empty-row" role="status">Loading activity…</p>}
+      </section>
+      <section className="vg-panel overflow-hidden">
+        <div className="vg-section-head"><div><h2>Classification breakdown</h2><p className="vg-section-subtitle">Repeated tracks by vehicle class</p></div></div>
+        {loaded && byClass.length ? <VehicleBreakdown data={byClass}/> :
           <p className="vg-empty-row">{loaded ? 'No classification data for this period.' : 'Loading data…'}</p>}
       </section>
-      <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><div><h2>Sessions in range</h2><p className="vg-section-subtitle">Most recent first · Browse your full history</p></div><span className="vg-metadata-chip">{loaded ? filtered.length + ' sessions' : 'Loading'}</span></div>
-        {!loaded ? <p className="vg-empty-row" role="status">Loading sessions…</p> : filtered.length ?
-          <PaginatedRows items={[...filtered].sort((a, b) => b.updatedAt - a.updatedAt)}
-            itemLabel="sessions" resetKey={range} className="vg-data-rows divide-y divide-slate-100" renderRow={run =>
-              <div key={run.id} className="vg-data-row flex items-center justify-between gap-3 px-5 py-3.5 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-semibold text-slate-800">{run.sourceName}</p>
-                  <p className="mt-1 text-xs text-slate-500">{niceDate(run.updatedAt)}</p>
-                </div>
-                <div className="text-right">
-                  <span className="block shrink-0 font-semibold tabular-nums text-slate-800">{countRepeatedTracks(run)}</span>
-                  <span className="text-[10px] text-slate-500">repeated tracks</span>
-                </div>
-              </div>}/> : <div className="vg-empty-state"><strong>No sessions in this period.</strong>Choose a wider time range or analyze new footage.<Link to="/app/analyze">Start an analysis</Link></div>}
+      <section className="vg-panel vg-session-comparison overflow-hidden">
+        <div className="vg-section-head"><div><h2>Session comparison</h2><p className="vg-section-subtitle">{loaded ? fmt(filtered.length) + ' sessions' : 'Loading'}</p></div>
+          <label className="vg-inline-filter">Sort by <select className="vg-field" value={order} onChange={event => setOrder(event.target.value as typeof order)}>
+            <option value="recent">Newest</option><option value="tracks">Most repeated tracks</option>
+          </select></label>
+        </div>
+        {!loaded ? <p className="vg-empty-row" role="status">Loading sessions…</p> : comparison.length ?
+          <PaginatedRows items={comparison} itemLabel="sessions" resetKey={range + order} renderRow={({ run, tracks }) =>
+            <div key={run.id} className="vg-data-row vg-comparison-row">
+              <div><Link to={'/app/reports?session=' + encodeURIComponent(run.id)} title={run.sourceName}>{run.sourceName}</Link>
+                <small>{niceDate(run.createdAt)} · {analysisSource(run)}</small></div>
+              <span><strong>{fmt(tracks)}</strong> repeated tracks</span>
+              <span><strong>{fmt(run.analyzedFrames)}</strong> inference frames</span>
+              <span><strong>{fmt(run.violations.length)}</strong> flags</span>
+            </div>}/> : <p className="vg-empty-row">No sessions match this period.</p>}
       </section>
     </div>
-    <p className="vg-footnote">Repeated track IDs exclude brief detections, but ID switches may still count one vehicle twice. No physical speed is calibrated.</p>
-  </div>;
-}
-
-function exportCSV(records: AnalysisRecord[]) {
-  const columns = ['Session','Source','Date','Track ID','Vehicle class','Confidence','First seen (s)','Last seen (s)','Estimated km/h (uncalibrated)','Repeated track'];
-  const rows = records.flatMap(run => Object.values(run.vehicles).map(t => [
-    run.id,run.sourceName,new Date(run.createdAt).toISOString(),t.id,t.type,
-    t.confidence.toFixed(3),t.firstSeenAt.toFixed(2),t.lastSeenAt.toFixed(2),
-    t.estimatedSpeedKmh === null ? '' : t.estimatedSpeedKmh.toFixed(1),
-    isRepeatedVehicleTrack(t) ? 'yes' : 'no'
-  ]));
-  const csv = '\uFEFF'+[columns,...rows].map(row=>row.map(csvCell).join(',')).join('\r\n');
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
-  link.href=url;link.download='VisionGuard-vehicle-report.csv';link.click();
-  setTimeout(()=>URL.revokeObjectURL(url),3000);
-}
-async function exportPDF(records: AnalysisRecord[]) {
-  // Avoid loading PDF dependencies for everyday dashboard navigation.
-  const [{ jsPDF: PdfDocument }, { default: autoTable }] = await Promise.all([
-    import('jspdf'), import('jspdf-autotable')
-  ]);
-  const data = summarizeActivity(records);
-  const pdf = new PdfDocument();
-  pdf.setFont('helvetica','bold');pdf.setFontSize(18);pdf.text('VisionGuard | Traffic activity',14,20);
-  pdf.setFont('helvetica','normal');pdf.setFontSize(10);
-  pdf.text('Exported '+new Date().toLocaleString(),14,29);
-  pdf.text('Optical speed proxies are uncalibrated, NOT verified road speeds.',14,36);
-  pdf.text('Sessions: '+data.runs+'  |  Repeated tracks: '+data.vehicles+'  |  Review flags: '+data.violations,14,45);
-  const rows = records.flatMap(run=>Object.values(run.vehicles).map(v=>[
-    run.sourceName.slice(0,32),String(v.id),v.type,
-    String(Math.round(v.confidence*100))+'%',
-    v.estimatedSpeedKmh===null?'N/A':'~'+Math.round(v.estimatedSpeedKmh)
-  ]));
-  autoTable(pdf,{
-    startY:54,head:[['Video/stream','Track','Class','Confidence','Est. km/h']],
-    body:rows,theme:'striped',styles:{fontSize:8},headStyles:{fillColor:[41,68,79]},
-  });
-  const flags = records.flatMap(run => run.violations.map(flag => [
-    run.sourceName.slice(0,25),
-    flag.trackId == null ? '—' : String(flag.trackId),
-    incidentLabel(flag.type),
-    incidentReviewLabel(flag.status),
-    flag.evidenceNote.slice(0,160)
-  ]));
-  if (flags.length) {
-    const previousTableEnd = (pdf as jsPDF & {lastAutoTable?: {finalY: number}})
-      .lastAutoTable?.finalY ?? 54;
-    autoTable(pdf,{
-      startY: previousTableEnd + 12,
-      head:[['Session','Track','Review reason','Status','Evidence / note']],
-      body:flags, theme:'striped', styles:{fontSize:7},
-      headStyles:{fillColor:[70,100,112]},
-      columnStyles:{4:{cellWidth:60}}
-    });
-  }
-  pdf.save('VisionGuard-activity-report.pdf');
-}
-
-function exportIncidentsCSV(records: AnalysisRecord[]) {
-  const columns = ['Session','Source','Flag ID','Track ID','Review reason','Status','Observed at','Evidence / note'];
-  const rows = records.flatMap(run => run.violations.map(event => [
-    run.id, run.sourceName, event.id, event.trackId ?? '', incidentLabel(event.type),
-    incidentReviewLabel(event.status), new Date(event.observedAt).toISOString(), event.evidenceNote
-  ]));
-  const csv = '\uFEFF'+[columns,...rows].map(row=>row.map(csvCell).join(',')).join('\r\n');
-  const url = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8'}));
-  const link = document.createElement('a');
-  link.href=url;link.download='VisionGuard-incident-review-flags.csv';link.click();
-  setTimeout(()=>URL.revokeObjectURL(url),3000);
-}
-
-export function ActivityReports() {
-  const { records, loaded, error } = useRuns();
-  const [selected, setSelected] = useState('all');
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const filtered = selected === 'all' ? records : records.filter(r=>r.id===selected);
-  const totals = summarizeActivity(filtered);
-  const downloadPdf = async () => {
-    if (pdfBusy || !loaded || !filtered.length) return;
-    setPdfBusy(true);
-    setExportError(null);
-    try {
-      await exportPDF(filtered);
-    } catch {
-      setExportError('Could not create the PDF. Please try again.');
-    } finally {
-      setPdfBusy(false);
-    }
-  };
-  return <div className="vg-page vg-data-page">
-    <header className="vg-page-header">
-      <div><div className="vg-product-eyebrow">Intelligence / Export</div><h1>Reports</h1><p>Create downloadable records from your saved traffic analysis sessions.</p></div>
-    </header>
-    {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
-    {exportError && <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{exportError}</p>}
-    <section className="vg-panel overflow-hidden">
-      <div className="vg-section-head"><div><h2>Export options</h2><p className="vg-section-subtitle">Select the scope and choose your preferred format</p></div></div>
-      <div className="p-5 sm:p-6">
-        {loaded && !records.length && <div className="vg-report-empty mb-5">
-          <strong>No sessions available to export.</strong>
-          <p>Analyze a source to create a report from your saved observations.</p>
-          <Link to="/app/analyze">Start an analysis <ArrowUpRight size={15} aria-hidden="true"/></Link>
-        </div>}
-        <label htmlFor="report-run" className="mb-2 block text-xs font-semibold text-slate-600">Select scope</label>
-        <select id="report-run" value={selected} onChange={e=>setSelected(e.target.value)} className="vg-field w-full max-w-xl">
-          <option value="all">All saved sessions</option>
-          {records.map(r=><option key={r.id} value={r.id}>{r.sourceName} · {niceDate(r.createdAt)}</option>)}
-        </select>
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
-          <Stat label="Sessions" number={loaded ? totals.runs : null} note="Included in report"/>
-          <Stat label="Repeated tracks" number={loaded ? totals.vehicles : null} note="Raw CSV includes brief candidates"/>
-          <Stat label="Review flags" number={loaded ? totals.violations : null}
-            note={!loaded ? 'Loading review flags' : totals.pendingReviews + ' pending · ' +
-              (totals.reviewedFlags + totals.dismissedFlags) + ' handled'}/>
-        </div>
-        <div className="vg-report-format-heading"><h3>Choose an export format</h3><p>Files contain saved observations for the selected scope.</p></div>
-        <div className="vg-report-format-grid">
-          <article><FileText size={22} aria-hidden="true"/><h4>Activity report</h4><p>Readable PDF with observations and review flags.</p>
-          <button type="button" disabled={pdfBusy || !loaded || !filtered.length} onClick={() => void downloadPdf()}
-            className="vg-primary" aria-busy={pdfBusy}><Download size={15}/>{pdfBusy ? 'Preparing PDF…' : 'Download PDF'}</button></article>
-          <article><Table2 size={22} aria-hidden="true"/><h4>Vehicle observations</h4><p>Track-level CSV including confidence and speed estimates.</p>
-          <button type="button" disabled={!loaded || !filtered.length} onClick={()=>exportCSV(filtered)}
-            className="vg-secondary"><Download size={15}/> Vehicle CSV</button></article>
-          <article><Table2 size={22} aria-hidden="true"/><h4>Incident review</h4><p>CSV of review reasons, evidence notes and decisions.</p>
-          <button type="button" disabled={!loaded || !filtered.some(r=>r.violations.length)}
-            onClick={()=>exportIncidentsCSV(filtered)}
-            className="vg-secondary"><Download size={15}/> Incident review CSV</button></article>
-        </div>
-        <p className="vg-footnote">PDF includes tracked vehicles and saved review flags. Vehicle CSV contains tracks; incident CSV contains review decisions. Image-derived speed remains an uncalibrated visual estimate, not an enforcement measurement.</p>
-      </div>
-    </section>
+    <p className="vg-footnote">A track ID belongs to one session. Repeated track counts can include the same physical vehicle after a tracking interruption.</p>
   </div>;
 }
 
@@ -340,7 +201,16 @@ interface B2VideoRow {
   uploaded_at: string;
   storage_path: string | null;
   processing_status: string | null;
-  metadata: Record<string, unknown> | null;
+  metadata: VideoAsset['metadata'];
+}
+
+function originalStatus(video: B2VideoRow) {
+  const availability = getAssetAvailability(video, undefined, false);
+  if (availability.kind === 'available') return 'B2 backup';
+  if (availability.kind === 'uploading') return 'B2 upload in progress';
+  if (availability.kind === 'upload_failed') return describeCloudVideoFailure(availability.detail).kind === 'not_configured'
+    ? 'Cloud storage unavailable' : 'B2 upload failed';
+  return video.processing_status === 'failed' ? 'Upload failed' : 'Original unavailable';
 }
 
 export function ActivityVideoLibrary() {
@@ -353,7 +223,7 @@ export function ActivityVideoLibrary() {
 function AccountVideoLibrary() {
   const { records, loaded, error, userId } = useRuns();
   const [b2Videos, setB2Videos] = useState<B2VideoRow[]>([]);
-  const [localVideo, setLocalVideo] = useState<{name:string;size:number}|null>(null);
+  const [localVideo, setLocalVideo] = useState<{name: string; size: number; runId?: string} | null>(null);
   const [localError, setLocalError] = useState('');
   const [localLoading, setLocalLoading] = useState(Boolean(userId));
   const [sourceFilter, setSourceFilter] = useState<'all' | 'recorded' | 'live'>('all');
@@ -361,12 +231,22 @@ function AccountVideoLibrary() {
   const [storageRetry, setStorageRetry] = useState(0);
   const [b2Error, setB2Error] = useState('');
   const [search, setSearch] = useState('');
+  const [order, setOrder] = useState<'recent' | 'tracks' | 'name'>('recent');
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const visibleVideos = normalizedSearch ? b2Videos.filter(video =>
     video.filename.toLocaleLowerCase().includes(normalizedSearch)) : b2Videos;
   const visibleSessions = records.filter(run =>
-    (!normalizedSearch || run.sourceName.toLocaleLowerCase().includes(normalizedSearch)) &&
-    (sourceFilter === 'all' || (sourceFilter === 'live' ? run.sourceType === 'live-stream' : run.sourceType !== 'live-stream')));
+    (!normalizedSearch || [run.sourceName, run.id].some(value => value.toLocaleLowerCase().includes(normalizedSearch))) &&
+    (sourceFilter === 'all' || (sourceFilter === 'live' ? run.sourceType === 'live-stream' : run.sourceType !== 'live-stream')))
+    .sort((a, b) => order === 'name' ? a.sourceName.localeCompare(b.sourceName) :
+      order === 'tracks' ? countRepeatedTracks(b) - countRepeatedTracks(a) : b.createdAt - a.createdAt);
+  const cloudByRun = new Map<string, B2VideoRow>();
+  for (const video of b2Videos) {
+    const runId = video.metadata && typeof video.metadata === 'object' && !Array.isArray(video.metadata) &&
+      video.metadata.analysis_run_id;
+    if (typeof runId === 'string' && (!cloudByRun.has(runId) || getAssetAvailability(video, undefined, false).kind === 'available'))
+      cloudByRun.set(runId, video);
+  }
   useEffect(() => {
     setLocalVideo(null); setLocalError('');
     setLocalLoading(Boolean(userId));
@@ -375,7 +255,7 @@ function AccountVideoLibrary() {
     void localAnalysisStorage.loadVideo(userId).then(saved => {
       if (!alive) return;
       setLocalError('');
-      setLocalVideo(saved ? {name:saved.name,size:saved.file.size} : null);
+      setLocalVideo(saved ? { name: saved.name, size: saved.file.size, runId: saved.runId } : null);
     }).catch(error => {
       if (!alive) return;
       setLocalVideo(null);
@@ -405,7 +285,7 @@ function AccountVideoLibrary() {
   },[userId,storageRetry]);
   return <div className="vg-page vg-data-page">
     <header className="vg-page-header vg-history-heading">
-      <div><div className="vg-product-eyebrow">Operations / Records</div><h1>History</h1><p>Sessions, original files and optional cloud backups—in one view.</p></div>
+      <div><h1>History</h1><p>Find saved sessions and check which originals are available.</p></div>
       <div className="vg-search-field">
         <Search size={17} aria-hidden="true" />
         <input type="search" value={search} onChange={event => setSearch(event.target.value)}
@@ -415,6 +295,47 @@ function AccountVideoLibrary() {
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     <div className="space-y-5">
       <section className="vg-panel overflow-hidden">
+        <div className="vg-section-head"><div><h2>Analysis sessions</h2><p className="vg-section-subtitle">{loaded ? visibleSessions.length + ' of ' + records.length + ' sessions' : 'Loading'}</p></div>
+          <label className="vg-inline-filter">Sort by <select className="vg-field" value={order} onChange={event => setOrder(event.target.value as typeof order)}>
+            <option value="recent">Newest</option><option value="tracks">Most tracks</option><option value="name">Source name</option>
+          </select></label>
+        </div>
+        <div className="vg-history-filter" role="group" aria-label="Filter analysis sessions by source">
+          {([['all','All sources'],['recorded','Recorded videos'],['live','Live sources']] as const).map(([value,label]) =>
+            <button key={value} type="button" className="vg-range-option" aria-pressed={sourceFilter === value}
+              onClick={() => setSourceFilter(value)}>{label}</button>)}
+        </div>
+        {!loaded ? <p className="vg-empty-row" role="status">Loading session history…</p> :
+          !visibleSessions.length ? <div className="vg-empty-state">
+            <strong>{normalizedSearch || sourceFilter !== 'all' ? 'No matching sessions.' : 'No saved sessions yet.'}</strong>
+            {normalizedSearch || sourceFilter !== 'all' ? 'Change the search or source filter.' : 'Your analysis history will appear after processing footage.'}
+          </div> : <>
+          <div className="vg-history-row vg-history-labels" aria-hidden="true"><span>Source / date</span><span>Repeated tracks</span><span>Review flags</span><span>Original / actions</span></div>
+          <PaginatedRows items={visibleSessions} itemLabel="analysis sessions" resetKey={normalizedSearch + sourceFilter + order}
+            className="vg-history-sessions" renderRow={run => {
+              const local = localVideo?.runId === run.id;
+              const cloud = cloudByRun.get(run.id);
+              const cloudReady = cloud && getAssetAvailability(cloud, undefined, false).kind === 'available';
+              const sample = run.id.startsWith('sample:');
+              const status = sample ? 'Built-in sample' : run.sourceType === 'live-stream' ? 'Live capture' :
+                [local && 'On this device', cloud && originalStatus(cloud)].filter(Boolean).join(' · ') || 'No linked original';
+              return <div key={run.id} className="vg-history-row">
+                <div><strong>{run.sourceName}</strong><small>{niceDate(run.createdAt)} · {analysisSource(run)}</small></div>
+                <div><strong>{fmt(countRepeatedTracks(run))}</strong><small className="sm:hidden">Repeated tracks</small></div>
+                <div><strong>{fmt(run.violations.length)}</strong><small className="sm:hidden">Review flags</small></div>
+                <div><small>{status}</small><div className="vg-history-links">
+                  <Link to={'/app/reports?session=' + encodeURIComponent(run.id)}>Report</Link>
+                  {local && <Link to={'/app/analyze?local=' + encodeURIComponent(run.id)}>Open local</Link>}
+                  {cloudReady && <Link to={'/app/analyze?video=' + encodeURIComponent(cloud.id)}>Open B2</Link>}
+                </div></div>
+              </div>;
+            }}/>
+          </>}
+      </section>
+      <details className="vg-panel overflow-hidden">
+        <summary className="vg-storage-disclosure-heading">Original video storage</summary>
+        <div className="space-y-3 px-3 pb-3 sm:px-4">
+      <section className="vg-panel overflow-hidden">
         <div className="vg-section-head">
           <div><h2>On this device</h2><p className="vg-section-subtitle">Most recently retained original</p></div>
           <Link to="/app/analyze">Video analysis</Link>
@@ -422,7 +343,7 @@ function AccountVideoLibrary() {
         {localError && <p role="alert" className="vg-empty-row text-amber-700">{localError}</p>}
         {localLoading && <p role="status" className="vg-empty-row">Checking local retention…</p>}
         {!localLoading && !localError && !localVideo && <p className="vg-empty-row">
-          No original video retained on this device. Analysis records are still available below.
+          No original video retained on this device. Sessions remain available in History.
           To replay footage later, choose <strong>Keep this video on this device</strong> when analyzing.
           <Link to="/app/analyze" className="ml-2 font-semibold text-[#bd5035] hover:underline">Open Live Analysis</Link>
         </p>}
@@ -434,7 +355,7 @@ function AccountVideoLibrary() {
             <p className="truncate text-sm font-semibold text-slate-800">{localVideo.name}</p>
             <p className="mt-1 text-xs text-slate-500">Local only · {(localVideo.size/1048576).toFixed(1)} MB · Not uploaded to cloud</p>
           </div>
-          <Link to="/app/analyze" className="text-xs font-semibold text-[#bd5035] hover:underline">Resume analysis</Link>
+          <Link to="/app/analyze" className="text-xs font-semibold text-[#bd5035] hover:underline">Open Live Analysis</Link>
         </div>}
       </section>
       <section className="vg-panel overflow-hidden">
@@ -456,38 +377,14 @@ function AccountVideoLibrary() {
                     {video.file_size ? ' · '+(video.file_size/1048576).toFixed(1)+' MB' : ''}</p>
                 </div>
                 <span className="text-xs text-slate-500">
-                  {video.storage_path ? 'Stored' :
-                    typeof video.metadata?.upload_error === 'string' &&
-                    describeCloudVideoFailure(video.metadata.upload_error).kind === 'not_configured' ?
-                      'Cloud not configured' :
-                    video.metadata?.upload_status === 'failed' || video.processing_status === 'failed' ?
-                      'Upload failed' : 'Not stored'}
+                  {originalStatus(video)}
                 </span>
                 <Link to={'/app/archive-videos?video='+encodeURIComponent(video.id)}
                   className="text-xs font-semibold text-[#bd5035] hover:underline">Details</Link>
               </div>}/>}
       </section>
-      <section className="vg-panel overflow-hidden">
-        <div className="vg-section-head"><div><h2>Analysis sessions</h2><p className="vg-section-subtitle">Saved observations, separate from original footage</p></div><span className="vg-metadata-chip">{loaded ? visibleSessions.length + ' of ' + records.length : 'Loading'}</span></div>
-        <div className="vg-history-filter" role="group" aria-label="Filter analysis sessions by source">
-          {([['all','All sources'],['recorded','Recorded videos'],['live','Live sources']] as const).map(([value,label]) =>
-            <button key={value} type="button" className="vg-range-option" aria-pressed={sourceFilter === value}
-              onClick={() => setSourceFilter(value)}>{label}</button>)}
         </div>
-        {!loaded ? <p className="vg-empty-row">Loading session history…</p> :
-          !visibleSessions.length ? <div className="vg-empty-state"><strong>{normalizedSearch || sourceFilter !== 'all' ? 'No matching sessions.' : 'No saved sessions yet.'}</strong>{normalizedSearch || sourceFilter !== 'all' ? 'Change the search or source filter.' : 'Your analysis history will appear after processing footage.'}<Link to="/app/analyze">Open Live Analysis</Link></div> :
-          <PaginatedRows items={visibleSessions} itemLabel="analysis sessions" resetKey={normalizedSearch + ':' + sourceFilter} renderRow={run =>
-              <div key={run.id} className="vg-data-row flex items-center gap-4 px-5 py-3.5 text-sm">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium text-slate-800">{run.sourceName}</div>
-                  <div className="mt-1 text-xs text-slate-500">{niceDate(run.createdAt)} · {run.sourceType==='live-stream'?'Live source':'Video'}</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-semibold tabular-nums text-slate-800">{countRepeatedTracks(run)}</div>
-                  <div className="text-[11px] text-slate-500">vehicles</div>
-                </div>
-              </div>}/>}
-      </section>
+      </details>
     </div>
     <p className="vg-footnote">Analysis records are retained separately from source video files. Saving a session does not upload its footage.</p>
   </div>;
@@ -502,49 +399,41 @@ function IncidentRow({
 }) {
   const automatic = event.id.startsWith('auto:');
   const statusLabel = incidentReviewLabel(event.status);
-  const statusClass = event.status === 'approved'
-    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-    : event.status === 'rejected'
-      ? 'border-slate-200 bg-slate-50 text-slate-600'
-      : 'border-amber-200 bg-amber-50 text-amber-900';
-  return <div className="vg-review-row flex flex-wrap items-start justify-between gap-3 px-5 py-4 text-sm">
+  return <div className="vg-review-row vg-incident-row flex flex-wrap items-start justify-between gap-3 px-5 py-4 text-sm">
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-semibold text-slate-800">{incidentLabel(event.type)}</p>
-        <span className={automatic
-          ? 'rounded-md bg-[#fff0e7] px-2 py-0.5 text-[10px] font-semibold text-[#bd5035]'
-          : 'rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600'}>
-          {automatic ? 'Automatic' : 'Manual'}
-        </span>
+        <span className="vg-incident-origin">{automatic ? 'Automatic candidate' : 'Manual observation'}</span>
       </div>
       <p className="mt-1 text-xs text-slate-500">
         {run.sourceName} · {event.trackId === null ? 'No vehicle selected' : 'Vehicle #' + event.trackId}
         {' · ' + niceDate(event.observedAt)}
       </p>
-      <p className="mt-1.5 break-words text-xs leading-5 text-slate-600">
-        {event.evidenceNote}
-      </p>
+      <details className="mt-1">
+        <summary>Evidence and details</summary>
+        <p className="break-words text-xs leading-5 text-slate-600">{event.evidenceNote}</p>
+        <p className="mt-1 break-all text-xs text-slate-500">Session {run.id}</p>
+        {event.statusUpdatedAt && <p className="mt-1 text-xs text-slate-500">Decision updated {niceDate(event.statusUpdatedAt)}</p>}
+      </details>
     </div>
     <div className="flex shrink-0 flex-col items-end gap-2">
-      <span className={'rounded-md border px-2.5 py-1 text-xs font-medium ' + statusClass}>
-        {statusLabel}
-      </span>
+      <span className="vg-incident-status" data-status={event.status}>{statusLabel}</span>
       <div className="flex flex-wrap justify-end gap-1.5">
         {event.status === 'pending_review' ? <>
           <button type="button" onClick={() => onReview(run.id, event.id, 'approved')}
             aria-label={'Mark ' + incidentLabel(event.type) + ' as reviewed'}
-            className="rounded-md border border-[#edcfc1] px-2 py-1 text-xs font-semibold text-[#bd5035] hover:bg-[#fff0e7]">
+            className="vg-secondary">
             Mark reviewed
           </button>
           <button type="button" onClick={() => onReview(run.id, event.id, 'rejected')}
             aria-label={'Dismiss ' + incidentLabel(event.type)}
-            className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
+            className="vg-secondary">
             Dismiss
           </button>
         </> :
           <button type="button" onClick={() => onReview(run.id, event.id, 'pending_review')}
             aria-label={'Reopen ' + incidentLabel(event.type) + ' for review'}
-            className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
+            className="vg-secondary">
             Reopen
           </button>}
       </div>
@@ -554,22 +443,22 @@ function IncidentRow({
 
 export function ActivityIncidents() {
   const { records, loaded, error, userId } = useRuns();
+  const [params] = useSearchParams();
+  const [sessionFilter, setSessionFilter] = useState(params.get('session') ?? '');
   const [manualOpen, setManualOpen] = useState(false);
+  const [formError, setFormError] = useState('');
   const [runId, setRunId] = useState('');
   const [trackId, setTrackId] = useState('');
   const [flagType, setFlagType] = useState<'speed_estimate_review' | 'observed_event'>('observed_event');
   const [note, setNote] = useState('');
   const [feedback, setFeedback] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | ViolationRecord['status']>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | ViolationRecord['status']>('pending_review');
   const run = records.find(r => r.id === runId) ?? records[0];
   const tracks = run ? Object.values(run.vehicles).sort((a, b) => a.id - b.id) : [];
   const chosenTrack = tracks.find(t => String(t.id) === trackId);
-  const { automatic, manual } = groupIncidentRecords(records);
-  const incidents = [...automatic, ...manual];
-  const visibleAutomatic = statusFilter === 'all' ? automatic :
-    automatic.filter(item => item.event.status === statusFilter);
-  const visibleManual = statusFilter === 'all' ? manual :
-    manual.filter(item => item.event.status === statusFilter);
+  const { automatic, manual } = groupIncidentRecords(sessionFilter ? records.filter(item => item.id === sessionFilter) : records);
+  const incidents = [...automatic, ...manual].sort((a, b) => b.event.observedAt - a.event.observedAt);
+  const visible = statusFilter === 'all' ? incidents : incidents.filter(item => item.event.status === statusFilter);
   const pendingCount = incidents.filter(item => item.event.status === 'pending_review').length;
   const reviewedCount = incidents.filter(item => item.event.status === 'approved').length;
   const dismissedCount = incidents.filter(item => item.event.status === 'rejected').length;
@@ -593,13 +482,13 @@ export function ActivityIncidents() {
 
   const submitFlag = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setFeedback('');
+    setFormError('');
     if (!loaded || !userId || !run) {
-      setFeedback('Analyze a video first.');
+      setFormError('Analyze footage before adding an observation.');
       return;
     }
     if (flagType === 'speed_estimate_review' && !chosenTrack) {
-      setFeedback('Select a vehicle for speed review.');
+      setFormError('Select a vehicle for speed review.');
       return;
     }
     const record: ViolationRecord = {
@@ -614,6 +503,8 @@ export function ActivityIncidents() {
     setNote('');
     setTrackId('');
     setManualOpen(false);
+    setStatusFilter('pending_review');
+    if (sessionFilter && sessionFilter !== run.id) setSessionFilter(run.id);
     setFeedback('Saving incident…');
     void activityLedger.flush(userId).then(() => {
       if (useAuthStore.getState().user?.id === userId) setFeedback('Incident saved for review on this device.');
@@ -625,31 +516,22 @@ export function ActivityIncidents() {
   return <div className="vg-page">
     <header className="vg-page-header vg-incidents-header">
       <div>
-        <div className="vg-product-eyebrow">Operations / Human review</div><h1>Incidents</h1>
+        <h1>Incidents</h1>
         <p>Review potential events and decide what needs follow-up.</p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button"
-          aria-controls="manual-incident-form" aria-expanded={manualOpen}
-          onClick={() => { setManualOpen(value => !value); setFeedback(''); }}
-          className="vg-primary inline-flex items-center gap-1.5 text-xs">
-          {manualOpen ? <X size={15}/> : <Plus size={15}/>}
-          {manualOpen ? 'Close' : 'Add incident'}
-        </button>
-      </div>
+      <button type="button" aria-haspopup="dialog" onClick={() => {
+        if (sessionFilter) { setRunId(sessionFilter); setTrackId(''); }
+        setFormError('');
+        setManualOpen(true);
+      }} className="vg-primary"><Plus size={16}/> Add incident</button>
     </header>
-    <div className="vg-review-summary vg-panel">
-      <div><strong>{loaded ? pendingCount : '—'}</strong><span>Needs review</span></div>
-      <div><strong>{loaded ? reviewedCount : '—'}</strong><span>Reviewed</span></div>
-      <div><strong>{loaded ? dismissedCount : '—'}</strong><span>Dismissed</span></div>
-      <p>Observations are review candidates, not confirmed violations.</p>
-    </div>
+    <div className="vg-incident-toolbar">
     <div className="vg-incident-filters" role="group" aria-label="Filter incidents by review status">
       {([
-        ['all', 'All observations', incidents.length],
         ['pending_review', 'Needs review', pendingCount],
         ['approved', 'Reviewed', reviewedCount],
         ['rejected', 'Dismissed', dismissedCount],
+        ['all', 'All observations', incidents.length],
       ] as const).map(([value, label, count]) =>
         <button key={value} type="button" className="vg-filter-pill"
           aria-pressed={statusFilter === value} onClick={() => setStatusFilter(value)}>
@@ -657,12 +539,23 @@ export function ActivityIncidents() {
         </button>
       )}
     </div>
+    <label className="vg-inline-filter">Session <select className="vg-field" value={sessionFilter}
+      onChange={event => setSessionFilter(event.target.value)}>
+      <option value="">All sessions</option>
+      {sessionFilter && !records.some(item => item.id === sessionFilter) && <option value={sessionFilter}>Selected session</option>}
+      {records.map(item => <option key={item.id} value={item.id}>{item.sourceName} · {niceDate(item.createdAt)}</option>)}
+    </select></label>
+    </div>
     {error && <p role="alert" className="mb-4 text-sm text-amber-700">{error}</p>}
     {feedback && <p role="status" className="mb-4 text-xs text-slate-600">{feedback}</p>}
 
-    {manualOpen && <section id="manual-incident-form" className="vg-panel mb-5 overflow-hidden">
-      <div className="vg-section-head"><h2>Add incident for review</h2></div>
+    {manualOpen && <Modal labelledBy="manual-incident-title" onDismiss={() => setManualOpen(false)} className="vg-incident-dialog">
+      <div>
+      <div className="vg-section-head"><h2 id="manual-incident-title">Add incident for review</h2>
+        <button type="button" className="vg-secondary" aria-label="Close incident form" onClick={() => setManualOpen(false)}><X size={16}/></button>
+      </div>
       <form onSubmit={submitFlag} className="space-y-3 p-4 sm:p-5">
+        {formError && <p className="vg-activity-alert" role="alert">{formError}</p>}
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="flag-session" className="mb-1 block text-xs font-semibold text-slate-700">Session</label>
@@ -707,35 +600,19 @@ export function ActivityIncidents() {
           Save incident
         </button>
       </form>
-    </section>}
-
-    <section className="vg-panel overflow-hidden">
-      <div className="vg-section-head">
-        <h2>Automatic detections</h2>
-        <span className="vg-metadata-chip">{loaded ? automatic.length : 'Loading'}</span>
       </div>
-      {!loaded ? <p className="vg-empty-row">Loading incidents…</p> :
-        !visibleAutomatic.length ?
-          <p className="vg-empty-row">{automatic.length ? 'No detections match this filter.' :
-            'No automatic incidents recorded yet.'}</p> :
-        <PaginatedRows items={visibleAutomatic} itemLabel="automatic detections" resetKey={statusFilter}
-          renderRow={({ run: item, event }) =>
-            <IncidentRow key={item.id + ':' + event.id} run={item} event={event}
-              onReview={changeReview}/>}/>}
+    </Modal>}
+
+    <section className="vg-panel vg-incident-queue overflow-hidden">
+      <div className="vg-section-head">
+        <h2>Review queue</h2>
+        <span className="text-xs tabular-nums text-slate-500">{loaded ? fmt(visible.length) + ' observations' : 'Loading'}</span>
+      </div>
+      {!loaded ? <p className="vg-empty-row" role="status">Loading incidents…</p> :
+        !visible.length ? <p className="vg-empty-row">{statusFilter === 'pending_review' ? 'No observations need review.' : 'No observations match this filter.'}</p> :
+        <PaginatedRows items={visible} itemLabel="observations" resetKey={statusFilter + sessionFilter}
+          renderRow={({ run: item, event }) => <IncidentRow key={item.id + ':' + event.id} run={item} event={event} onReview={changeReview}/>}/>}
     </section>
-
-    {!!manual.length && <section className="vg-panel mt-4 overflow-hidden">
-      <div className="vg-section-head">
-        <h2>Manual incidents</h2>
-        <span className="text-xs tabular-nums text-slate-500">{manual.length}</span>
-      </div>
-      {visibleManual.length ? <PaginatedRows items={visibleManual} itemLabel="manual incidents"
-        resetKey={statusFilter} renderRow={({ run: item, event }) =>
-          <IncidentRow key={item.id + ':' + event.id} run={item} event={event}
-            onReview={changeReview}/>}/> :
-        <p className="vg-empty-row">No manual incidents match this filter.</p>}
-    </section>}
-    <p className="vg-footnote">Reviewed means a person checked the observation. Automated flags are review candidates.
-      Review decisions are saved with the incident and included in exported reports.</p>
+    <p className="vg-footnote">Automatic detections are candidates for human review. Review decisions are included in exports.</p>
   </div>;
 }

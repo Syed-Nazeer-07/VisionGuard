@@ -1,30 +1,33 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { ThemeControl } from '../theme/ThemeControl';
 import '../../pages/auth/AuthTheme.css';
 
-/** Shared recovery shell with the same visual language as sign-in and registration. */
 export function AuthCardLayout({
-  title, subtitle, children
-}: { title: string; subtitle: string; children: ReactNode }) {
-  return (
-    <main className="vg-auth-recovery flex min-h-screen items-center justify-center px-5 py-12 text-[#263136]">
-      <div className="w-full max-w-[456px]">
-        <Link to="/" className="vg-auth-recovery-brand mb-9 inline-flex items-center gap-2.5 text-[19px] font-bold tracking-[-.045em] text-[#263136]">
-          <img src="/brand-mark.svg?v=20261111" alt="" width={38} height={38} className="h-[38px] w-[38px] rounded-[10px]" />
-          VisionGuard
-        </Link>
-        <section className="vg-auth-recovery-card rounded-2xl border border-[#dce3e1] bg-white p-6 sm:p-9">
-          <div className="mb-7">
-            <h1 className="mt-0 text-[28px] font-semibold tracking-[-.055em] text-[#263136]">{title}</h1>
-            <p className="mt-2 text-sm leading-7 text-[#69777d]">{subtitle}</p>
-          </div>
-          {children}
-        </section>
-        <Link to="/login" className="mt-7 inline-flex items-center gap-2 text-sm font-medium text-[#596970] hover:text-[#202b30]">
-          <ArrowLeft size={16} /> Back to sign in
-        </Link>
+  title, subtitle, children, signInLink = true
+}: { title: string; subtitle: ReactNode; children: ReactNode; signInLink?: boolean }) {
+  return <main className="vg-auth">
+    <div className="vg-auth-showcase" aria-hidden="true">
+      <div className="vg-auth-photo"/>
+      <div className="vg-auth-photo-copy">
+        <p>Traffic video analysis</p>
+        <span>Read the road<br/><em>in motion.</em></span>
       </div>
-    </main>
-  );
+      <div className="vg-auth-credit">Vancouver, Canada · Ferdinand Stöhr</div>
+    </div>
+    <div className="vg-auth-form">
+      <header className="vg-auth-header">
+        <Link to="/" className="vg-auth-brand" aria-label="VisionGuard homepage">
+          <img src="/brand-mark.svg?v=20261111" alt="" width="36" height="36"/>VisionGuard
+        </Link>
+        <ThemeControl/>
+      </header>
+      <section className="vg-auth-form-inner">
+        <div className="vg-auth-title"><h1>{title}</h1><p>{subtitle}</p></div>
+        {children}
+        {signInLink && <Link to="/login" className="vg-auth-back"><ArrowLeft size={16}/> Back to sign in</Link>}
+      </section>
+    </div>
+  </main>;
 }

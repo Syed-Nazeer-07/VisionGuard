@@ -6,6 +6,7 @@ import { Landing } from './pages/Landing'
 import { Login } from './pages/auth/Login'
 import { ForgotPassword } from './pages/auth/ForgotPassword'
 import { ResetPassword } from './pages/auth/ResetPassword'
+import { VerifyEmail } from './pages/auth/VerifyEmail'
 import { useAuthStore } from './store/auth'
 import { lazy, Suspense, useEffect } from 'react'
 
@@ -17,7 +18,7 @@ const AppLayout = lazy(() => import('./components/layout/AppLayout').then(module
 const loadActivityPages = () => import('./pages/ActivityPages');
 const Dashboard = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityDashboard })));
 const Analytics = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityAnalytics })));
-const Reports = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityReports })));
+const Reports = lazy(() => import('./pages/Reports').then(module => ({ default: module.ActivityReports })));
 const ActivityVideoLibrary = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityVideoLibrary })));
 const ActivityIncidents = lazy(() => loadActivityPages().then(module => ({ default: module.ActivityIncidents })));
 const LegacyVideoLibrary = lazy(() => import('./pages/VideoLibrary').then(module => ({ default: module.VideoLibrary })));
@@ -92,17 +93,19 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Login />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           
           {/* Protected App Routes */}
           <Route path="/app" element={<RequireAuth />}>
             <Route element={
-              <Suspense fallback={<div role="status" className="flex min-h-[40vh] items-center justify-center bg-[#f5f7f6] px-6 text-sm text-[#61747b]">Opening your workspace…</div>}>
+              <Suspense fallback={<div role="status" className="flex min-h-[40vh] items-center justify-center px-6 text-sm text-[var(--vg-subtext)]">Opening your workspace…</div>}>
                 <AppLayout />
               </Suspense>
             }>
               <Route index element={<AppHome />} />
+              <Route path="overview" element={<Dashboard />} />
               <Route path="cameras" element={<Navigate to="/app/analyze" replace />} />
               <Route path="monitor" element={<Navigate to="/app/analyze" replace />} />
               <Route path="analytics" element={<Analytics />} />

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
 import subprocess
 import time
 from urllib.error import URLError
@@ -18,7 +19,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
-BASE = "http://127.0.0.1:3000"
+BASE = os.environ.get("VISIONGUARD_SMOKE_BASE", "http://127.0.0.1:3000")
 BREAKPOINTS = [(1440, 900), (1024, 768), (768, 900), (390, 844)]
 GEOMETRY_VIEWPORTS = [(320, 720), (375, 812), (768, 1024), (1440, 900), (2560, 1440)]
 
@@ -190,12 +191,15 @@ def main():
     env.setdefault("VITE_SUPABASE_URL", "https://ci-test.supabase.co")
     env.setdefault("VITE_SUPABASE_ANON_KEY", "sb_publishable_ci_test_only_public_fixture")
     env.setdefault("VITE_VIDEO_STORAGE_PROVIDER", "b2")
-    server = subprocess.Popen(
-        ["npm", "run", "dev", "-w", "web"],
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.STDOUT,
-    )
+    server = None
+    if "VISIONGUARD_SMOKE_BASE" not in os.environ:
+        server = subprocess.Popen(
+            ["npm", "run", "dev", "-w", "web"],
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
     driver = None
     try:
         wait_for_server()
@@ -231,11 +235,13 @@ def main():
     finally:
         if driver:
             driver.quit()
-        server.terminate()
-        try:
-            server.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            server.kill()
+        if server and server.poll() is None:
+            os.killpg(server.pid, signal.SIGTERM)
+            try:
+                server.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(server.pid, signal.SIGKILL)
+                server.wait()
 
 
 if __name__ == "__main__":

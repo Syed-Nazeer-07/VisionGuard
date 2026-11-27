@@ -58,8 +58,9 @@ describe('native browser navigation from the public landing page', () => {
       act(() => tabs[1].click());
       expect(tabs[1].getAttribute('aria-pressed')).toBe('true');
       expect(tabs[0].getAttribute('aria-pressed')).toBe('false');
-      expect(host.querySelector('.vgn-stage-image img')?.getAttribute('src')).toBe('/traffic_flow_analysis.jpg');
-      expect(host.textContent).toContain('ILLUSTRATIVE SCENE — NO LIVE INFERENCE');
+      expect(host.querySelector('.vgn-stage-image')?.getAttribute('data-scene')).toBe('1');
+      expect(host.textContent).toContain('Follow vehicles across frames');
+      expect(host.textContent).toContain('Illustrative workflow preview');
     } finally { dispose(); }
   });
   it('does not intercept the header Get started link', () => {

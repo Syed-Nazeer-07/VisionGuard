@@ -79,11 +79,13 @@ describe('responsive workspace navigation accessibility', () => {
   });
 });
 
-it('exposes the analysis action and accessible names for navigation links', () => {
+it('keeps analysis in navigation and omits the redundant launcher and ordinary role', () => {
   mobileMediaQuery();
   const view = mount();
   try {
-    expect(view.host.querySelector('a[aria-label="Start analysis"]')?.getAttribute('href')).toBe('/app/analyze');
+    expect(view.host.querySelector('a[aria-label="Live analysis"]')?.getAttribute('href')).toBe('/app/analyze');
+    expect(view.host.querySelector('.vg-product-topbar')?.textContent).not.toMatch(/Viewer|Analyze/);
+    expect(view.host.querySelector('select[aria-label="Color theme"]')).not.toBeNull();
     expect(view.host.querySelector('a[aria-label="Overview"]')?.getAttribute('aria-current')).toBe('page');
     expect(view.host.querySelector('a[aria-label="Settings"]')?.getAttribute('href')).toBe('/app/settings');
   } finally { view.dispose(); }

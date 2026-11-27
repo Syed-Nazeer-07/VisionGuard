@@ -1,6 +1,5 @@
 .vg-shell {
   --vg-canvas: #f4f5f0;
-  --vg-surface: #ffffff;
   --vg-ink: #172b28;
   --vg-muted: #526460;
   --vg-line: #dce3dd;
@@ -428,9 +427,9 @@
   border-color: #eae4dc;
   background: #faf7f2;
 }
-.vg-shell .vg-report-empty > strong { color: #24282d; }
-.vg-shell .vg-report-empty > p { color: #62666a; font-size: 13px; }
-.vg-shell .vg-report-empty > a { color: #ae442b; }
+.vg-shell .vg-report-empty > strong { color: var(--vg-text); }
+.vg-shell .vg-report-empty > p { color: var(--vg-subtext); font-size: 13px; }
+.vg-shell .vg-report-empty > a { color: var(--vg-link); }
 
 /* Player stays dark for legibility; surrounding controls match the workspace. */
 .vg-shell .vg-analysis-header .vg-page-kicker { color: #aa5138; }

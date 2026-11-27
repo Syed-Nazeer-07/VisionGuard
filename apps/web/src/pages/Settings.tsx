@@ -1,10 +1,12 @@
+import { AuthField } from '../components/auth/AuthField';
+import { ThemeControl } from '../components/theme/ThemeControl';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, KeyRound, LockKeyhole, Save, ShieldCheck, UserRound, SlidersHorizontal, HardDrive } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { supabase, supabaseConfig } from '../lib/supabase';
 
-type Section = 'profile' | 'workspace' | 'security' | 'storage' | 'about';
+type Section = 'profile' | 'appearance' | 'workspace' | 'security' | 'storage' | 'about';
 const START_PAGES = [
   { value: '/app', label: 'Overview' },
   { value: '/app/analyze', label: 'Live analysis' },
@@ -15,7 +17,7 @@ const START_PAGES = [
 ];
 
 export default function Settings() {
-  const { user, role, profile, settings, updateProfile, updateSettings } = useAuthStore();
+  const { user, profile, settings, updateProfile, updateSettings } = useAuthStore();
   const [section, setSection] = useState<Section>('profile');
   const [name, setName] = useState('');
   const [organization, setOrganization] = useState('');
@@ -82,6 +84,7 @@ export default function Settings() {
 
   const sectionButtons = [
     {id:'profile' as const,label:'Profile',description:'Your account details',icon:UserRound},
+    {id:'appearance' as const,label:'Appearance',description:'Light, dark or system',icon:SlidersHorizontal},
     {id:'workspace' as const,label:'Workspace',description:'Default starting page',icon:SlidersHorizontal},
     {id:'security' as const,label:'Security',description:'Password and account access',icon:ShieldCheck},
     {id:'storage' as const,label:'Storage',description:'Originals and backup controls',icon:HardDrive},
@@ -90,7 +93,7 @@ export default function Settings() {
 
   return <div className="vg-page">
     <header className="vg-page-header">
-      <div><span className="vg-page-kicker">ACCOUNT / PREFERENCES</span><h1>Settings</h1><p>Manage your profile, workspace defaults and account security.</p></div>
+      <div><h1>Settings</h1><p>Manage your profile, workspace defaults and account security.</p></div>
     </header>
     <div className="vg-settings-layout grid gap-5 lg:grid-cols-[245px_minmax(0,1fr)]">
       <aside className="space-y-3">
@@ -104,7 +107,7 @@ export default function Settings() {
               <Icon size={18} className="shrink-0"/>
               <span className="min-w-0">
                 <span className="block text-sm font-semibold">{item.label}</span>
-                <span className="mt-0.5 block text-[11px] opacity-75">{item.description}</span>
+                <span className="mt-0.5 block text-[11px] text-[var(--vg-subtext)]">{item.description}</span>
               </span>
             </button>;
           })}
@@ -112,10 +115,6 @@ export default function Settings() {
         <section className="vg-panel vg-settings-account space-y-2 p-4">
           <p className="text-xs font-semibold text-slate-800">Account access</p>
           <p className="break-all text-xs text-slate-600">{user?.email || 'Not signed in'}</p>
-          <span className="vg-metadata-chip inline-flex rounded-md px-2 py-1 text-[11px] font-semibold">
-            {role || 'Viewer'}
-          </span>
-          <p className="text-[11px] leading-5 text-slate-500">Roles are assigned by an authorized administrator, not from this settings page.</p>
         </section>
       </aside>
       <section className="vg-panel h-fit overflow-hidden">
@@ -124,7 +123,7 @@ export default function Settings() {
             <h2>{sectionButtons.find(item=>item.id===section)?.label}</h2>
             <p className="vg-section-subtitle">{sectionButtons.find(item=>item.id===section)?.description}</p>
           </div>
-          <span className="vg-metadata-chip">ACCOUNT SETTINGS</span>
+
         </div>
         <div className="space-y-5 p-5 sm:p-7">
           {section==='profile' && <>
@@ -134,7 +133,7 @@ export default function Settings() {
               <input id="settings-name" className="vg-field w-full" value={name} onChange={e=>setName(e.target.value)} maxLength={120}/>
             </div>
             <div>
-              <label htmlFor="settings-organization" className="mb-1.5 block text-xs font-semibold text-slate-700">Organization</label>
+              <label htmlFor="settings-organization" className="mb-1.5 block text-xs font-semibold text-slate-700">Organization (optional)</label>
               <input id="settings-organization" className="vg-field w-full" value={organization} onChange={e=>setOrganization(e.target.value)} maxLength={200}/>
             </div>
             <div>
@@ -143,6 +142,10 @@ export default function Settings() {
               <p className="mt-1.5 text-xs text-slate-500">Example: Asia/Kolkata, UTC, America/New_York</p>
             </div>
           </>}
+          {section==='appearance' && <div className="vg-settings-appearance">
+            <div><p className="font-semibold">Color theme</p><p className="vg-section-subtitle">Applies across VisionGuard in this browser.</p></div>
+            <ThemeControl expanded/>
+          </div>}
           {section==='workspace' && <>
             <div>
               <label htmlFor="settings-start" className="mb-1.5 block text-xs font-semibold text-slate-700">Default start page</label>
@@ -177,16 +180,11 @@ export default function Settings() {
             <div className="flex items-center gap-2 text-xs leading-5 text-slate-500">
               <KeyRound size={16}/> Update the password for your currently signed-in account.
             </div>
-            <div>
-              <label htmlFor="settings-new-password" className="mb-1.5 block text-xs font-semibold text-slate-700">New password</label>
-              <input id="settings-new-password" className="vg-field w-full" type="password"
-                autoComplete="new-password" value={newPassword} onChange={e=>setNewPassword(e.target.value)}/>
-            </div>
-            <div>
-              <label htmlFor="settings-confirm-password" className="mb-1.5 block text-xs font-semibold text-slate-700">Confirm password</label>
-              <input id="settings-confirm-password" className="vg-field w-full" type="password"
-                autoComplete="new-password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)}/>
-            </div>
+            <AuthField id="settings-new-password" label="New password" type="password" icon={LockKeyhole}
+              value={newPassword} autoComplete="new-password" onChange={event => setNewPassword(event.target.value)}
+              hint="Use at least 8 characters."/>
+            <AuthField id="settings-confirm-password" label="Confirm password" type="password" icon={LockKeyhole}
+              value={confirmPassword} autoComplete="new-password" onChange={event => setConfirmPassword(event.target.value)}/>
             <Link to="/forgot-password" className="text-xs font-semibold text-[#bd5035] hover:underline">
               Use email password recovery instead
             </Link>
@@ -197,7 +195,7 @@ export default function Settings() {
             {feedback.ok && <CheckCircle2 size={18} className="shrink-0"/>}
             <span>{feedback.text}</span>
           </div>}
-          {section !== 'storage' && section !== 'about' && <div className="vg-settings-save flex justify-end border-t border-slate-100 pt-5">
+          {section !== 'storage' && section !== 'about' && section !== 'appearance' && <div className="vg-settings-save flex justify-end border-t border-slate-100 pt-5">
             <button type="button" onClick={() => void save()} disabled={saving || !user}
               className="vg-primary"><Save size={16}/>{saving?'Saving…':section==='security'?'Update password':'Save changes'}</button>
           </div>}

@@ -107,7 +107,7 @@ class UploadManagerService {
   public async startUpload(
     file: File,
     selectedAt: string = new Date().toISOString(),
-    options: { keepPreview?: boolean } = {}
+    options: { keepPreview?: boolean; analysisRunId?: string } = {}
   ): Promise<{ videoId: string }> {
     if (!file || file.size <= 0) throw new Error('Cannot upload an empty video file.');
     const provider = uploadStorageProvider()
@@ -115,7 +115,8 @@ class UploadManagerService {
     const baseMetadata: Metadata = {
       client_uploaded_at: selectedAt,
       original_filename: file.name,
-      content_type: contentType
+      content_type: contentType,
+      ...(options.analysisRunId ? { analysis_run_id: options.analysisRunId } : {})
     }
 
     const { data: assetData, error: assetErr } = await supabase
