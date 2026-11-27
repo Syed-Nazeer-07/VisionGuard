@@ -41,7 +41,7 @@ describe('email callback proof', () => {
     const session = { access_token: 'callback', user: { id: 'recovering' } };
     onAuthStateChange.mockImplementation(callback => {
       callback('INITIAL_SESSION', { access_token: 'ordinary' });
-      callback('PASSWORD_RECOVERY', session);
+      window.setTimeout(() => callback('PASSWORD_RECOVERY', session), 0);
       return { data: { subscription: { unsubscribe: vi.fn() } } };
     });
     initialize.mockResolvedValue({ error: null });

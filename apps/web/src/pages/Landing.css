@@ -49,7 +49,7 @@
 .vgn-hero-demo { position: relative; margin-top: clamp(30px, 5vw, 64px); margin-bottom: 0; overflow: hidden; border-radius: 9px; background: #233a35; }
 .vgn-hero-demo img { width: 100%; height: clamp(290px, 42vw, 560px); display: block; object-fit: cover; object-position: 50% 52%; }
 .vgn-hero-demo figcaption { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; padding: 11px 16px; background: #172c25; color: #e4f0e8; font-size: 12px; }
-.vgn-section { padding-block: clamp(60px, 8vw, 120px); scroll-margin-top: var(--vgn-header-height); }
+.vgn-section { padding-block: clamp(60px, 8vw, 120px); scroll-margin-top: calc(var(--vgn-header-height) + 12px); }
 .vgn h2 { font-size: clamp(2.55rem, 5.6vw, 5.6rem); line-height: .99; }
 .vgn-section-heading { margin-bottom: clamp(27px, 3.4vw, 48px); }
 .vgn-section-heading p { margin: 0; }

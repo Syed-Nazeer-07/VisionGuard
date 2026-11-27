@@ -19,14 +19,30 @@ const initialUrl = typeof window === 'undefined' ? null : new URL(window.locatio
 const incoming = initialUrl ? parseEmailCallback(initialUrl) : null;
 const legacyType = initialUrl?.pathname === '/reset-password' && incoming?.type === 'recovery' ? 'recovery'
   : ['/login', '/verify-email'].includes(initialUrl?.pathname ?? '') && ['signup', 'email'].includes(incoming?.type ?? '') ? 'email' : null;
-let legacySession: Session | null = null;
+let legacyCallback: Promise<Session | null> | null = null;
 
 if (!supabaseConfig.isMock && legacyType && incoming?.accessToken && incoming.hasRefreshToken && !incoming.failed) {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+  const accessToken = incoming.accessToken;
+  let unsubscribe: (() => void) | undefined;
+  legacyCallback = new Promise<Session | null>(resolve => {
     const callbackEvent = legacyType === 'recovery' ? 'PASSWORD_RECOVERY' : 'SIGNED_IN';
-    if (event === callbackEvent && session?.access_token === incoming.accessToken) legacySession = session;
+    let timer: number;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      if (event === callbackEvent && session?.access_token === accessToken) resolve(session);
+    });
+    // The SDK can emit the callback in a task after initialize() resolves.
+    // Leave the listener in place until the matching event or bounded timeout.
+    const result = supabase.auth.initialize() as Promise<{ error: unknown }>;
+    void result.then(({ error }) => {
+      if (error) resolve(null);
+      else timer = window.setTimeout(() => resolve(null), 1500);
+    }, () => resolve(null));
+    unsubscribe = () => {
+      window.clearTimeout(timer);
+      subscription.unsubscribe();
+    };
   });
-  void supabase.auth.initialize().finally(() => subscription.unsubscribe()).catch(() => {});
+  void legacyCallback.then(() => unsubscribe?.());
 }
 
 export const hasLegacyConfirmation = legacyType === 'email';
@@ -39,9 +55,9 @@ export async function redeemEmailLink(type: 'email' | 'recovery', tokenHash?: st
     return data.session;
   }
   if (legacyType !== type || incoming?.failed) return null;
-  await supabase.auth.initialize();
-  const session = legacySession;
-  legacySession = null;
+  const callback = legacyCallback;
+  legacyCallback = null;
+  const session = await callback;
   return session && (type !== 'email' || session.user.email_confirmed_at) ? session : null;
 }
 

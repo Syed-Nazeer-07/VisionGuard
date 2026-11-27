@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 // Run against Vite configured with the synthetic Supabase URL in the QA guide.
@@ -7,7 +7,10 @@ const base = process.env.VISIONGUARD_SMOKE_URL || 'http://localhost:3002';
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(new URL(base).hostname),
   'The workspace browser fixture requires a local Vite server.');
 const { chromium } = await import(process.env.VISIONGUARD_PLAYWRIGHT_MODULE || 'playwright-core');
-const fixtureVideo = fileURLToPath(new URL('../apps/web/public/car-detection.mp4', import.meta.url));
+const fixtureVideo = fileURLToPath(new URL('../apps/web/public/imagery/motorway-sample.mp4', import.meta.url));
+const modelPath = process.env.VISIONGUARD_SMOKE_MODEL;
+const screenshots = process.env.VISIONGUARD_SMOKE_SCREENSHOTS;
+if (screenshots) await mkdir(screenshots, { recursive: true });
 const browser = await chromium.launch({
   executablePath: process.env.VISIONGUARD_CHROMIUM || undefined,
   args: ['--disable-dev-shm-usage', '--use-fake-device-for-media-stream'],
@@ -57,7 +60,12 @@ await context.route('https://visionguard-fixture.invalid/**', async route => {
 });
 
 
+if (modelPath) await context.route('**/models/yolo11s.onnx', route => route.fulfill({
+  path: modelPath, contentType: 'application/octet-stream',
+  headers: { 'cross-origin-resource-policy': 'same-origin' },
+}));
 const page = await context.newPage();
+const screenshot = name => screenshots ? page.screenshot({ path: screenshots + '/' + name + '.jpg', type: 'jpeg', quality: 84 }) : Promise.resolve();
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 const checked = [];
@@ -69,13 +77,14 @@ try {
   const anonymous = await browser.newPage();
   await anonymous.goto(base+'/app/analyze?quality=1');
   await anonymous.waitForURL('**/login');
-  await anonymous.getByRole('textbox',{ name:'Email', exact:true }).waitFor();
+  await anonymous.getByRole('textbox',{ name:'Email address', exact:true }).waitFor();
   assert.equal(await anonymous.locator('video').count(), 0);
   await anonymous.close();
   checked.push('Unauthenticated analysis route redirected to login.');
 
   await page.setViewportSize({width:390,height:844});
   await open('/app', 'Overview');
+  await screenshot('mobile-overview');
   const menu = page.getByRole('button',{name:'Open navigation'});
   await menu.click();
   await page.getByRole('dialog').waitFor();
@@ -101,6 +110,7 @@ try {
   checked.push('Admin retention saves one active key and records an audit entry through the test API.');
 
   await open('/app/analyze','Live analysis');
+  await page.getByText('Analysis settings', {exact:true}).click();
   const boxes = page.getByRole('checkbox',{name:'Boxes',exact:true});
   const labels = page.getByRole('checkbox',{name:'Labels',exact:true});
   await boxes.uncheck();
@@ -117,28 +127,86 @@ try {
   assert.equal(await page.getByRole('button',{name:'Focus view',exact:true}).getAttribute('aria-pressed'),'false');
   checked.push('Display controls and Escape exit in Live Analysis.');
 
+  const openSources = () => page.getByRole('button',{name:/^(choose|change) source$/i}).click();
+  await openSources();
+  await page.getByRole('button',{name:/YouTube footage/}).click();
+  await page.getByRole('button',{name:'Intersection traffic footage'}).click();
+  const search = page.getByRole('link',{name:'Open YouTube search'});
+  assert.equal(new URL(await search.getAttribute('href')).searchParams.get('search_query'), 'Intersection traffic footage');
+  assert.equal(await search.getAttribute('target'), '_blank');
+  assert.equal(await page.getByRole('button',{name:'Select YouTube tab'}).isEnabled(), true);
+  await screenshot('mobile-youtube-source');
+  await page.keyboard.press('Escape');
+  checked.push('Guided YouTube offers direct search and a browser tab-selection action.');
+
   await context.grantPermissions(['camera'], {origin:base});
-  await page.getByRole('button',{name:'Use camera',exact:true}).click();
+  await openSources();
+  await page.getByRole('button',{name:/Device camera/}).click();
   await page.waitForFunction(()=>window.vgTestCapture?.getVideoTracks().some(track=>track.readyState==='live'));
   await page.locator('video').waitFor();
-  await page.locator('input[type=file]').setInputFiles(fixtureVideo);
+  await page.getByRole('button',{name:'Pause analysis'}).click();
+  assert.equal(await page.locator('video').evaluate(video => video.paused), false);
+  assert.equal(await page.getByRole('slider',{name:'Seek video'}).count(),0);
+  await page.getByRole('button',{name:'Resume analysis'}).click();
+  await openSources();
+  const picker = page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:/Upload video/}).click();
+  await (await picker).setFiles(fixtureVideo);
   await page.waitForFunction(()=>window.vgTestCapture.getTracks().every(track=>track.readyState==='ended'));
-  await page.waitForFunction(()=>document.querySelector('video')?.src.startsWith('blob:'));
-  checked.push('Switching from the permitted Chromium fixture camera to a local file stops all camera tracks.');
+  await page.waitForFunction(()=>document.querySelector('video')?.src.startsWith('blob:') && document.querySelector('video')?.duration > 10);
+  checked.push('Camera analysis pauses independently of the fixture stream and switching to a file releases camera tracks.');
+
+  await page.locator('video').evaluate(video => video.pause());
+  await page.getByRole('button',{name:'Play',exact:true}).waitFor();
+  assert.equal(await page.locator('video').evaluate(video=>video.controls), false);
+  await page.getByRole('group',{name:'Video player'}).focus();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  assert.ok(await page.locator('video').evaluate(video=>video.currentTime >= 4.9));
+  await page.getByLabel('Playback settings').click();
+  await page.getByRole('radio',{name:'0.5×',exact:true}).check();
+  assert.equal(await page.locator('video').evaluate(video=>video.playbackRate), .5);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Enter fullscreen'}).click();
+  await page.waitForFunction(()=>document.fullscreenElement?.classList.contains('vg-player-frame'));
+  assert.equal(await page.evaluate(() => {
+    const frame = document.fullscreenElement;
+    const video = frame.querySelector('video').getBoundingClientRect();
+    const canvas = frame.querySelector('canvas').getBoundingClientRect();
+    return Math.abs(video.width - canvas.width) < 1 && Math.abs(video.height - canvas.height) < 1;
+  }), true);
+  await page.getByRole('button',{name:'Exit fullscreen'}).click();
+  checked.push('Shared playback bar provides keyboard seeking, slow playback and composite fullscreen.');
 
   await page.getByText('Storage & privacy',{exact:true}).click();
   await page.getByRole('checkbox',{name:'Keep this video on this device'}).check();
   await page.getByText('Original saved locally',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Close current source'}).click();
   await page.locator('video').waitFor({state:'detached'});
-  await page.getByRole('button',{name:'Reopen saved video'}).click();
-  await page.locator('video').waitFor();
+  await openSources();
+  await page.getByRole('button',{name:/Reopen saved video/}).click();
   await page.waitForFunction(()=>document.querySelector('video')?.currentTime > 0);
   await page.getByRole('checkbox',{name:'Keep this video on this device'}).uncheck();
   await page.getByText('Local retention disabled',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Close current source'}).click();
-  await page.getByRole('button',{name:'Reopen saved video'}).waitFor({state:'hidden'});
-  checked.push('Opted-in original survives Close, reopens from IndexedDB, and loses retention when disabled.');
+  await openSources();
+  await page.getByRole('button',{name:/Reopen saved video/}).waitFor({state:'hidden'});
+  await page.keyboard.press('Escape');
+  checked.push('Opted-in original survived Close, reopened from IndexedDB and was removed when retention was disabled.');
+
+  if (modelPath) {
+    await page.setViewportSize({width:1440,height:1000});
+    await page.getByRole('button',{name:'Try sample footage'}).click();
+    await page.getByText('Detector ready',{exact:true}).waitFor({timeout:90000});
+    await page.waitForFunction(() => {
+      const stat = [...document.querySelectorAll('.vg-live-counts > div')].find(item => /Observed tracks/.test(item.textContent));
+      return Number(stat?.querySelector('dd')?.textContent) > 0;
+    }, null, {timeout:30000});
+    await screenshot('desktop-analysis-real-yolo');
+    await page.setViewportSize({width:390,height:844});
+    await screenshot('mobile-analysis-real-yolo');
+    checked.push('Licensed A40 sample produced observed tracks with the actual YOLO11s ONNX model.');
+  }
 
   await open('/app/cases', 'Incidents');
   await page.getByRole('button',{name:'Add incident',exact:true}).click();
@@ -148,16 +216,41 @@ try {
   await page.getByRole('button',{name:/mark .* reviewed|mark reviewed/i}).first().click();
   await page.getByText('Review saved on this device.',{exact:true}).waitFor();
   await page.reload();
+  await page.getByRole('button',{name:/^Reviewed/}).click();
   await page.getByRole('button',{name:/reopen .* review/i}).waitFor();
+  await screenshot('mobile-incidents');
 
   await open('/app/reports', 'Reports');
   const exportReady = page.waitForEvent('download');
-  await page.getByRole('button',{name:'Incident review CSV'}).click();
+  await page.getByRole('radio',{name:/Incident-review CSV/}).check();
+  await page.getByRole('button',{name:'Download report'}).click();
   const exported = await exportReady;
   const csv = await readFile(await exported.path(), 'utf8');
   assert.match(csv, /Reviewed/i);
   assert.match(csv, /Fixture review observation/);
-  checked.push('An incident and its human review survive reload and appear in the incident CSV.');
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole('radio',{name:/Executive summary PDF/}).check();
+  const pdfReady = page.waitForEvent('download');
+  await page.getByRole('button',{name:'Download report'}).click();
+  const pdfDownload = await pdfReady;
+  const pdfBytes = await readFile(await pdfDownload.path());
+  assert.equal(pdfBytes.subarray(0,5).toString(),'%PDF-');
+  if (screenshots) await pdfDownload.saveAs(screenshots+'/executive-browser-check.pdf');
+  await screenshot('desktop-reports');
+  checked.push('A human review persisted through reload, appeared in CSV and the browser downloaded an executive PDF.');
+
+  await open('/app/analytics','Analytics');
+  await page.getByRole('button',{name:'7 days'}).click();
+  await page.getByRole('heading',{name:'Session comparison'}).waitFor();
+  await screenshot('desktop-analytics');
+  await open('/app/settings','Settings');
+  await page.getByRole('button',{name:/^Appearance/}).click();
+  await page.getByRole('combobox',{name:'Color theme'}).last().selectOption('dark');
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+  await page.reload();
+  assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+  await screenshot('desktop-settings-dark');
+  checked.push('Analytics filters work and workspace theme survives a reload.');
 
   role = 'Viewer';
   await page.goto(base+'/app/users');
@@ -165,7 +258,7 @@ try {
   await page.getByRole('heading',{name:'Overview'}).waitFor();
   checked.push('Viewer access to the admin Users route redirects to Overview.');
 
-  await open('/reset-password','Choose a new password');
+  await open('/reset-password','Request a new reset link');
   await page.getByRole('link',{name:'Request a new link'}).waitFor();
   assert.equal(await page.getByLabel('New password',{exact:true}).count(),0);
   checked.push('An ordinary signed-in session cannot stand in for a password recovery link.');
@@ -176,11 +269,11 @@ try {
   await page.getByLabel('New password',{exact:true}).fill('fixture-only-password-012');
   await page.getByLabel('Confirm new password',{exact:true}).fill('fixture-only-password-012');
   await page.getByRole('button',{name:'Update password'}).click();
-  await page.getByText('Your password has been updated successfully.',{exact:true}).waitFor();
+  await page.getByRole('heading',{name:'Password updated',exact:true}).waitFor();
   checked.push('The Supabase client recovery callback unlocks the reset form after the fixture API validates it.');
 
   assert.deepEqual(errors, []);
-  checked.forEach(message => console.log(message));
 } finally {
+  checked.forEach(message => console.log(message));
   await browser.close();
 }
