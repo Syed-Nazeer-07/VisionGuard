@@ -140,7 +140,7 @@ def check_responsive_geometry(driver, width: int, height: int):
     navigate_home(driver)
     layout = driver.execute_script(
         """const selectors=['.vgn-nav','.vgn-hero-content','.vgn-hero-content h1',
-                            '.vgn-hero-actions','.vgn-hero-demo'];
+                            '.vgn-hero-actions','.vgn-hero-demo','.vgn-product-showcase','.vgn-feature-strip'];
            const clipped=selectors.flatMap(selector => {
              const el=document.querySelector(selector);
              if(!el)return [selector+': missing'];
@@ -171,18 +171,16 @@ def check_responsive_geometry(driver, width: int, height: int):
     WebDriverWait(driver, 5).until(lambda d: d.find_element(By.TAG_NAME, "html").get_attribute("data-theme") == "dark")
     Select(theme).select_by_value("system")
 
-    follow = driver.find_element(By.XPATH, '//button[normalize-space()="Follow"]')
-    driver.execute_script("arguments[0].scrollIntoView({block:'center',behavior:'instant'})", follow)
-    WebDriverWait(driver, 5).until(lambda d: d.execute_script("""
-        const button = arguments[0], rect = button.getBoundingClientRect();
-        return button.contains(document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2));
-    """, follow))
-    follow.click()
+    frame = driver.find_element(By.CSS_SELECTOR, '.vgn-stage-image img')
+    driver.execute_script("arguments[0].scrollIntoView({block:'center',behavior:'instant'})", frame)
     WebDriverWait(driver, 5).until(lambda d: d.execute_script("""
         const frame = document.querySelector('.vgn-stage-image img');
         return frame?.complete && frame.naturalWidth > 0 &&
           frame.getAttribute('src') === '/imagery/motorway-detections.webp';
     """))
+    assert len(driver.find_elements(By.CSS_SELECTOR, '.vgn-feature-strip > div')) == 3
+    assert not driver.find_elements(By.CSS_SELECTOR, '.vgn-stage-tab')
+    check_click_target(driver, '#platform a[href="/register"]', '/register')
 
     for route in ("/login", "/register"):
         driver.get(BASE + route)
