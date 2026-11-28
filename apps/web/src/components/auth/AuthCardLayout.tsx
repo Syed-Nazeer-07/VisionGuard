@@ -12,9 +12,9 @@ export function AuthCardLayout({
       <div className="vg-auth-photo"/>
       <div className="vg-auth-photo-copy">
         <p>Traffic video analysis</p>
-        <span>Read the road<br/><em>in motion.</em></span>
+        <span>Understand traffic.<br/><em>Frame by frame.</em></span>
       </div>
-      <div className="vg-auth-credit">Vancouver, Canada · Ferdinand Stöhr</div>
+      <div className="vg-auth-credit">Illustrative traffic monitoring scene</div>
     </div>
     <div className="vg-auth-form">
       <header className="vg-auth-header">

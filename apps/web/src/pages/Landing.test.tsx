@@ -22,7 +22,7 @@ describe('VisionGuard public landing experience', () => {
 
   it('shows a captured detector frame and concise feature strip without old stage controls', () => {
     const html = renderLanding();
-    expect(html).toContain('/imagery/traffic-night.webp');
+    expect(html).toContain('/signin_hero.jpg');
     expect(html).toContain('/imagery/motorway-detections.webp');
     expect(html).toContain('Frame from a sample analysis');
     expect(html).toContain('vgn-feature-strip');
@@ -32,7 +32,7 @@ describe('VisionGuard public landing experience', () => {
 
   it('never displays a fake live dashboard, sample video player, or fabricated metrics', () => {
     const html = renderLanding();
-    expect(html).toContain('Traffic and light trails');
+    expect(html).toContain('Traffic camera overlooking a multilane highway');
     expect(html).not.toContain('<video');
     expect(html).not.toContain('car-detection.mp4');
     expect(html).not.toContain('platform_preview.png');

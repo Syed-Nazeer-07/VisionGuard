@@ -108,12 +108,9 @@ export function Landing() {
           </div>
         </div>
         <figure className="vgn-hero-demo vgn-shell">
-          <picture>
-            <source media="(max-width: 680px)" srcSet="/imagery/traffic-night-small.webp"/>
-            <img src="/imagery/traffic-night.webp" width="1800" height="1200" fetchPriority="high"
-              alt="Traffic and light trails at a downtown Vancouver intersection at night"/>
-          </picture>
-          <figcaption><span>Vancouver, Canada</span><span>Photograph by Ferdinand Stöhr</span></figcaption>
+          <img src="/signin_hero.jpg" fetchPriority="high" decoding="async"
+            alt="Traffic camera overlooking a multilane highway"/>
+          <figcaption><span>Traffic monitoring</span><span>Illustrative scene</span></figcaption>
         </figure>
       </section>
 
