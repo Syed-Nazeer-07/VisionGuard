@@ -160,18 +160,12 @@ export function AppLayout() {
       className={'vg-side-bar fixed inset-y-0 left-0 z-40 flex w-[248px] shrink-0 flex-col border-r transition-[width,transform] duration-200 lg:relative lg:translate-x-0 ' +
         (compactSidebar ? 'lg:w-[78px] ' : 'lg:w-[248px] ') +
         (mobileOpen ? 'translate-x-0' : '-translate-x-full')}>
-      <div className="vg-side-head flex h-[72px] shrink-0 items-center justify-between border-b px-4">
+      <div className={"vg-side-head flex h-[72px] shrink-0 items-center border-b " + (compactSidebar ? "vg-side-head-compact justify-center" : "justify-between px-4")}>
         <Link to="/app" onClick={() => setMobileOpen(false)} aria-label="VisionGuard workspace"
-          className={'vg-side-logo flex min-w-0 items-center gap-2.5 ' + (compactSidebar ? 'mx-auto' : '')}>
+          className={'vg-side-logo flex items-center gap-2.5 ' + (compactSidebar ? 'vg-side-logo-compact' : 'min-w-0')}>
           <img src="/brand-mark.svg?v=20261111" alt="" width={36} height={36} className="h-9 w-9 shrink-0 rounded-[10px]" />
           {!compactSidebar && <span className="truncate text-[16px] font-bold tracking-[-.045em]">Vision<span className="font-medium">Guard</span><span className="vg-brand-dot">.</span></span>}
         </Link>
-        <button type="button" aria-label={compactSidebar ? 'Expand sidebar' : 'Collapse sidebar'}
-          title={compactSidebar ? 'Expand sidebar' : 'Collapse sidebar'}
-          className="vg-side-icon-button hidden rounded-lg p-1.5 lg:inline-flex"
-          onClick={() => setCollapsed(value => !value)}>
-          {compactSidebar ? <PanelLeftOpen size={17}/> : <PanelLeftClose size={17}/>}
-        </button>
         <button ref={closeButtonRef} type="button" aria-label="Close menu"
           className="vg-side-icon-button rounded-lg p-1.5 lg:hidden"
           onClick={() => setMobileOpen(false)}><X size={18}/></button>
@@ -184,6 +178,13 @@ export function AppLayout() {
       </nav>
 
       <div className="vg-side-footer shrink-0 border-t p-3">
+        {!smallViewport && <button type="button" aria-label={compactSidebar ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={compactSidebar ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!compactSidebar}
+          className={"vg-side-nav-item vg-side-toggle mb-2 flex h-10 w-full items-center gap-3 rounded-lg px-3 " + (compactSidebar ? "justify-center" : "")}
+          onClick={() => setCollapsed(value => !value)}>
+          {compactSidebar ? <PanelLeftOpen size={18} className="shrink-0"/> : <PanelLeftClose size={18} className="shrink-0"/>}
+          {!compactSidebar && <span>Collapse sidebar</span>}
+        </button>}
         {!smallViewport && tabSharing && !activeAnalyze && <div className="vg-side-capture">{captureStatus(compactSidebar)}</div>}
         {!smallViewport && <div className={"vg-side-theme" + (compactSidebar ? " vg-side-theme-compact" : "")}>
           {!compactSidebar && <span>Appearance</span>}<ThemeControl/>

@@ -113,3 +113,23 @@ it('removes the desktop bar and preserves appearance and active tab sharing cont
     expect(view.host.querySelector('.vg-mobile-bar .vg-capture-status')).not.toBeNull();
   } finally { view.dispose(); }
 });
+
+it('keeps the collapsed logo alone at the top and provides a separate expand control', () => {
+  const viewport = mobileMediaQuery();
+  const view = mount();
+  try {
+    viewport.resize(false);
+    const header = view.host.querySelector('.vg-side-head')!;
+    const collapse = view.host.querySelector<HTMLButtonElement>('button[aria-label="Collapse sidebar"]')!;
+    expect(header.contains(collapse)).toBe(false);
+    act(() => collapse.click());
+    expect(header.classList.contains('vg-side-head-compact')).toBe(true);
+    expect(header.querySelector('img')?.getAttribute('width')).toBe('36');
+    expect(header.querySelector('.vg-side-logo')?.textContent).toBe('');
+    const expand = view.host.querySelector<HTMLButtonElement>('button[aria-label="Expand sidebar"]')!;
+    expect(header.contains(expand)).toBe(false);
+    expect(expand.closest('.vg-side-footer')).not.toBeNull();
+    act(() => expand.click());
+    expect(header.querySelector('.vg-side-logo')?.textContent).toContain('VisionGuard');
+  } finally { view.dispose(); }
+});

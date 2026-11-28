@@ -87,3 +87,10 @@
 .vg-shell .vg-side-capture .vg-capture-compact { flex-direction:column; gap:3px; padding:8px 2px 2px; text-align:center; }
 .vg-shell .vg-side-capture .vg-capture-compact button { min-width:42px; }
 @media(max-width:1023px) { .vg-shell .vg-mobile-bar { height:52px; min-height:52px; } }
+
+/* Keep the brand independent from sidebar controls in the narrow rail. */
+.vg-shell .vg-side-head-compact { padding-inline:0; justify-content:center; }
+.vg-shell .vg-side-logo-compact { width:44px; height:44px; flex:none; justify-content:center; }
+.vg-shell .vg-side-logo-compact img { display:block; width:36px; height:36px; min-width:36px; max-width:none; flex:none; }
+.vg-shell .vg-side-toggle { justify-content:flex-start; }
+.vg-shell .vg-side-toggle[aria-expanded="false"] { justify-content:center; padding-inline:0; }
