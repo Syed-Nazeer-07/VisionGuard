@@ -1,5 +1,8 @@
 .vg-player-frame { background: #09120f; color: #f4fbf5; isolation: isolate; }
 .vg-player-frame > video { display: block; }
+.vg-player-frame[data-click-playback="true"] > video { cursor: pointer; }
+.vg-player-frame[data-click-playback="true"] { cursor: pointer; }
+.vg-player-controls { cursor: default; }
 .vg-player-frame:focus-visible { outline-offset: -3px; }
 .vg-player-controls {
   position: absolute;

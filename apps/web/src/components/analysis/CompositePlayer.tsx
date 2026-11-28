@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type RefObject } from 'react';
 import { Maximize2, Minimize2, Pause, Play, Settings2, Square, Volume2, VolumeX } from 'lucide-react';
 import './CompositePlayer.css';
 
@@ -70,6 +70,15 @@ export function CompositePlayer({
     else video.pause();
   }
 
+  function onFrameClick(event: MouseEvent<HTMLDivElement>) {
+    if (!source || !ready || capture || event.button !== 0 || event.defaultPrevented) return;
+    // Playback controls bubble through the frame; never toggle twice or
+    // change playback when a user seeks, adjusts volume, or opens settings.
+    if (event.target !== event.currentTarget && event.target !== videoRef.current) return;
+    reveal();
+    togglePlayback();
+  }
+
   function toggleMuted() {
     const video = videoRef.current;
     if (!video) return;
@@ -101,7 +110,8 @@ export function CompositePlayer({
   return <div ref={frameRef} className="vg-player-frame relative aspect-video w-full overflow-hidden"
     tabIndex={source ? 0 : undefined} role={source ? 'group' : undefined} aria-label={source ? 'Video player' : undefined}
     aria-keyshortcuts={source ? capture ? 'F' : 'Space K ArrowLeft ArrowRight Home End M F' : undefined}
-    onPointerMove={reveal} onKeyDown={onKeyDown}>
+    data-click-playback={Boolean(source && ready && !capture)}
+    onPointerMove={reveal} onKeyDown={onKeyDown} onClick={onFrameClick}>
     {children}
     {source && <div className="vg-player-controls" data-hidden={!showControls && playing && !capture}>
       {!capture && <input className="vg-player-timeline" type="range" min="0" max={canSeek ? duration : 1} step="any"

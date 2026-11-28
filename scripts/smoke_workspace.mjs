@@ -189,6 +189,12 @@ try {
     const video = document.querySelector('.vg-player-frame video');
     return video?.currentTime > .1 && !video.paused;
   });
+  const videoSurface = page.locator('.vg-player-frame video');
+  await videoSurface.click();
+  await page.waitForFunction(() => document.querySelector('.vg-player-frame video')?.paused === true);
+  await videoSurface.click();
+  await page.waitForFunction(() => document.querySelector('.vg-player-frame video')?.paused === false);
+  checked.push('Clicking the recording surface pauses and resumes the original video.');
   const pause = page.getByRole('button',{name:'Pause',exact:true});
   await page.locator('.vg-player-frame').hover();
   await pause.click();
