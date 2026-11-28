@@ -74,3 +74,16 @@
 .vg-shell :is(.vg-data-row:hover,.vg-run-row:hover,.vg-report-format-grid article,.vg-settings-tab:hover) { background:var(--vg-surface-soft); color:var(--vg-text); }
 .vg-shell :is(.vg-product-eyebrow,.vg-product-section-label) { color:var(--vg-text); }
 .vg-shell .vg-product-section-label span { color:var(--vg-subtext); }
+
+/* Desktop workspace uses the sidebar rather than a duplicate page-header bar. */
+.vg-shell .vg-mobile-bar[hidden] { display:none !important; }
+@media(min-width:1024px) { .vg-shell .vg-mobile-bar { display:none !important; } }
+.vg-shell .vg-side-theme { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 8px 10px; color:#c5c5c5; font-size:12px; }
+.vg-shell .vg-side-theme-compact { justify-content:center; padding-inline:0; }
+.vg-shell .vg-side-theme .vg-theme-control { background:#242424; color:#e5e5e5; border-color:#414141; }
+.vg-shell .vg-side-theme .vg-theme-control:hover { background:#353535; }
+.vg-shell .vg-side-capture { padding:0 0 10px; }
+.vg-shell .vg-side-capture .vg-capture-status { width:100%; justify-content:space-between; white-space:normal; }
+.vg-shell .vg-side-capture .vg-capture-compact { flex-direction:column; gap:3px; padding:8px 2px 2px; text-align:center; }
+.vg-shell .vg-side-capture .vg-capture-compact button { min-width:42px; }
+@media(max-width:1023px) { .vg-shell .vg-mobile-bar { height:52px; min-height:52px; } }

@@ -115,6 +115,11 @@ export function AppLayout() {
     return () => window.removeEventListener('visionguard:tab-capture-status', onStatus);
   }, []);
 
+  const captureStatus = (compact = false) => <div className={"vg-capture-status" + (compact ? " vg-capture-compact" : "")} aria-label="Browser tab sharing is active">
+    <span aria-hidden="true"/><Link to="/app/analyze" aria-label="Return to active tab sharing">{compact ? "Live" : "Tab sharing"}</Link>
+    <button type="button" aria-label="Stop tab sharing" onClick={() => window.dispatchEvent(new Event("visionguard:stop-tab-capture"))}>Stop</button>
+  </div>;
+
   const signOut = async () => {
     await supabase.auth.signOut();
     navigate('/login', { replace: true });
@@ -179,6 +184,10 @@ export function AppLayout() {
       </nav>
 
       <div className="vg-side-footer shrink-0 border-t p-3">
+        {!smallViewport && tabSharing && !activeAnalyze && <div className="vg-side-capture">{captureStatus(compactSidebar)}</div>}
+        {!smallViewport && <div className={"vg-side-theme" + (compactSidebar ? " vg-side-theme-compact" : "")}>
+          {!compactSidebar && <span>Appearance</span>}<ThemeControl/>
+        </div>}
         <Link to="/app/settings" onClick={() => setMobileOpen(false)}
           aria-current={location.pathname === '/app/settings' ? 'page' : undefined}
           aria-label="Settings"
@@ -204,21 +213,17 @@ export function AppLayout() {
     </aside>
 
     <div className="flex min-w-0 flex-1 flex-col" inert={smallViewport && mobileOpen}>
-      <div className="vg-mobile-bar vg-product-topbar flex h-12 shrink-0 items-center gap-3 border-b px-3">
+      <div hidden={!smallViewport} className="vg-mobile-bar vg-product-topbar flex h-12 shrink-0 items-center gap-3 border-b px-3">
         <button ref={menuButtonRef} type="button" aria-label="Open navigation"
           className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
           aria-expanded={mobileOpen} aria-controls="vg-workspace-navigation"
           onClick={() => setMobileOpen(true)}><Menu size={20}/></button>
         <div className="vg-topbar-location min-w-0">
-          <span className="vg-product-breadcrumb hidden lg:inline">Workspace</span>
           <span className="vg-topbar-title truncate">{title}</span>
         </div>
         <div className="vg-topbar-actions ml-auto">
-          {tabSharing && !activeAnalyze && <div className="vg-capture-status" aria-label="Browser tab sharing is active">
-            <span aria-hidden="true"/><Link to="/app/analyze">Tab sharing</Link>
-            <button type="button" onClick={() => window.dispatchEvent(new Event('visionguard:stop-tab-capture'))}>Stop</button>
-          </div>}
-          <ThemeControl/>
+          {smallViewport && tabSharing && !activeAnalyze && captureStatus()}
+          {smallViewport && <ThemeControl/>}
         </div>
       </div>
       <main tabIndex={-1} className="vg-main-scroll relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto" id="main-content">

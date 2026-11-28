@@ -90,3 +90,26 @@ it('keeps analysis in navigation and omits the redundant launcher and ordinary r
     expect(view.host.querySelector('a[aria-label="Settings"]')?.getAttribute('href')).toBe('/app/settings');
   } finally { view.dispose(); }
 });
+
+it('removes the desktop bar and preserves appearance and active tab sharing controls in the sidebar', () => {
+  const viewport = mobileMediaQuery();
+  const view = mount();
+  try {
+    viewport.resize(false);
+    expect(view.host.querySelector<HTMLElement>('.vg-mobile-bar')?.hidden).toBe(true);
+    expect(view.host.querySelector('.vg-side-theme select[aria-label="Color theme"]')).not.toBeNull();
+    expect(view.host.querySelectorAll('select[aria-label="Color theme"]')).toHaveLength(1);
+    act(() => window.dispatchEvent(new CustomEvent('visionguard:tab-capture-status', { detail: { active: true } })));
+    expect(view.host.querySelector('.vg-side-capture a')?.getAttribute('href')).toBe('/app/analyze');
+    const stop = vi.fn();
+    window.addEventListener('visionguard:stop-tab-capture', stop);
+    try {
+      act(() => view.host.querySelector<HTMLButtonElement>('.vg-side-capture button')!.click());
+      expect(stop).toHaveBeenCalledTimes(1);
+    } finally { window.removeEventListener('visionguard:stop-tab-capture', stop); }
+    viewport.resize(true);
+    expect(view.host.querySelector<HTMLElement>('.vg-mobile-bar')?.hidden).toBe(false);
+    expect(view.host.querySelector('.vg-mobile-bar select[aria-label="Color theme"]')).not.toBeNull();
+    expect(view.host.querySelector('.vg-mobile-bar .vg-capture-status')).not.toBeNull();
+  } finally { view.dispose(); }
+});
