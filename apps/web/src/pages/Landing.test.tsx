@@ -47,6 +47,17 @@ describe('VisionGuard public landing experience', () => {
     expect(html).toContain('vgn-source-grid');
   });
 
+  it('includes real reporting, browser architecture and accessible FAQ chapters', () => {
+    const html = renderLanding();
+    expect(html).toContain('id="records"');
+    expect(html).toContain('id="technology"');
+    expect(html).toContain('id="answers"');
+    expect(html).toContain('YOLO11s');
+    expect(html).toContain('PDF or CSV');
+    expect(html).toContain('<details>');
+    expect(html).toContain('uncalibrated optical estimates');
+  });
+
   it('states speed, storage and human-review limitations rather than overstating accuracy', () => {
     const html = renderLanding();
     expect(html).toContain('Review flagged observations');

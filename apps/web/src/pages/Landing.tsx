@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowRight, ArrowUpRight, ChevronRight, Film, LockKeyhole, Menu, Monitor, ScanLine, Video, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUpRight, ChevronRight, FileText, Film, History, LockKeyhole, Menu, Monitor, ScanLine, ShieldCheck, Video, X } from 'lucide-react';
 import { ThemeControl } from '../components/theme/ThemeControl';
 import './Landing.css';
 
@@ -158,6 +158,48 @@ export function Landing() {
           <li><h3>Inspect the scene</h3><p>Seek through the recording or slow playback to give the detector more time per second of footage.</p></li>
           <li><h3>Share your findings</h3><p>Review flagged observations and download a summary PDF or detailed records.</p></li>
         </ol>
+      </section>
+
+      <section className="vgn-records vgn-section vgn-reveal" id="records">
+        <div className="vgn-shell">
+          <div className="vgn-section-heading">
+            <div><p className="vgn-kicker">Beyond detection</p><h2>Turn footage into findings.</h2></div>
+            <p>The recording is only the beginning. Return to your sessions, inspect observations and keep your findings organized.</p>
+          </div>
+          <div className="vgn-record-grid">
+            <article><History size={30} strokeWidth={1.5}/><h3>Session history</h3><p>Revisit saved analyses, vehicle classes and observed tracks.</p><span>History &amp; analytics</span></article>
+            <article><ShieldCheck size={30} strokeWidth={1.5}/><h3>Human review</h3><p>Inspect flagged observations, then review, dismiss or reopen them.</p><span>Incident review</span></article>
+            <article><FileText size={30} strokeWidth={1.5}/><h3>Export findings</h3><p>Download session summaries as PDF or CSV and review records as CSV.</p><span>Reports</span></article>
+          </div>
+        </div>
+      </section>
+
+      <section className="vgn-section vgn-shell vgn-reveal vgn-engine" id="technology">
+        <div className="vgn-engine-copy">
+          <p className="vgn-kicker">Browser-first architecture</p>
+          <h2>Intelligence, closer to the source.</h2>
+          <p>VisionGuard uses YOLO11s and browser-based tracking to analyze traffic footage. Original recordings are not automatically uploaded for detection.</p>
+          <a href="/register" className="vgn-text-action">Explore the workspace <ArrowRight size={16}/></a>
+        </div>
+        <div className="vgn-engine-diagram" aria-label="How browser analysis works">
+          <div><span>01</span><Film size={24} strokeWidth={1.5}/><strong>Video input</strong><small>Recording or authorized capture</small></div>
+          <ArrowDown size={19} aria-hidden="true"/>
+          <div><span>02</span><ScanLine size={24} strokeWidth={1.5}/><strong>Browser inference</strong><small>YOLO11s and vehicle tracking</small></div>
+          <ArrowDown size={19} aria-hidden="true"/>
+          <div><span>03</span><FileText size={24} strokeWidth={1.5}/><strong>Session records</strong><small>Review, analytics and exports</small></div>
+        </div>
+      </section>
+
+      <section className="vgn-faq vgn-section vgn-reveal" id="answers">
+        <div className="vgn-shell vgn-faq-layout">
+          <div><p className="vgn-kicker">Good to know</p><h2>Frequently asked questions.</h2></div>
+          <div className="vgn-faq-items">
+            <details><summary>Do I need to install anything?<ChevronRight size={19}/></summary><p>VisionGuard runs in a supported browser. A modern Chromium-based browser such as Chrome or Edge is recommended.</p></details>
+            <details><summary>Can I use my own footage?<ChevronRight size={19}/></summary><p>Yes. Open a local video, use a supported camera or share an authorized browser tab. Included sample footage is also available.</p></details>
+            <details><summary>Does VisionGuard upload my video?<ChevronRight size={19}/></summary><p>Detection happens in your browser. Original-video retention on your device is optional, and cloud backup requires an explicit upload.</p></details>
+            <details><summary>Are the speed estimates exact?<ChevronRight size={19}/></summary><p>No. They are uncalibrated optical estimates, not verified road speeds. Review flags require human judgment and are not proof of an offence.</p></details>
+          </div>
+        </div>
       </section>
 
       <section className="vgn-cta">
