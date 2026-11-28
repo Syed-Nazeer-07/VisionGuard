@@ -39,6 +39,14 @@ describe('VisionGuard public landing experience', () => {
     expect(html).not.toContain('fps');
   });
 
+  it('explains the supported video sources without fake product metrics', () => {
+    const html = renderLanding();
+    expect(html).toContain('Recorded video');
+    expect(html).toContain('Live camera');
+    expect(html).toContain('Browser tab');
+    expect(html).toContain('vgn-source-grid');
+  });
+
   it('states speed, storage and human-review limitations rather than overstating accuracy', () => {
     const html = renderLanding();
     expect(html).toContain('Review flagged observations');

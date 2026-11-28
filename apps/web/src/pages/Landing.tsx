@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowRight, ArrowUpRight, ChevronRight, LockKeyhole, Menu, ScanLine, X } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUpRight, ChevronRight, Film, LockKeyhole, Menu, Monitor, ScanLine, Video, X } from 'lucide-react';
 import { ThemeControl } from '../components/theme/ThemeControl';
 import './Landing.css';
 
@@ -134,6 +134,17 @@ export function Landing() {
       </section>
 
       <section className="vgn-capabilities vgn-section vgn-reveal" id="capabilities">
+        <div className="vgn-shell">
+          <div className="vgn-section-heading vgn-source-heading">
+            <div><p className="vgn-kicker">Flexible input</p><h2>Start with any scene.</h2></div>
+            <p>Choose the footage you want to inspect. One workspace for recordings and live sources.</p>
+          </div>
+          <div className="vgn-source-grid">
+            <article><Film size={28} strokeWidth={1.5}/><div><h3>Recorded video</h3><p>Open a local recording and inspect traffic at your own pace.</p></div></article>
+            <article><Video size={28} strokeWidth={1.5}/><div><h3>Live camera</h3><p>Connect a supported camera with your browser's permission.</p></div></article>
+            <article><Monitor size={28} strokeWidth={1.5}/><div><h3>Browser tab</h3><p>Share a browser tab to analyze the video playing there.</p></div></article>
+          </div>
+        </div>
         <div className="vgn-shell vgn-capability-grid">
           <div><ScanLine size={28}/><h2>See what moved.</h2><p>Use vehicle classes and tracks to compare approaches at an intersection or review movement along a highway. Save session summaries and export observations for further analysis.</p></div>
           <div><LockKeyhole size={27}/><h2>Keep control of footage.</h2><p>Detection runs in your browser. Saving an original on this device is optional. Cloud video backup requires explicit upload.</p></div>
@@ -151,7 +162,7 @@ export function Landing() {
 
       <section className="vgn-cta">
         <div className="vgn-shell">
-          <h2>Ready to analyze?</h2>
+          <div><p className="vgn-kicker">Your next scene</p><h2>Ready to analyze?</h2><p className="vgn-cta-copy">Try the included footage or bring a recording of your own.</p></div>
           <div className="vgn-cta-actions">
             <a href="/register" className="vgn-button vgn-button-accent">Get started <ArrowUpRight size={17}/></a>
             <a href="/login" className="vgn-text-action">Sign in <ArrowRight size={16}/></a>
