@@ -48,7 +48,7 @@ continue after its sharing permission is revoked.
 
 - **Keep sharing on other pages:** this preference is saved locally per
   account. The current capture stays active only after explicit user consent
-  and while that same VisionGuard browser tab remains open. The header
+  and while that same VisionGuard browser tab remains open. The sidebar on desktop (or mobile header)
   displays an active-capture indicator and a Stop button.
 - **Tab/screen sharing permission:** cannot be silently re-granted after
   a browser refresh, app close, browser permission revocation, or switching

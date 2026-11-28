@@ -50,7 +50,7 @@ Video kept advancing while inference was pending. The single local trials and sm
 
 ## Browser workflow coverage
 
-The browser swept 390, 768, 1366, 1920, and 2560 px widths on 15 routes. It checked public navigation, forms, and responsive workspace layout. It also exercised focus Escape, composite fullscreen, seeking, and closing the source. [Before and after screenshots](qa/overhaul/screenshots.md) use the same fixtures.
+The browser swept 390, 768, 1366, 1920, and 2560 px widths on 15 routes. It checked public navigation, forms, and responsive workspace layout. It also exercised focus Escape, composite fullscreen, seeking, and closing the source. [Before and after screenshots](https://github.com/Syed-Nazeer-07/VisionGuard/blob/da535bddbf6b00537a9a6b7c4910c2550085ce61/docs/qa/overhaul/screenshots.md) use the same fixtures.
 
 The optional [workspace smoke test](../scripts/smoke_workspace.mjs) checks a signed-out redirect, Viewer access to admin routes, mobile focus and dismissal, admin retention, display toggles, camera release on source switch, local video opt-in and reopening, incident review persistence and CSV, and password recovery callbacks. It confines all remote data to `visionguard-fixture.invalid`. Run this fixture from separate terminals:
 

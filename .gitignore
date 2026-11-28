@@ -19,7 +19,7 @@ apps/web/public/ort-wasm-*
 # Supabase CLI linked-project state (local machine only)
 supabase/.temp/
 
-# Backend local runtime directories
+# Historical local runtime directories (never commit)
 backend/.venv/
 backend/uploads/
 backend/artifacts/
@@ -34,3 +34,10 @@ assets/
 tmp_venv/
 backend/eval/dataset/images/
 
+# Local editor, OS and test artifacts
+.DS_Store
+Thumbs.db
+coverage/
+playwright-report/
+test-results/
+*.log
