@@ -176,7 +176,7 @@ def check_responsive_geometry(driver, width: int, height: int):
     WebDriverWait(driver, 5).until(lambda d: d.execute_script("""
         const frame = document.querySelector('.vgn-stage-image img');
         return frame?.complete && frame.naturalWidth > 0 &&
-          frame.getAttribute('src') === '/imagery/motorway-detections.webp';
+          frame.getAttribute('src') === '/traffic_flow_analysis.jpg';
     """))
     assert len(driver.find_elements(By.CSS_SELECTOR, '.vgn-feature-strip > div')) == 3
     assert not driver.find_elements(By.CSS_SELECTOR, '.vgn-stage-tab')

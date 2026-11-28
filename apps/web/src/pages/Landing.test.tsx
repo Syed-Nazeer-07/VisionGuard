@@ -20,11 +20,11 @@ describe('VisionGuard public landing experience', () => {
     expect(html).toContain('id="workflow"');
   });
 
-  it('shows a captured detector frame and concise feature strip without old stage controls', () => {
+  it('shows a full-color traffic illustration and concise feature strip without old stage controls', () => {
     const html = renderLanding();
     expect(html).toContain('/signin_hero.jpg');
-    expect(html).toContain('/imagery/motorway-detections.webp');
-    expect(html).toContain('Frame from a sample analysis');
+    expect(html).toContain('/traffic_flow_analysis.jpg');
+    expect(html).toContain('Illustrative traffic scene');
     expect(html).toContain('vgn-feature-strip');
     expect(html).not.toContain('vgn-stage-tab');
     expect(html).not.toContain('/imagery/motorway-recording-frame.webp');

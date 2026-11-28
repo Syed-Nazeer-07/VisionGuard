@@ -120,10 +120,10 @@ export function Landing() {
           <a href="/register" className="vgn-text-action">Open the workspace <ArrowRight size={16}/></a>
         </div>
         <div className="vgn-product-showcase">
-          <div className="vgn-preview-bar"><span><ScanLine size={16}/> Vehicle tracking</span><span>Recorded sample</span></div>
+          <div className="vgn-preview-bar"><span><ScanLine size={16}/> Vehicle tracking</span><span>Traffic analysis</span></div>
           <figure className="vgn-stage-image">
-            <img src="/imagery/motorway-detections.webp" alt="VisionGuard detector output with tracking boxes around vehicles on the A40 motorway" width="960" height="540" loading="lazy"/>
-            <figcaption>Frame from a sample analysis</figcaption>
+            <img src="/traffic_flow_analysis.jpg" alt="Elevated view of multilane urban highway traffic with cars, trucks and buses" loading="lazy" decoding="async"/>
+            <figcaption>Illustrative traffic scene</figcaption>
           </figure>
           <div className="vgn-feature-strip">
             <div><span className="vgn-feature-index">01</span><h3>Detect</h3><p>Identify vehicles in recorded footage.</p></div>

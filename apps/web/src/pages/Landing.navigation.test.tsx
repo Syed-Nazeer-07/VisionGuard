@@ -53,8 +53,8 @@ describe('native browser navigation from the public landing page', () => {
   it('uses a captured analysis frame with a working workspace entry link', () => {
     const { host, dispose } = mountLanding();
     try {
-      expect(host.querySelector('.vgn-stage-image img')?.getAttribute('src')).toBe('/imagery/motorway-detections.webp');
-      expect(host.querySelector('.vgn-stage-image figcaption')?.textContent).toBe('Frame from a sample analysis');
+      expect(host.querySelector('.vgn-stage-image img')?.getAttribute('src')).toBe('/traffic_flow_analysis.jpg');
+      expect(host.querySelector('.vgn-stage-image figcaption')?.textContent).toBe('Illustrative traffic scene');
       expect(host.querySelector('#platform a[href="/register"]')).not.toBeNull();
       expect(host.querySelectorAll('.vgn-feature-strip > div')).toHaveLength(3);
       expect(host.querySelector('.vgn-stage-tab')).toBeNull();

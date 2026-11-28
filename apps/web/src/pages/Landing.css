@@ -112,8 +112,8 @@
 .vgn-preview-bar { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:52px; padding:0 22px; border-bottom:1px solid #383838; font-size:13px; }
 .vgn-preview-bar span:first-child { display:flex; gap:9px; align-items:center; font-weight:650; }
 .vgn-preview-bar span:last-child { color:#b8b8b8; font-size:12px; }
-.vgn-product-showcase .vgn-stage-image { margin:0; display:grid; justify-items:center; }
-.vgn-product-showcase .vgn-stage-image img { max-height:430px; object-fit:contain; width:100%; height:auto; aspect-ratio:16 / 9; }
+.vgn-product-showcase .vgn-stage-image { margin:0; display:block; width:100%; }
+.vgn-product-showcase .vgn-stage-image img { display:block; width:100%; height:clamp(240px,35vw,460px); aspect-ratio:auto; object-fit:cover; object-position:50% 54%; }
 .vgn-product-showcase .vgn-stage-image figcaption { top:auto; left:auto; bottom:10px; right:10px; background:#161616; }
 .vgn-feature-strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); border-top:1px solid #383838; }
 .vgn-feature-strip > div { padding:clamp(16px,2.4vw,30px); }
